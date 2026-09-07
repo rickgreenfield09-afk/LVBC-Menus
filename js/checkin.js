@@ -163,10 +163,8 @@ async function renderTapList(memberId) {
   try {
     const { data: beers } = await window.supabase
       .from('beers')
-      .select('id, name, style, abv, is_new_release')
-      .eq('is_on_tap', true)
-      .eq('retired', false)
-      .order('is_new_release', { ascending: false })
+      .select('id, name, style, abv, badges')
+      .eq('status', 'active')
       .order('name', { ascending: true });
 
     const { data: memberPours } = await window.supabase
@@ -175,9 +173,15 @@ async function renderTapList(memberId) {
       .eq('member_id', memberId);
     const pouredIds = (memberPours || []).map((p) => p.beer_id);
 
-    tapList.innerHTML = (beers || [])
+    const sorted = (beers || []).slice().sort((a, b) => {
+      const aNew = (a.badges || []).includes('new_release') ? 0 : 1;
+      const bNew = (b.badges || []).includes('new_release') ? 0 : 1;
+      return aNew - bNew;
+    });
+
+    tapList.innerHTML = sorted
       .map((b) => {
-        const isNew = b.is_new_release;
+        const isNew = (b.badges || []).includes('new_release');
         const alreadyPoured = pouredIds.includes(b.id);
         const tileClass = 'beer-tile' + (isNew ? ' new-release' : '') + (alreadyPoured ? ' already-poured' : '');
         const badge = isNew

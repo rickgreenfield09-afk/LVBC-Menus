@@ -32,35 +32,24 @@ create table tiers (
   created_at timestamptz not null default now()
 );
 
--- ---------- BEER CATEGORIES ----------
--- New — matches the printed tap list's grouping (Light & Lager, etc).
-create table beer_categories (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  sort_order int not null default 0
-);
-
 -- ---------- BEERS ----------
+-- Category is free text (fixed dropdown in the UI, not a lookup table) —
+-- matches the "Beers & Menus" MVP this replaces. status replaces the old
+-- is_on_tap/retired booleans; badges replaces the old is_new_release flag
+-- with a small set of admin-picked labels (new_release, back_again, etc).
 create table beers (
   id uuid primary key default gen_random_uuid(),
-  category_id uuid references beer_categories(id) on delete set null,
+  ref_id text,
   name text not null,
   style text,
-  description text,
-  tasting_notes text,
   abv numeric(4,2),
-  ibu int,
-  srm numeric(5,2),
-  og numeric(5,3),
-  fg numeric(5,3),
-  price numeric(6,2),               -- new
+  price numeric(6,2),
+  category text,                    -- 'Light & Lager','Ales & IPAs','Strong & Specialty','Dark','Guest Tap','Non-Alcoholic'
+  description text,
+  long_description text,
+  badges text[] not null default '{}',   -- e.g. 'new_release','back_again','seasonal','limited','collab','lactose','wheat'
   image_url text,
-  tapped_on timestamptz default now(),
-  retired_on timestamptz,
-  is_on_tap boolean not null default true,
-  is_new_release boolean not null default false,
-  retired boolean not null default false,
-  sort_order int not null default 0,
+  status text not null default 'active' check (status in ('active','archived')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -76,6 +65,24 @@ $$ language plpgsql;
 create trigger beers_set_updated_at
   before update on beers
   for each row execute function set_updated_at();
+
+-- ---------- WINE & N/A MENU ----------
+create table wine_menu (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  winery text,
+  region text,
+  type text,
+  category text,             -- white/red/rosé/sparkling/na
+  display_group text,        -- 'Wine by the Bottle' | 'Wine by the Glass' | 'N/A Beer' | 'N/A Options'
+  description text,
+  price_glass numeric(6,2),
+  price_bottle numeric(6,2),
+  badge text[] not null default '{}',
+  status text not null default 'active' check (status in ('active','archived')),
+  sort_order int not null default 0,
+  created_at timestamptz not null default now()
+);
 
 -- ---------- MEMBERS ----------
 create table members (
@@ -213,8 +220,8 @@ create table lvbc_u_there (
 
 alter table staff_profiles enable row level security;
 alter table tiers enable row level security;
-alter table beer_categories enable row level security;
 alter table beers enable row level security;
+alter table wine_menu enable row level security;
 alter table members enable row level security;
 alter table qr_tokens enable row level security;
 alter table check_ins enable row level security;
@@ -236,11 +243,11 @@ create policy "admin manage roster" on staff_profiles for all
 create policy "public read tiers" on tiers for select using (true);
 create policy "staff write tiers" on tiers for all using (is_staff()) with check (is_staff());
 
-create policy "public read beer_categories" on beer_categories for select using (true);
-create policy "staff write beer_categories" on beer_categories for all using (is_staff()) with check (is_staff());
-
 create policy "public read beers" on beers for select using (true);
-create policy "staff write beers" on beers for all using (is_staff()) with check (is_staff());
+create policy "admin write beers" on beers for all using (is_admin()) with check (is_admin());
+
+create policy "public read wine_menu" on wine_menu for select using (true);
+create policy "admin write wine_menu" on wine_menu for all using (is_admin()) with check (is_admin());
 
 create policy "public read rewards" on rewards for select using (true);
 create policy "staff write rewards" on rewards for all using (is_staff()) with check (is_staff());
@@ -264,33 +271,46 @@ create policy "staff only redemptions" on redemptions for all using (is_staff())
 create policy "staff only free_pours" on free_pours for all using (is_staff()) with check (is_staff());
 
 -- ============================================================
+-- STORAGE — beer / wine photo uploads
+-- Public bucket "assets", admin-only write.
+-- ============================================================
+
+insert into storage.buckets (id, name, public) values ('assets', 'assets', true)
+  on conflict (id) do nothing;
+
+create policy "public read assets" on storage.objects for select
+  using (bucket_id = 'assets');
+create policy "admin write assets" on storage.objects for insert
+  with check (bucket_id = 'assets' and is_admin());
+create policy "admin update assets" on storage.objects for update
+  using (bucket_id = 'assets' and is_admin()) with check (bucket_id = 'assets' and is_admin());
+create policy "admin delete assets" on storage.objects for delete
+  using (bucket_id = 'assets' and is_admin());
+
+-- ============================================================
 -- SEED DATA
 -- ============================================================
 
 insert into tiers (name, rank) values
   ('Free', 0), ('Mug Club', 1), ('Coffee Club', 2), ('Full Pour', 3);
 
-insert into beer_categories (name, sort_order) values
-  ('LIGHT & LAGER', 1), ('ALES & IPAS', 2), ('STRONG & SPECIALTY', 3),
-  ('DARK', 4), ('NON-ALC & GUEST', 5);
-
-insert into beers (category_id, name, style, description, abv, price, is_new_release, sort_order)
-select id, 'Bronco Blonde', 'Blonde Ale', 'Smooth and easy-drinking with a touch of honey sweetness and a clean finish.', 5.0, 6.50, false, 1 from beer_categories where name = 'LIGHT & LAGER'
-union all select id, 'Float Club', 'Dry Hopped Kölsch', 'Light and crisp with a delicate hop aroma and refreshing German character.', 5.1, 7.50, false, 2 from beer_categories where name = 'LIGHT & LAGER'
-union all select id, 'Howdyfest', 'Rye Lager', 'A Texas take on a classic lager, with a spicy rye backbone and smooth malt body.', 6.2, 6.50, false, 3 from beer_categories where name = 'LIGHT & LAGER'
-union all select id, 'Southern Drawl', 'Helles Lager', 'Soft, malty, and approachable — a Bavarian classic brewed for the Texas heat.', 5.5, 6.50, false, 4 from beer_categories where name = 'LIGHT & LAGER'
-union all select id, 'Orbit Sixx-T', 'Patersbier', 'The sessionable table beer of Belgian monks — golden, gentle, and quietly complex.', 5.8, 6.50, false, 5 from beer_categories where name = 'LIGHT & LAGER'
-union all select id, 'Bonfire', 'Amber Ale', 'Rich caramel malt with a gentle hop balance and a warm, toasty finish.', 5.0, 6.50, false, 1 from beer_categories where name = 'ALES & IPAS'
-union all select id, 'Vista IPA', 'IPA', 'Bold citrus and pine hop character with a clean, bitter finish that opens up the view.', 6.2, 7.50, false, 2 from beer_categories where name = 'ALES & IPAS'
-union all select id, 'Thick & Sprucey', 'Spruce Tip IPA', 'Bright forest aromatics and resinous spruce tips layered over a juicy hop base.', 6.2, 7.50, false, 3 from beer_categories where name = 'ALES & IPAS'
-union all select id, 'All Burn', 'Rauchbier', 'German smoked malt brings the campfire to the glass — savory, deep, and unforgettable.', 5.2, 7.50, false, 4 from beer_categories where name = 'ALES & IPAS'
-union all select id, 'TBD', 'Berliner Weisse', 'Tart, refreshing, and light — a classic German wheat ale with bright lactic acidity.', 3.8, 6.50, true, 5 from beer_categories where name = 'ALES & IPAS'
-union all select id, 'Hill Country Strong', 'Peach Saison', 'Rustic farmhouse yeast meets Hill Country peaches for a fruity, peppery seasonal.', 8.0, 7.50, false, 1 from beer_categories where name = 'STRONG & SPECIALTY'
-union all select id, 'Brazos Abbey', 'Belgian Dubbel', 'Dark fruit, brown sugar, and Belgian yeast spice in a rich, abbey-style ale.', 6.5, 7.50, false, 2 from beer_categories where name = 'STRONG & SPECIALTY'
-union all select id, 'Double Quad Dare', 'Belgian Quad', 'A bold, warming strong ale with dried fruit, caramel depth, and monastic complexity.', 8.5, 7.50, true, 3 from beer_categories where name = 'STRONG & SPECIALTY'
-union all select id, 'Mintal Vacation', 'Mint Milk Chocolate Stout', 'Lush chocolate malt with cool mint and a creamy lactose finish — dessert in a glass.', 6.6, 7.50, false, 1 from beer_categories where name = 'DARK'
-union all select id, 'Lago''s Finest', 'Root Beer', 'House-crafted with vanilla and wintergreen — the best non-alcoholic pour on the list.', null, 4.00, false, 1 from beer_categories where name = 'NON-ALC & GUEST'
-union all select id, 'Tin City Cider', 'Dry Hopped Cider', 'Crisp fermented apple with a bright hop lift — bone dry and endlessly drinkable.', 6.9, 7.00, false, 2 from beer_categories where name = 'NON-ALC & GUEST';
+insert into beers (name, style, category, description, abv, price, badges) values
+  ('Bronco Blonde', 'Blonde Ale', 'Light & Lager', 'Smooth and easy-drinking with a touch of honey sweetness and a clean finish.', 5.0, 6.50, '{}'),
+  ('Float Club', 'Dry Hopped Kölsch', 'Light & Lager', 'Light and crisp with a delicate hop aroma and refreshing German character.', 5.1, 7.50, '{}'),
+  ('Howdyfest', 'Rye Lager', 'Light & Lager', 'A Texas take on a classic lager, with a spicy rye backbone and smooth malt body.', 6.2, 6.50, '{}'),
+  ('Southern Drawl', 'Helles Lager', 'Light & Lager', 'Soft, malty, and approachable — a Bavarian classic brewed for the Texas heat.', 5.5, 6.50, '{}'),
+  ('Orbit Sixx-T', 'Patersbier', 'Light & Lager', 'The sessionable table beer of Belgian monks — golden, gentle, and quietly complex.', 5.8, 6.50, '{}'),
+  ('Bonfire', 'Amber Ale', 'Ales & IPAs', 'Rich caramel malt with a gentle hop balance and a warm, toasty finish.', 5.0, 6.50, '{}'),
+  ('Vista IPA', 'IPA', 'Ales & IPAs', 'Bold citrus and pine hop character with a clean, bitter finish that opens up the view.', 6.2, 7.50, '{}'),
+  ('Thick & Sprucey', 'Spruce Tip IPA', 'Ales & IPAs', 'Bright forest aromatics and resinous spruce tips layered over a juicy hop base.', 6.2, 7.50, '{}'),
+  ('All Burn', 'Rauchbier', 'Ales & IPAs', 'German smoked malt brings the campfire to the glass — savory, deep, and unforgettable.', 5.2, 7.50, '{}'),
+  ('TBD', 'Berliner Weisse', 'Ales & IPAs', 'Tart, refreshing, and light — a classic German wheat ale with bright lactic acidity.', 3.8, 6.50, '{new_release}'),
+  ('Hill Country Strong', 'Peach Saison', 'Strong & Specialty', 'Rustic farmhouse yeast meets Hill Country peaches for a fruity, peppery seasonal.', 8.0, 7.50, '{}'),
+  ('Brazos Abbey', 'Belgian Dubbel', 'Strong & Specialty', 'Dark fruit, brown sugar, and Belgian yeast spice in a rich, abbey-style ale.', 6.5, 7.50, '{}'),
+  ('Double Quad Dare', 'Belgian Quad', 'Strong & Specialty', 'A bold, warming strong ale with dried fruit, caramel depth, and monastic complexity.', 8.5, 7.50, '{new_release}'),
+  ('Mintal Vacation', 'Mint Milk Chocolate Stout', 'Dark', 'Lush chocolate malt with cool mint and a creamy lactose finish — dessert in a glass.', 6.6, 7.50, '{lactose}'),
+  ('Lago''s Finest', 'Root Beer', 'Non-Alcoholic', 'House-crafted with vanilla and wintergreen — the best non-alcoholic pour on the list.', null, 4.00, '{}'),
+  ('Tin City Cider', 'Dry Hopped Cider', 'Non-Alcoholic', 'Crisp fermented apple with a bright hop lift — bone dry and endlessly drinkable.', 6.9, 7.00, '{}');
 
 insert into point_rules (label, transaction_type, description, points) values
   ('First Visit', 'checkin_first_visit', 'Awarded on a member''s very first check-in', 50),

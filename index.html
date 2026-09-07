@@ -92,41 +92,201 @@
 
       <!-- MENU SCREEN -->
       <div class="screen" id="screen-menu">
-        <div class="tap-screen-toggle">
-          <button class="tap-toggle-btn active" onclick="setMenuFilter('ontap', this)">On Tap</button>
-          <button class="tap-toggle-btn" onclick="setMenuFilter('all', this)">All Beers</button>
-          <button class="tap-toggle-btn" onclick="setMenuFilter('retired', this)">Retired</button>
+        <div class="sub-tabs">
+          <button class="sub-tab active" onclick="setMenuTab('taplist', this)">Tap List</button>
+          <button class="sub-tab" onclick="setMenuTab('wine', this)">Wine &amp; N/A</button>
+          <button class="sub-tab" onclick="setMenuTab('gen', this)">Menu Generator</button>
         </div>
 
-        <div id="menu-admin-form-wrap" style="display:none;">
-          <div class="event-form-wrap" style="margin-bottom:20px;">
-            <div class="event-form-title" id="menu-form-title">Add New Beer</div>
-            <input type="hidden" id="menu-beer-id">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
-              <div class="admin-field" style="margin-bottom:0;"><label class="admin-label">Beer Name</label><input class="admin-input" type="text" id="menu-beer-name" placeholder="e.g. Hazy Daze IPA"></div>
-              <div class="admin-field" style="margin-bottom:0;"><label class="admin-label">Category</label><select class="admin-select" id="menu-beer-category"></select></div>
-              <div class="admin-field" style="margin-bottom:0;"><label class="admin-label">Style</label><input class="admin-input" type="text" id="menu-beer-style" placeholder="e.g. Hazy IPA"></div>
-              <div class="admin-field" style="margin-bottom:0;"><label class="admin-label">Price</label><input class="admin-input" type="number" step="0.01" id="menu-beer-price" placeholder="7.50"></div>
-              <div class="admin-field" style="margin-bottom:0;"><label class="admin-label">ABV %</label><input class="admin-input" type="number" step="0.1" id="menu-beer-abv" placeholder="6.2"></div>
-              <div class="admin-field" style="margin-bottom:0;"><label class="admin-label">IBU</label><input class="admin-input" type="number" id="menu-beer-ibu" placeholder="45"></div>
-              <div class="admin-field" style="margin-bottom:0;grid-column:1/-1;"><label class="admin-label">Description</label><input class="admin-input" type="text" id="menu-beer-desc" placeholder="Brewer's description..."></div>
-              <div class="admin-field" style="margin-bottom:0;grid-column:1/-1;"><label class="admin-label">Tasting Notes</label><input class="admin-input" type="text" id="menu-beer-notes" placeholder="e.g. Tropical, citrus, hazy finish..."></div>
-              <div class="admin-field" style="margin-bottom:0;"><label class="admin-label">Image URL (optional)</label><input class="admin-input" type="text" id="menu-beer-img" placeholder="https://..."></div>
-              <div class="admin-field" style="margin-bottom:0;"><label class="admin-label">Tapped On</label><input class="admin-input" type="date" id="menu-beer-tapped"></div>
+        <!-- TAP LIST -->
+        <div class="sub-sec active" id="menutab-taplist">
+          <div class="grid-2">
+            <div class="grid2-col" id="beer-form-col">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                <div class="section-label" style="margin:0;" id="bn-form-label">Add New Beer</div>
+                <button class="btn btn-sm btn-secondary" id="bn-cancel-edit" style="display:none;" onclick="cancelBeerEdit()">✕ Cancel Edit</button>
+              </div>
+              <div class="card">
+                <div class="form-row">
+                  <div class="form-group"><label class="form-label">Name</label><input class="form-input" style="width:100%;" type="text" id="bn-name" placeholder="e.g. Bronco Blonde"></div>
+                  <div class="form-group"><label class="form-label">Style</label><input class="form-input" style="width:100%;" type="text" id="bn-style" placeholder="e.g. Blonde Ale"></div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group"><label class="form-label">ABV %</label><input class="form-input" style="width:100%;" type="text" id="bn-abv" placeholder="e.g. 5.0"></div>
+                  <div class="form-group"><label class="form-label">Price</label><input class="form-input" style="width:100%;" type="text" id="bn-price" placeholder="e.g. 6.50"></div>
+                </div>
+                <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Category</label>
+                  <select class="form-select" style="width:100%;" id="bn-cat">
+                    <option value="" disabled selected>Select category</option>
+                    <option>Light &amp; Lager</option><option>Ales &amp; IPAs</option>
+                    <option>Strong &amp; Specialty</option><option>Dark</option>
+                    <option>Guest Tap</option><option>Non-Alcoholic</option>
+                  </select>
+                </div>
+                <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Description</label>
+                  <textarea class="form-ta" id="bn-desc" placeholder="e.g. Smooth and easy-drinking with a touch of honey sweetness" rows="3"></textarea>
+                </div>
+                <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Long Description</label>
+                  <textarea class="form-ta" id="bn-longdesc" placeholder="e.g. Saddle up and take a ride with Bronco Blonde..." rows="3"></textarea>
+                </div>
+                <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Beer Photo</label>
+                  <div style="display:flex;align-items:center;gap:12px;">
+                    <div id="bn-img-preview" style="width:64px;height:64px;border-radius:6px;border:1px solid var(--border);background:var(--raised);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;">
+                      <span style="font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;">NO IMG</span>
+                    </div>
+                    <div style="flex:1;">
+                      <input type="file" id="bn-img-file" accept="image/*" style="display:none;">
+                      <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('bn-img-file').click()">Upload Photo</button>
+                      <button type="button" class="btn btn-sm btn-danger" id="bn-img-clear" style="display:none;margin-left:6px;" onclick="clearBeerImage()">Remove</button>
+                      <div style="font-size:11px;color:var(--muted);margin-top:4px;font-family:'DM Mono',monospace;" id="bn-img-name"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Badges</label>
+                  <div class="badge-picker" id="bn-badges">
+                    <div class="badge-pill amber" data-badge="new_release"><div class="badge-pill-dot"></div>New Release</div>
+                    <div class="badge-pill purple" data-badge="back_again"><div class="badge-pill-dot"></div>Back Again</div>
+                    <div class="badge-pill" data-badge="seasonal"><div class="badge-pill-dot"></div>Seasonal</div>
+                    <div class="badge-pill red" data-badge="limited"><div class="badge-pill-dot"></div>Limited</div>
+                    <div class="badge-pill" data-badge="collab"><div class="badge-pill-dot"></div>Collab</div>
+                    <div class="badge-pill" data-badge="lactose"><div class="badge-pill-dot"></div>Lactose</div>
+                    <div class="badge-pill" data-badge="wheat"><div class="badge-pill-dot"></div>Wheat</div>
+                  </div>
+                </div>
+                <div id="beer-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
+                <div style="display:flex;gap:8px;">
+                  <button class="btn btn-primary" id="btn-save-beer" style="flex:1;" onclick="saveBeer()">Add Beer to Tap List</button>
+                </div>
+              </div>
             </div>
-            <div class="checkbox-row">
-              <input type="checkbox" id="menu-beer-release">
-              <label for="menu-beer-release">Mark as new release</label>
-            </div>
-            <div id="menu-beer-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
-            <div style="display:flex;gap:10px;">
-              <button class="btn btn-primary" id="menu-beer-submit" onclick="saveMenuBeer()">Add Beer to Tap List</button>
-              <button class="btn btn-secondary" id="menu-beer-cancel" style="display:none;" onclick="cancelMenuEdit()">Cancel Edit</button>
+            <div class="grid2-col">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                <div class="section-label" style="margin:0;">Tap List</div>
+                <div style="display:flex;gap:6px;">
+                  <button class="tap-toggle-btn active" id="bf-current" onclick="setBeerFilter('active')">Current</button>
+                  <button class="tap-toggle-btn" id="bf-retired" onclick="setBeerFilter('archived')">Retired</button>
+                </div>
+              </div>
+              <div id="beer-list"><div class="loading">Loading...</div></div>
             </div>
           </div>
         </div>
 
-        <div class="tap-screen-grid" id="menu-grid"><div class="loading" style="grid-column:1/-1;">Loading...</div></div>
+        <!-- WINE & N/A -->
+        <div class="sub-sec" id="menutab-wine">
+          <div class="grid-2">
+            <div class="grid2-col" id="wine-form-col">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                <div class="section-label" style="margin:0;" id="wn-form-label">Add Item</div>
+                <button class="btn btn-sm btn-secondary" id="wn-cancel-edit" style="display:none;" onclick="cancelWineEdit()">✕ Cancel Edit</button>
+              </div>
+              <div class="card">
+                <div class="form-row">
+                  <div class="form-group"><label class="form-label">Name</label><input class="form-input" style="width:100%;" type="text" id="wn-name" placeholder="e.g. Louis Perdrier Brut"></div>
+                  <div class="form-group"><label class="form-label">Winery / Producer</label><input class="form-input" style="width:100%;" type="text" id="wn-winery" placeholder="e.g. Louis Perdrier"></div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group"><label class="form-label">Region</label><input class="form-input" style="width:100%;" type="text" id="wn-region" placeholder="e.g. Burgundy, France"></div>
+                  <div class="form-group">
+                    <label class="form-label">Type</label>
+                    <select class="form-select" style="width:100%;" id="wn-type-sel">
+                      <option value="" disabled selected>Select type</option>
+                      <option>Champagne</option><option>Sparkling</option><option>Brut Rosé</option>
+                      <option>Dry Rosé</option><option>Chardonnay</option><option>Sauvignon Blanc</option>
+                      <option>Pinot Grigio</option><option>Riesling</option><option>Cabernet Sauvignon</option>
+                      <option>Merlot</option><option>Pinot Noir</option><option>Dry Red</option>
+                      <option>Golden Ale</option><option>IPA</option><option>Light Lager</option>
+                      <option>Root Beer</option><option>Cider</option><option>Soda</option>
+                      <option>Tea</option><option>Juice</option><option>Water</option>
+                      <option value="__other__">Other...</option>
+                    </select>
+                    <input class="form-input" style="width:100%;margin-top:8px;display:none;" type="text" id="wn-type-other" placeholder="Enter type">
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group"><label class="form-label">Category</label>
+                    <select class="form-select" style="width:100%;" id="wn-cat">
+                      <option value="" disabled selected>e.g. Sparkling</option>
+                      <option value="white">White</option><option value="red">Red</option>
+                      <option value="rosé">Rosé</option><option value="sparkling">Sparkling</option>
+                      <option value="na">N/A</option>
+                    </select>
+                  </div>
+                  <div class="form-group"><label class="form-label">Display Group</label>
+                    <select class="form-select" style="width:100%;" id="wn-group">
+                      <option value="" disabled selected>e.g. Wine by the Glass</option>
+                      <option>Wine by the Bottle</option><option>Wine by the Glass</option>
+                      <option>N/A Beer</option><option>N/A Options</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Description</label>
+                  <textarea class="form-ta" id="wn-desc" placeholder="e.g. Served straight or brightened with fresh orange juice" rows="3"></textarea>
+                </div>
+                <div class="form-row">
+                  <div class="form-group"><label class="form-label">Glass / Per Unit Price</label><input class="form-input" style="width:100%;" type="text" id="wn-pglass" placeholder="e.g. 6.00"></div>
+                  <div class="form-group"><label class="form-label">Bottle Price</label><input class="form-input" style="width:100%;" type="text" id="wn-pbottle" placeholder="e.g. 20.00"></div>
+                </div>
+                <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Badges</label>
+                  <div class="badge-picker" id="wn-badges">
+                    <div class="badge-pill" data-badge="Bottle"><div class="badge-pill-dot"></div>Bottle</div>
+                    <div class="badge-pill" data-badge="Glass+Bottle"><div class="badge-pill-dot"></div>Glass+Bottle</div>
+                    <div class="badge-pill" data-badge="Can"><div class="badge-pill-dot"></div>Can</div>
+                    <div class="badge-pill amber" data-badge="New"><div class="badge-pill-dot"></div>New</div>
+                    <div class="badge-pill purple" data-badge="back_again"><div class="badge-pill-dot"></div>Back Again</div>
+                    <div class="badge-pill red" data-badge="seasonal"><div class="badge-pill-dot"></div>Seasonal</div>
+                    <div class="badge-pill" data-badge="limited"><div class="badge-pill-dot"></div>Limited</div>
+                  </div>
+                </div>
+                <div id="wine-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
+                <div style="display:flex;gap:8px;">
+                  <button class="btn btn-primary" id="btn-save-wine" style="flex:1;" onclick="saveWine()">Add to Menu</button>
+                </div>
+              </div>
+            </div>
+            <div class="grid2-col">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                <div class="section-label" style="margin:0;">Wine &amp; N/A</div>
+                <div style="display:flex;gap:6px;">
+                  <button class="tap-toggle-btn active" id="wf-active" onclick="setWineFilterBtn('active')">Active</button>
+                  <button class="tap-toggle-btn" id="wf-archived" onclick="setWineFilterBtn('archived')">Archived</button>
+                </div>
+              </div>
+              <div id="wine-list"><div class="loading">Loading...</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- MENU GENERATOR -->
+        <div class="sub-sec" id="menutab-gen">
+          <div class="section-label" style="margin-top:0;">Print-Ready Menus</div>
+          <div class="gen-grid">
+            <div class="gen-card"><div class="gen-card-title">Tap List</div><div class="gen-card-desc">Full 8.5×11 tap menu with categories, badges, ABV, and pricing.</div><button class="btn btn-primary btn-sm" onclick="genTapList()">Generate Tap List</button></div>
+            <div class="gen-card"><div class="gen-card-title">Tap Half-Sheet</div><div class="gen-card-desc">Two half-cards per page, landscape-rotated, for table displays.</div><button class="btn btn-primary btn-sm" onclick="genTapHalf()">Generate Half-Sheet</button></div>
+            <div class="gen-card"><div class="gen-card-title">Wine &amp; N/A Menu</div><div class="gen-card-desc">Full wine menu with glass/bottle badges, N/A beer, and options grid.</div><button class="btn btn-primary btn-sm" onclick="genWineMenu()">Generate Wine Menu</button></div>
+            <div class="gen-card"><div class="gen-card-title">Wine Half-Sheet</div><div class="gen-card-desc">Compact half-card wine &amp; N/A for table or bar use.</div><button class="btn btn-primary btn-sm" onclick="genWineHalf()">Generate Wine Half</button></div>
+            <div class="gen-card"><div class="gen-card-title">Fridge Labels</div><div class="gen-card-desc">3.94×1.57in crowler labels — select individual beers or print all.</div><button class="btn btn-primary btn-sm" onclick="openLabelPicker()">Select &amp; Generate Labels</button></div>
+          </div>
+          <div class="gen-status" id="gen-status"></div>
+
+          <div id="label-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:500;align-items:center;justify-content:center;">
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;width:560px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;">
+              <div style="padding:20px 24px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+                <div><div style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px;">Select Labels to Print</div><div style="font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);margin-top:2px;">Click beers to toggle — selected will be printed</div></div>
+                <button onclick="closeLabelPicker()" style="background:none;border:none;color:var(--sub);font-size:20px;cursor:pointer;line-height:1;">✕</button>
+              </div>
+              <div style="padding:12px 24px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-shrink:0;">
+                <button class="btn btn-sm btn-secondary" onclick="labelSelectAll()">Select All</button>
+                <button class="btn btn-sm btn-secondary" onclick="labelSelectNone()">Clear All</button>
+              </div>
+              <div id="label-picker-list" style="flex:1;overflow-y:auto;padding:12px 24px;display:flex;flex-direction:column;gap:6px;"></div>
+              <div style="padding:16px 24px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;flex-shrink:0;">
+                <button class="btn btn-secondary" onclick="closeLabelPicker()">Cancel</button>
+                <button class="btn btn-primary" onclick="genFridgeLabels()">Generate Labels</button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </main>
   </div>
