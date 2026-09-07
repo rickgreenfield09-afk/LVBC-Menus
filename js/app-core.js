@@ -11,6 +11,9 @@
   const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.LVBC_CONFIG;
   const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   window.supabase = client;
+
+  const logo = document.getElementById('header-logo');
+  if (logo) logo.src = SUPABASE_URL + '/storage/v1/object/public/assets/lvbc-logo.png';
 })();
 
 window.currentStaff = null;
@@ -67,6 +70,7 @@ function renderLoggedIn() {
   document.getElementById('app-shell').style.display = 'flex';
   document.getElementById('staff-name-badge').textContent = window.currentStaff.name;
   if (typeof loadDashboard === 'function') loadDashboard();
+  if (typeof loadMenu === 'function') loadMenu();
 }
 
 function renderLoggedOut() {

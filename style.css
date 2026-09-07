@@ -279,6 +279,7 @@
   .sub-sec{display:none;}
   .sub-sec.active{display:block;animation:fadeIn 0.2s ease;}
   .grid2-col{display:flex;flex-direction:column;}
+  .menu-col-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;min-height:32px;}
   .form-ta{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 14px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;transition:border-color 0.15s;width:100%;resize:vertical;min-height:80px;line-height:1.5;}
   .form-ta:focus{border-color:var(--teal);}
   .form-ta::placeholder{color:var(--muted);}

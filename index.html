@@ -31,6 +31,7 @@
   <div id="app-shell" style="display:none;flex-direction:column;min-height:100vh;">
     <header>
       <div class="logo-wrap">
+        <img class="logo-img" id="header-logo" alt="LVBC" onerror="this.style.display='none'">
         <span class="logo">LVBC <span>Staff Panel</span></span>
       </div>
       <div style="display:flex;align-items:center;gap:12px;">
@@ -40,58 +41,13 @@
     </header>
 
     <nav>
-      <button class="nav-btn active" onclick="showScreen('checkin', this)">Check-In</button>
-      <button class="nav-btn" onclick="showScreen('menu', this); loadMenu()">Menu</button>
+      <button class="nav-btn active" onclick="showScreen('menu', this); loadMenu()">Menu</button>
       <!-- Dashboard, Admin, Reports tabs added as their .js files land -->
     </nav>
 
     <main>
-      <!-- CHECK-IN SCREEN -->
-      <div class="screen active" id="screen-checkin">
-        <div class="lookup-wrap">
-          <div>
-            <div class="lookup-toolbar">
-              <input class="search-bar" id="checkin-search" placeholder="Search member by name or email..." oninput="searchMembers()">
-            </div>
-            <div id="checkin-results"></div>
-
-            <div class="member-profile" id="member-profile">
-              <div class="profile-header">
-                <div class="profile-header-left">
-                  <div id="profile-photo-wrap"></div>
-                  <div>
-                    <div class="profile-name" id="profile-name"></div>
-                    <div class="profile-email" id="profile-email"></div>
-                  </div>
-                </div>
-                <span class="tier" id="profile-tier"></span>
-              </div>
-              <div class="profile-stats">
-                <div class="stat-box">
-                  <div class="stat-label">Points</div>
-                  <div class="stat-val" id="profile-balance"></div>
-                </div>
-                <div class="stat-box">
-                  <div class="stat-label">Member Since</div>
-                  <div class="stat-val" id="profile-since" style="font-size:16px;"></div>
-                </div>
-                <div class="stat-box">
-                  <div class="stat-label">Free Pours</div>
-                  <div class="stat-val" id="profile-pour-count"></div>
-                </div>
-              </div>
-              <div class="profile-actions">
-                <button class="btn btn-primary" id="checkin-btn" onclick="applyCheckin()">Check In</button>
-              </div>
-              <div class="tap-list-title" style="margin-top:20px;">ON TAP — FREE POUR STATUS</div>
-              <div class="tap-grid" id="tap-list"><div class="loading">Loading tap list...</div></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <!-- MENU SCREEN -->
-      <div class="screen" id="screen-menu">
+      <div class="screen active" id="screen-menu">
         <div class="sub-tabs">
           <button class="sub-tab active" onclick="setMenuTab('taplist', this)">Tap List</button>
           <button class="sub-tab" onclick="setMenuTab('wine', this)">Wine &amp; N/A</button>
@@ -102,9 +58,9 @@
         <div class="sub-sec active" id="menutab-taplist">
           <div class="grid-2">
             <div class="grid2-col" id="beer-form-col">
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+              <div class="menu-col-header">
                 <div class="section-label" style="margin:0;" id="bn-form-label">Add New Beer</div>
-                <button class="btn btn-sm btn-secondary" id="bn-cancel-edit" style="display:none;" onclick="cancelBeerEdit()">✕ Cancel Edit</button>
+                <button class="btn btn-sm btn-secondary" id="bn-cancel-edit" style="visibility:hidden;" onclick="cancelBeerEdit()">✕ Cancel Edit</button>
               </div>
               <div class="card">
                 <div class="form-row">
@@ -142,17 +98,6 @@
                     </div>
                   </div>
                 </div>
-                <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Badges</label>
-                  <div class="badge-picker" id="bn-badges">
-                    <div class="badge-pill amber" data-badge="new_release"><div class="badge-pill-dot"></div>New Release</div>
-                    <div class="badge-pill purple" data-badge="back_again"><div class="badge-pill-dot"></div>Back Again</div>
-                    <div class="badge-pill" data-badge="seasonal"><div class="badge-pill-dot"></div>Seasonal</div>
-                    <div class="badge-pill red" data-badge="limited"><div class="badge-pill-dot"></div>Limited</div>
-                    <div class="badge-pill" data-badge="collab"><div class="badge-pill-dot"></div>Collab</div>
-                    <div class="badge-pill" data-badge="lactose"><div class="badge-pill-dot"></div>Lactose</div>
-                    <div class="badge-pill" data-badge="wheat"><div class="badge-pill-dot"></div>Wheat</div>
-                  </div>
-                </div>
                 <div id="beer-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
                 <div style="display:flex;gap:8px;">
                   <button class="btn btn-primary" id="btn-save-beer" style="flex:1;" onclick="saveBeer()">Add Beer to Tap List</button>
@@ -160,7 +105,7 @@
               </div>
             </div>
             <div class="grid2-col">
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+              <div class="menu-col-header">
                 <div class="section-label" style="margin:0;">Tap List</div>
                 <div style="display:flex;gap:6px;">
                   <button class="tap-toggle-btn active" id="bf-current" onclick="setBeerFilter('active')">Current</button>
@@ -176,9 +121,9 @@
         <div class="sub-sec" id="menutab-wine">
           <div class="grid-2">
             <div class="grid2-col" id="wine-form-col">
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+              <div class="menu-col-header">
                 <div class="section-label" style="margin:0;" id="wn-form-label">Add Item</div>
-                <button class="btn btn-sm btn-secondary" id="wn-cancel-edit" style="display:none;" onclick="cancelWineEdit()">✕ Cancel Edit</button>
+                <button class="btn btn-sm btn-secondary" id="wn-cancel-edit" style="visibility:hidden;" onclick="cancelWineEdit()">✕ Cancel Edit</button>
               </div>
               <div class="card">
                 <div class="form-row">
@@ -227,17 +172,6 @@
                   <div class="form-group"><label class="form-label">Glass / Per Unit Price</label><input class="form-input" style="width:100%;" type="text" id="wn-pglass" placeholder="e.g. 6.00"></div>
                   <div class="form-group"><label class="form-label">Bottle Price</label><input class="form-input" style="width:100%;" type="text" id="wn-pbottle" placeholder="e.g. 20.00"></div>
                 </div>
-                <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Badges</label>
-                  <div class="badge-picker" id="wn-badges">
-                    <div class="badge-pill" data-badge="Bottle"><div class="badge-pill-dot"></div>Bottle</div>
-                    <div class="badge-pill" data-badge="Glass+Bottle"><div class="badge-pill-dot"></div>Glass+Bottle</div>
-                    <div class="badge-pill" data-badge="Can"><div class="badge-pill-dot"></div>Can</div>
-                    <div class="badge-pill amber" data-badge="New"><div class="badge-pill-dot"></div>New</div>
-                    <div class="badge-pill purple" data-badge="back_again"><div class="badge-pill-dot"></div>Back Again</div>
-                    <div class="badge-pill red" data-badge="seasonal"><div class="badge-pill-dot"></div>Seasonal</div>
-                    <div class="badge-pill" data-badge="limited"><div class="badge-pill-dot"></div>Limited</div>
-                  </div>
-                </div>
                 <div id="wine-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
                 <div style="display:flex;gap:8px;">
                   <button class="btn btn-primary" id="btn-save-wine" style="flex:1;" onclick="saveWine()">Add to Menu</button>
@@ -245,7 +179,7 @@
               </div>
             </div>
             <div class="grid2-col">
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+              <div class="menu-col-header">
                 <div class="section-label" style="margin:0;">Wine &amp; N/A</div>
                 <div style="display:flex;gap:6px;">
                   <button class="tap-toggle-btn active" id="wf-active" onclick="setWineFilterBtn('active')">Active</button>
@@ -293,7 +227,6 @@
 
   <script src="config.js"></script>
   <script src="js/app-core.js"></script>
-  <script src="js/checkin.js"></script>
   <script src="js/menu.js"></script>
 </body>
 </html>

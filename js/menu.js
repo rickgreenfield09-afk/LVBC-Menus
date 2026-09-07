@@ -18,25 +18,6 @@ function parseCurrency(id) {
   const v = document.getElementById(id).value.replace(/[^0-9.]/g, '');
   return v ? parseFloat(v) : null;
 }
-function getSelectedBadges(id) {
-  const s = [];
-  document.querySelectorAll('#' + id + ' .badge-pill.selected').forEach((p) => s.push(p.dataset.badge));
-  return s;
-}
-function clearBadgePills(id) {
-  document.querySelectorAll('#' + id + ' .badge-pill').forEach((p) => p.classList.remove('selected'));
-}
-function setBadgePills(id, arr) {
-  clearBadgePills(id);
-  (arr || []).forEach((b) => {
-    const p = document.querySelector('#' + id + ' [data-badge="' + b + '"]');
-    if (p) p.classList.add('selected');
-  });
-}
-document.addEventListener('click', (e) => {
-  const pill = e.target.closest('.badge-pill');
-  if (pill) pill.classList.toggle('selected');
-});
 
 let beers = [], selBeer = null, beerEditMode = false, beerFilter = 'active';
 let wines = [], selWine = null, wineEditMode = false, wineFilter = 'active';
@@ -81,7 +62,6 @@ function setBeerFilter(status) {
 
 function makeBeerStatusBadge(b) {
   if (b.status === 'archived') return '<span class="badge badge-red">Retired</span>';
-  if ((b.badges || []).length) return '<span class="badge badge-teal">Badged</span>';
   return '<span style="font-size:11px;color:var(--muted)">Active</span>';
 }
 
@@ -129,7 +109,7 @@ function loadBeerIntoForm(b) {
   selBeer = b.id;
   document.getElementById('bn-form-label').textContent = 'Edit Beer';
   document.getElementById('btn-save-beer').textContent = 'Save Changes';
-  document.getElementById('bn-cancel-edit').style.display = '';
+  document.getElementById('bn-cancel-edit').style.visibility = 'visible';
   document.getElementById('bn-name').value = b.name || '';
   document.getElementById('bn-style').value = b.style || '';
   document.getElementById('bn-abv').value = b.abv != null ? b.abv : '';
@@ -138,7 +118,6 @@ function loadBeerIntoForm(b) {
   catSel.value = b.category || '';
   document.getElementById('bn-desc').value = b.description || '';
   document.getElementById('bn-longdesc').value = b.long_description || '';
-  setBadgePills('bn-badges', b.badges || []);
   setBeerImagePreview(b.image_url || null);
 
   const old = document.getElementById('bn-archive-btn');
@@ -165,12 +144,11 @@ function cancelBeerEdit() {
   if (!label) return;
   label.textContent = 'Add New Beer';
   document.getElementById('btn-save-beer').textContent = 'Add Beer to Tap List';
-  document.getElementById('bn-cancel-edit').style.display = 'none';
+  document.getElementById('bn-cancel-edit').style.visibility = 'hidden';
   ['bn-name', 'bn-style', 'bn-abv', 'bn-price'].forEach((id) => { document.getElementById(id).value = ''; });
   document.getElementById('bn-desc').value = '';
   document.getElementById('bn-longdesc').value = '';
   document.getElementById('bn-cat').value = '';
-  clearBadgePills('bn-badges');
   clearBeerImage();
   const old = document.getElementById('bn-archive-btn');
   if (old) old.remove();
@@ -191,7 +169,6 @@ async function saveBeer() {
     description: document.getElementById('bn-desc').value.trim() || null,
     long_description: document.getElementById('bn-longdesc').value.trim() || null,
     category: cat,
-    badges: getSelectedBadges('bn-badges'),
   };
 
   try {
@@ -389,7 +366,7 @@ function loadWineIntoForm(w) {
   selWine = w.id;
   document.getElementById('wn-form-label').textContent = 'Edit Item';
   document.getElementById('btn-save-wine').textContent = 'Save Changes';
-  document.getElementById('wn-cancel-edit').style.display = '';
+  document.getElementById('wn-cancel-edit').style.visibility = 'visible';
   document.getElementById('wn-name').value = w.name || '';
   document.getElementById('wn-winery').value = w.winery || '';
   document.getElementById('wn-region').value = w.region || '';
@@ -399,7 +376,6 @@ function loadWineIntoForm(w) {
   document.getElementById('wn-desc').value = w.description || '';
   document.getElementById('wn-pglass').value = w.price_glass != null ? Number(w.price_glass).toFixed(2) : '';
   document.getElementById('wn-pbottle').value = w.price_bottle != null ? Number(w.price_bottle).toFixed(2) : '';
-  setBadgePills('wn-badges', w.badge || []);
 
   const old = document.getElementById('wn-archive-btn');
   if (old) old.remove();
@@ -425,14 +401,13 @@ function cancelWineEdit() {
   if (!label) return;
   label.textContent = 'Add Item';
   document.getElementById('btn-save-wine').textContent = 'Add to Menu';
-  document.getElementById('wn-cancel-edit').style.display = 'none';
+  document.getElementById('wn-cancel-edit').style.visibility = 'hidden';
   ['wn-name', 'wn-winery', 'wn-region', 'wn-desc', 'wn-pglass', 'wn-pbottle'].forEach((id) => { document.getElementById(id).value = ''; });
   document.getElementById('wn-type-sel').value = '';
   document.getElementById('wn-type-other').style.display = 'none';
   document.getElementById('wn-type-other').value = '';
   document.getElementById('wn-cat').value = '';
   document.getElementById('wn-group').value = '';
-  clearBadgePills('wn-badges');
   const old = document.getElementById('wn-archive-btn');
   if (old) old.remove();
   if (wines.length) renderWines();
@@ -451,7 +426,6 @@ async function saveWine() {
     description: document.getElementById('wn-desc').value.trim() || null,
     price_glass: parseCurrency('wn-pglass'),
     price_bottle: parseCurrency('wn-pbottle'),
-    badge: getSelectedBadges('wn-badges'),
   };
   try {
     if (wineEditMode && selWine) {
