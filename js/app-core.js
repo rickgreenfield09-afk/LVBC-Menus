@@ -9,7 +9,8 @@
 
 (function () {
   const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.LVBC_CONFIG;
-  window.supabase = supabaseJs.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  window.supabase = client;
 })();
 
 window.currentStaff = null;

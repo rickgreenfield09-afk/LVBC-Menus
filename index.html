@@ -41,7 +41,8 @@
 
     <nav>
       <button class="nav-btn active" onclick="showScreen('checkin', this)">Check-In</button>
-      <!-- Dashboard, On Tap, Admin, Reports tabs added as their .js files land -->
+      <button class="nav-btn" onclick="showScreen('menu', this); loadMenu()">Menu</button>
+      <!-- Dashboard, Admin, Reports tabs added as their .js files land -->
     </nav>
 
     <main>
@@ -88,11 +89,51 @@
           </div>
         </div>
       </div>
+
+      <!-- MENU SCREEN -->
+      <div class="screen" id="screen-menu">
+        <div class="tap-screen-toggle">
+          <button class="tap-toggle-btn active" onclick="setMenuFilter('ontap', this)">On Tap</button>
+          <button class="tap-toggle-btn" onclick="setMenuFilter('all', this)">All Beers</button>
+          <button class="tap-toggle-btn" onclick="setMenuFilter('retired', this)">Retired</button>
+        </div>
+
+        <div id="menu-admin-form-wrap" style="display:none;">
+          <div class="event-form-wrap" style="margin-bottom:20px;">
+            <div class="event-form-title" id="menu-form-title">Add New Beer</div>
+            <input type="hidden" id="menu-beer-id">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+              <div class="admin-field" style="margin-bottom:0;"><label class="admin-label">Beer Name</label><input class="admin-input" type="text" id="menu-beer-name" placeholder="e.g. Hazy Daze IPA"></div>
+              <div class="admin-field" style="margin-bottom:0;"><label class="admin-label">Category</label><select class="admin-select" id="menu-beer-category"></select></div>
+              <div class="admin-field" style="margin-bottom:0;"><label class="admin-label">Style</label><input class="admin-input" type="text" id="menu-beer-style" placeholder="e.g. Hazy IPA"></div>
+              <div class="admin-field" style="margin-bottom:0;"><label class="admin-label">Price</label><input class="admin-input" type="number" step="0.01" id="menu-beer-price" placeholder="7.50"></div>
+              <div class="admin-field" style="margin-bottom:0;"><label class="admin-label">ABV %</label><input class="admin-input" type="number" step="0.1" id="menu-beer-abv" placeholder="6.2"></div>
+              <div class="admin-field" style="margin-bottom:0;"><label class="admin-label">IBU</label><input class="admin-input" type="number" id="menu-beer-ibu" placeholder="45"></div>
+              <div class="admin-field" style="margin-bottom:0;grid-column:1/-1;"><label class="admin-label">Description</label><input class="admin-input" type="text" id="menu-beer-desc" placeholder="Brewer's description..."></div>
+              <div class="admin-field" style="margin-bottom:0;grid-column:1/-1;"><label class="admin-label">Tasting Notes</label><input class="admin-input" type="text" id="menu-beer-notes" placeholder="e.g. Tropical, citrus, hazy finish..."></div>
+              <div class="admin-field" style="margin-bottom:0;"><label class="admin-label">Image URL (optional)</label><input class="admin-input" type="text" id="menu-beer-img" placeholder="https://..."></div>
+              <div class="admin-field" style="margin-bottom:0;"><label class="admin-label">Tapped On</label><input class="admin-input" type="date" id="menu-beer-tapped"></div>
+            </div>
+            <div class="checkbox-row">
+              <input type="checkbox" id="menu-beer-release">
+              <label for="menu-beer-release">Mark as new release</label>
+            </div>
+            <div id="menu-beer-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
+            <div style="display:flex;gap:10px;">
+              <button class="btn btn-primary" id="menu-beer-submit" onclick="saveMenuBeer()">Add Beer to Tap List</button>
+              <button class="btn btn-secondary" id="menu-beer-cancel" style="display:none;" onclick="cancelMenuEdit()">Cancel Edit</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="tap-screen-grid" id="menu-grid"><div class="loading" style="grid-column:1/-1;">Loading...</div></div>
+      </div>
     </main>
   </div>
 
   <script src="config.js"></script>
   <script src="js/app-core.js"></script>
   <script src="js/checkin.js"></script>
+  <script src="js/menu.js"></script>
 </body>
 </html>
