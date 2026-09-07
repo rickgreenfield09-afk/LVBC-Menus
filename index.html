@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LVBC Staff Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <!-- LOGIN SCREEN -->
+  <div id="login-screen" style="min-height:100vh;display:flex;align-items:center;justify-content:center;">
+    <form onsubmit="handleLogin(event)" style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:32px;width:320px;">
+      <div class="logo" style="margin-bottom:20px;">LVBC <span>Staff Login</span></div>
+      <div class="admin-field" style="margin-bottom:12px;">
+        <label class="admin-label">Email</label>
+        <input class="admin-input" type="email" id="login-email" required>
+      </div>
+      <div class="admin-field" style="margin-bottom:16px;">
+        <label class="admin-label">Password</label>
+        <input class="admin-input" type="password" id="login-password" required>
+      </div>
+      <div id="login-error" style="color:var(--red);font-size:12px;margin-bottom:12px;"></div>
+      <button type="submit" class="btn btn-primary" style="width:100%;">Sign In</button>
+    </form>
+  </div>
+
+  <!-- APP SHELL -->
+  <div id="app-shell" style="display:none;flex-direction:column;min-height:100vh;">
+    <header>
+      <div class="logo-wrap">
+        <span class="logo">LVBC <span>Staff Panel</span></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span class="staff-badge" id="staff-name-badge"></span>
+        <button class="btn btn-secondary btn-sm" onclick="handleLogout()">Sign Out</button>
+      </div>
+    </header>
+
+    <nav>
+      <button class="nav-btn active" onclick="showScreen('checkin', this)">Check-In</button>
+      <!-- Dashboard, On Tap, Admin, Reports tabs added as their .js files land -->
+    </nav>
+
+    <main>
+      <!-- CHECK-IN SCREEN -->
+      <div class="screen active" id="screen-checkin">
+        <div class="lookup-wrap">
+          <div>
+            <div class="lookup-toolbar">
+              <input class="search-bar" id="checkin-search" placeholder="Search member by name or email..." oninput="searchMembers()">
+            </div>
+            <div id="checkin-results"></div>
+
+            <div class="member-profile" id="member-profile">
+              <div class="profile-header">
+                <div class="profile-header-left">
+                  <div id="profile-photo-wrap"></div>
+                  <div>
+                    <div class="profile-name" id="profile-name"></div>
+                    <div class="profile-email" id="profile-email"></div>
+                  </div>
+                </div>
+                <span class="tier" id="profile-tier"></span>
+              </div>
+              <div class="profile-stats">
+                <div class="stat-box">
+                  <div class="stat-label">Points</div>
+                  <div class="stat-val" id="profile-balance"></div>
+                </div>
+                <div class="stat-box">
+                  <div class="stat-label">Member Since</div>
+                  <div class="stat-val" id="profile-since" style="font-size:16px;"></div>
+                </div>
+                <div class="stat-box">
+                  <div class="stat-label">Free Pours</div>
+                  <div class="stat-val" id="profile-pour-count"></div>
+                </div>
+              </div>
+              <div class="profile-actions">
+                <button class="btn btn-primary" id="checkin-btn" onclick="applyCheckin()">Check In</button>
+              </div>
+              <div class="tap-list-title" style="margin-top:20px;">ON TAP — FREE POUR STATUS</div>
+              <div class="tap-grid" id="tap-list"><div class="loading">Loading tap list...</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="js/app-core.js"></script>
+  <script src="js/checkin.js"></script>
+</body>
+</html>

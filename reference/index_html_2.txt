@@ -1,0 +1,2053 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LVBC Staff Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
+<style>
+
+  /* prevent date pickers from overflowing cards */
+  input[type="date"], input[type="datetime-local"]{
+    max-width:100%;
+    width:100%;
+    box-sizing:border-box;
+    min-width:0;
+  }
+  :root{--void:#0D1117;--surface:#161C26;--raised:#1E2733;--teal:#2AB8A6;--amber:#E8B84B;--red:#E05252;--purple:#BF5FFF;--header:#3E4E6C;--text:#F2EDE4;--sub:#8E92B0;--muted:#5C607E;--border:#2E3440;}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:var(--void);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;display:flex;flex-direction:column;}
+  header{background:var(--header);padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);flex-shrink:0;}
+  .logo-wrap{display:flex;align-items:center;gap:12px;}
+  .logo-img{width:36px;height:36px;object-fit:contain;}
+  .logo{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:3px;color:var(--teal);}
+  .logo span{color:var(--text);opacity:0.5;font-size:13px;font-family:'DM Mono',monospace;letter-spacing:1px;margin-left:12px;vertical-align:middle;}
+  .staff-badge{background:var(--raised);border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-size:12px;color:var(--sub);font-family:'DM Mono',monospace;}
+  nav{background:var(--surface);border-bottom:1px solid var(--border);display:flex;padding:0 24px;gap:4px;flex-shrink:0;}
+  .nav-btn{background:none;border:none;color:var(--sub);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;padding:12px 16px;cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s;}
+  .nav-btn:hover{color:var(--text);}
+  .nav-btn.active{color:var(--teal);border-bottom-color:var(--teal);}
+  main{flex:1;padding:24px;overflow-y:auto;}
+  .screen{display:none;animation:fadeIn 0.2s ease;}
+  .screen.active{display:block;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+  .grid-4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:16px;margin-bottom:16px;}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;}
+  .card-title{font-size:11px;font-family:'DM Mono',monospace;color:var(--sub);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;}
+  .card-value{font-family:'Bebas Neue',sans-serif;font-size:36px;color:var(--text);line-height:1;}
+  .card-value.teal{color:var(--teal);}
+  .card-value.amber{color:var(--amber);}
+  .card-sub{font-size:12px;color:var(--sub);margin-top:4px;}
+  .section-label{font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;margin-top:24px;}
+  .checkin-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);}
+  .checkin-row:last-child{border-bottom:none;}
+  .checkin-name{font-weight:500;font-size:14px;}
+  .checkin-time{font-size:12px;color:var(--sub);font-family:'DM Mono',monospace;margin-top:2px;}
+  .checkin-pour{font-size:12px;color:var(--amber);margin-top:3px;}
+  .checkin-pts{font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--teal);}
+  .tier{display:inline-block;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:600;}
+  .tier-mug{background:rgba(42,184,166,0.15);color:var(--teal);border:1px solid rgba(42,184,166,0.3);}
+  .tier-coffee{background:rgba(232,184,75,0.15);color:var(--amber);border:1px solid rgba(232,184,75,0.3);}
+  .tier-full{background:rgba(191,95,255,0.15);color:var(--purple);border:1px solid rgba(191,95,255,0.3);}
+  .tier-free{background:rgba(142,155,176,0.1);color:var(--sub);border:1px solid var(--border);}
+  .loading{color:var(--muted);font-size:13px;font-family:'DM Mono',monospace;padding:20px 0;text-align:center;}
+  .lookup-wrap{display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start;}
+  .lookup-toolbar{display:flex;gap:12px;margin-bottom:16px;align-items:center;}
+  .search-bar{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 16px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;transition:border-color 0.15s;}
+  .search-bar:focus{border-color:var(--teal);}
+  .search-bar::placeholder{color:var(--muted);}
+  .btn{padding:10px 20px;border-radius:6px;border:none;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.15s;}
+  .btn-primary{background:var(--teal);color:var(--void);}
+  .btn-primary:hover{background:#35d4c0;}
+  .btn-secondary{background:var(--raised);color:var(--text);border:1px solid var(--border);}
+  .btn-secondary:hover{border-color:var(--teal);color:var(--teal);}
+  .btn-scan{background:var(--amber);color:var(--void);}
+  .btn-scan:hover{background:#f5c84e;}
+  .btn-danger{background:rgba(224,82,82,0.15);color:var(--red);border:1px solid rgba(224,82,82,0.3);}
+  .btn-dd{background:rgba(191,95,255,0.15);color:var(--purple);border:1px solid rgba(191,95,255,0.3);}
+  .btn-dd:hover{background:rgba(191,95,255,0.25);}
+  .btn-sm{padding:6px 14px;font-size:12px;}
+  .member-profile{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:24px;display:none;margin-bottom:16px;}
+  .member-profile.visible{display:block;animation:fadeIn 0.2s ease;}
+  .profile-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;gap:16px;}
+  .profile-header-left{display:flex;align-items:flex-start;gap:14px;}
+  .profile-photo{width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid var(--border);flex-shrink:0;}
+  .profile-photo-initials{width:56px;height:56px;border-radius:50%;background:var(--raised);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--teal);flex-shrink:0;}
+  .profile-name{font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:1px;}
+  .profile-email{font-size:13px;color:var(--sub);font-family:'DM Mono',monospace;margin-top:2px;}
+  .profile-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
+  .stat-box{background:var(--raised);border-radius:6px;padding:12px;}
+  .stat-label{font-size:10px;font-family:'DM Mono',monospace;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px;}
+  .stat-val{font-family:'Bebas Neue',sans-serif;font-size:24px;line-height:1;}
+  .profile-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  .tap-list-title{font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;}
+  .tap-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .beer-tile{background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:14px;transition:all 0.15s;}
+  .beer-tile.new-release{border-color:rgba(232,184,75,0.4);}
+  .beer-tile.already-poured{opacity:0.5;}
+  .beer-name{font-weight:600;font-size:14px;margin-bottom:2px;}
+  .beer-style{font-size:11px;color:var(--sub);font-family:'DM Mono',monospace;margin-bottom:8px;}
+  .beer-abv{font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;}
+  .pour-badge{display:inline-block;font-size:10px;font-family:'DM Mono',monospace;padding:2px 8px;border-radius:10px;margin-bottom:6px;}
+  .pour-badge.new{background:rgba(232,184,75,0.15);color:var(--amber);border:1px solid rgba(232,184,75,0.3);}
+  .pour-badge.done{background:rgba(142,155,176,0.1);color:var(--muted);border:1px solid var(--border);}
+  .btn-pour{width:100%;margin-top:8px;padding:8px;border-radius:6px;border:none;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;background:var(--amber);color:var(--void);transition:all 0.15s;}
+  .btn-pour:hover{background:#f5c84e;}
+  .btn-pour:disabled{background:var(--border);color:var(--muted);cursor:default;}
+  .table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+  table{width:100%;border-collapse:collapse;}
+  thead{background:var(--raised);}
+  th{padding:10px 16px;text-align:left;font-size:11px;font-family:'DM Mono',monospace;color:var(--sub);letter-spacing:1px;text-transform:uppercase;font-weight:400;}
+  td{padding:12px 16px;font-size:13px;border-top:1px solid var(--border);}
+  tr:hover td{background:var(--raised);}
+  .form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
+  .form-group{display:flex;flex-direction:column;gap:6px;}
+  .form-label{font-size:11px;font-family:'DM Mono',monospace;color:var(--sub);letter-spacing:1px;text-transform:uppercase;}
+  .form-input,.form-select{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 14px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;transition:border-color 0.15s;}
+  .form-input:focus,.form-select:focus{border-color:var(--teal);}
+  .form-select option{background:var(--surface);}
+  .dropdown-results{background:var(--raised);border-radius:6px;margin-top:4px;display:none;max-height:160px;overflow-y:auto;border:1px solid var(--border);}
+  .dropdown-item{padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
+  .dropdown-item:last-child{border-bottom:none;}
+  .dropdown-item:hover{background:var(--surface);}
+  .reward-row{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-top:1px solid var(--border);}
+  .reward-name{font-weight:500;}
+  .reward-cost{font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--amber);}
+  .reward-tier-sub{font-size:11px;color:var(--sub);margin-top:2px;}
+  .rdm-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);}
+  .rdm-row:last-child{border-bottom:none;}
+  .rdm-name{font-weight:500;font-size:14px;}
+  .rdm-meta{font-size:12px;color:var(--sub);font-family:'DM Mono',monospace;margin-top:2px;}
+  .rdm-pts{font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--amber);}
+  .tier-pill{display:inline-block;background:var(--raised);border:1px solid var(--border);border-radius:4px;font-size:10px;font-family:'DM Mono',monospace;padding:1px 6px;color:var(--muted);margin-right:6px;}
+  .admin-field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px;}
+  .admin-label{font-size:11px;font-family:'DM Mono',monospace;color:var(--sub);letter-spacing:1px;text-transform:uppercase;}
+  .admin-input,.admin-select{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 14px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;transition:border-color 0.15s;width:100%;}
+  .admin-input:focus,.admin-select:focus{border-color:var(--teal);}
+  .admin-select option{background:var(--surface);}
+  .admin-summary-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;}
+  .admin-summary-row:last-child{border-bottom:none;}
+  .admin-summary-val{font-family:'DM Mono',monospace;color:var(--teal);}
+  /* leaderboard */
+  .leaderboard-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+  .leaderboard-header{padding:12px 16px;background:var(--raised);border-bottom:1px solid var(--border);font-size:11px;font-family:'DM Mono',monospace;color:var(--sub);letter-spacing:2px;text-transform:uppercase;}
+  .lb-row{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.1s;}
+  .lb-row:last-child{border-bottom:none;}
+  .lb-row:hover{background:var(--raised);}
+  .lb-rank{font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--muted);min-width:24px;text-align:center;}
+  .lb-rank.top{color:var(--amber);}
+  .lb-photo-initials{width:32px;height:32px;border-radius:50%;background:var(--raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;font-family:'Bebas Neue',sans-serif;color:var(--teal);flex-shrink:0;}
+  .lb-count{font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--teal);}
+  .lb-count-label{font-size:10px;font-family:'DM Mono',monospace;color:var(--muted);}
+  /* on tap */
+  .tap-screen-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;}
+  .tap-screen-toggle{display:flex;gap:8px;margin-bottom:20px;}
+  .tap-toggle-btn{background:var(--raised);border:1px solid var(--border);color:var(--sub);padding:8px 20px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all 0.15s;}
+  .tap-toggle-btn.active{background:rgba(42,184,166,0.15);border-color:var(--teal);color:var(--teal);}
+  .tap-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;transition:border-color 0.15s;}
+  .tap-card:hover{border-color:var(--muted);}
+  .tap-card.new-release{border-color:rgba(232,184,75,0.5);}
+  .tap-card.retired-card{opacity:0.55;}
+  /* horizontal card layout */
+  .tap-card-inner{display:flex;gap:0;min-height:160px;}
+  .tap-card-body{flex:1;padding:16px;}
+  .tap-card-thumb{width:130px;flex-shrink:0;background:var(--raised);display:flex;align-items:center;justify-content:center;font-size:36px;border-left:1px solid var(--border);border-radius:0 10px 10px 0;overflow:hidden;}
+  .tap-card-thumb img{width:100%;height:100%;object-fit:cover;}
+  .tap-card-name{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:0.5px;margin-bottom:2px;}
+  .tap-card-style{font-size:12px;color:var(--sub);margin-bottom:10px;}
+  .tap-card-badges{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+  .tap-badge{font-size:10px;font-family:'DM Mono',monospace;padding:2px 8px;border-radius:10px;}
+  .tap-badge-new{background:rgba(232,184,75,0.15);color:var(--amber);border:1px solid rgba(232,184,75,0.3);}
+  .tap-badge-abv{background:rgba(142,155,176,0.1);color:var(--sub);border:1px solid var(--border);}
+  .tap-badge-retired{background:rgba(224,82,82,0.1);color:var(--red);border:1px solid rgba(224,82,82,0.2);}
+  .tap-section-title{font-size:11px;font-weight:600;color:var(--sub);text-transform:uppercase;letter-spacing:1px;margin-bottom:3px;font-family:'DM Mono',monospace;}
+  .tap-section-text{font-size:12px;color:var(--sub);line-height:1.6;margin-bottom:10px;}
+  .tap-card-divider{height:1px;background:var(--border);margin:10px 0;}
+  .tap-flavor-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px;}
+  .tap-flavor-item{background:var(--raised);border-radius:6px;padding:6px 8px;}
+  .tap-flavor-label{font-size:9px;font-family:'DM Mono',monospace;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:2px;}
+  .tap-flavor-val{font-size:13px;font-weight:500;}
+  .tap-card-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
+  .btn-retire{background:rgba(224,82,82,0.1);color:var(--red);border:1px solid rgba(224,82,82,0.25);padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;}
+  .btn-retire:hover{background:rgba(224,82,82,0.2);}
+  .btn-new-release-toggle{padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;border:1px solid rgba(232,184,75,0.3);background:rgba(232,184,75,0.1);color:var(--amber);}
+  .btn-new-release-toggle:hover{background:rgba(232,184,75,0.2);}
+  /* admin tabs */
+  .admin-tabs{display:flex;gap:4px;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:0;}
+  .admin-tab{background:none;border:none;color:var(--sub);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;padding:10px 18px;cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s;margin-bottom:-1px;}
+  .admin-tab:hover{color:var(--text);}
+  .admin-tab.active{color:var(--teal);border-bottom-color:var(--teal);}
+  .admin-section{display:none;}
+  .admin-section.active{display:block;animation:fadeIn 0.2s ease;}
+  .scoring-row{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface);}
+  .scoring-row:last-child{border-bottom:none;}
+  .scoring-label{flex:1;font-size:13px;font-weight:500;}
+  .scoring-desc{font-size:11px;color:var(--sub);font-family:'DM Mono',monospace;margin-top:2px;}
+  .scoring-input{width:80px;background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-family:'DM Mono',monospace;font-size:14px;text-align:center;outline:none;}
+  .scoring-input:focus{border-color:var(--teal);}
+  .scoring-save{padding:5px 12px;border-radius:6px;border:1px solid rgba(42,184,166,0.3);background:rgba(42,184,166,0.1);color:var(--teal);font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;}
+  .scoring-save:hover{background:rgba(42,184,166,0.2);}
+  .reward-admin-row{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface);}
+  .reward-admin-row:last-child{border-bottom:none;}
+  .badge-admin-row{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--surface);}
+  .badge-admin-row:last-child{border-bottom:none;}
+  .badge-color-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;}
+  .rarity-pill{font-size:10px;font-family:'DM Mono',monospace;padding:2px 6px;border-radius:8px;}
+  .rarity-standard{background:rgba(142,155,176,0.1);color:var(--sub);border:1px solid var(--border);}
+  .rarity-rare{background:rgba(232,184,75,0.12);color:var(--amber);border:1px solid rgba(232,184,75,0.3);}
+  .rarity-exclusive{background:rgba(191,95,255,0.12);color:var(--purple);border:1px solid rgba(191,95,255,0.3);}
+  .report-table{width:100%;border-collapse:collapse;background:var(--surface);border-radius:8px;overflow:hidden;border:1px solid var(--border);}
+  .report-table th{padding:10px 14px;text-align:left;font-size:11px;font-family:'DM Mono',monospace;color:var(--sub);letter-spacing:1px;text-transform:uppercase;background:var(--raised);font-weight:400;}
+  .report-table td{padding:11px 14px;font-size:13px;border-top:1px solid var(--border);}
+  .report-table tr:hover td{background:var(--raised);}
+  .report-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}
+  /* events */
+  .events-wrap{display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;}
+  .event-type-badge{display:inline-block;font-size:10px;font-family:'DM Mono',monospace;padding:2px 8px;border-radius:10px;margin-bottom:8px;}
+  .etype-trivia{background:rgba(42,184,166,0.12);color:var(--teal);border:1px solid rgba(42,184,166,0.25);}
+  .etype-bingo{background:rgba(232,184,75,0.12);color:var(--amber);border:1px solid rgba(232,184,75,0.25);}
+  .etype-karaoke{background:rgba(191,95,255,0.12);color:var(--purple);border:1px solid rgba(191,95,255,0.25);}
+  .etype-special{background:rgba(224,82,82,0.12);color:var(--red);border:1px solid rgba(224,82,82,0.25);}
+  .etype-market{background:rgba(42,184,166,0.08);color:var(--sub);border:1px solid var(--border);}
+  .etype-uthere{background:rgba(191,95,255,0.2);color:var(--purple);border:1px solid rgba(191,95,255,0.4);}
+  .etype-default{background:rgba(142,155,176,0.1);color:var(--sub);border:1px solid var(--border);}
+  .event-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:10px;display:flex;align-items:flex-start;gap:16px;}
+  .event-card.beer-release{border-color:rgba(232,184,75,0.35);}
+  .event-date-block{background:var(--raised);border-radius:8px;padding:8px 12px;text-align:center;min-width:52px;flex-shrink:0;}
+  .event-date-month{font-size:10px;font-family:'DM Mono',monospace;color:var(--sub);text-transform:uppercase;letter-spacing:1px;}
+  .event-date-day{font-family:'Bebas Neue',sans-serif;font-size:28px;line-height:1;color:var(--text);}
+  .event-date-time{font-size:10px;font-family:'DM Mono',monospace;color:var(--muted);margin-top:2px;}
+  .event-info{flex:1;}
+  .event-name{font-weight:600;font-size:15px;margin-bottom:4px;}
+  .event-meta{font-size:12px;color:var(--sub);font-family:'DM Mono',monospace;}
+  .event-pts{font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--teal);white-space:nowrap;}
+  .event-pts-label{font-size:10px;font-family:'DM Mono',monospace;color:var(--muted);}
+  .event-form-wrap{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:20px;}
+  .event-form-title{font-size:11px;font-family:'DM Mono',monospace;color:var(--sub);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:16px;}
+  .event-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
+  .event-form-full{margin-bottom:12px;}
+  .checkbox-row{display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:13px;color:var(--sub);}
+  .checkbox-row input{accent-color:var(--teal);width:16px;height:16px;}
+  /* u there */
+  .uthere-tabs{display:flex;gap:8px;margin-bottom:16px;}
+  .uthere-tab{background:var(--raised);border:1px solid var(--border);color:var(--sub);padding:7px 18px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all 0.15s;}
+  .uthere-tab.active{background:rgba(191,95,255,0.15);border-color:var(--purple);color:var(--purple);}
+  .nomination-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:10px;}
+  .nomination-card.pending{border-left:3px solid var(--amber);}
+  .nomination-card.approved{border-left:3px solid var(--teal);}
+  .nomination-card.rejected{border-left:3px solid var(--red);opacity:0.6;}
+  .nomination-name{font-weight:600;font-size:15px;margin-bottom:2px;}
+  .nomination-meta{font-size:12px;color:var(--sub);font-family:'DM Mono',monospace;margin-bottom:8px;}
+  .nomination-desc{font-size:13px;color:var(--sub);margin-bottom:10px;line-height:1.5;}
+  .nomination-actions{display:flex;gap:8px;align-items:center;}
+  .vote-count{font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--amber);margin-right:4px;}
+  .vote-label{font-size:10px;font-family:'DM Mono',monospace;color:var(--muted);}
+  .btn-approve{background:rgba(42,184,166,0.12);color:var(--teal);border:1px solid rgba(42,184,166,0.3);padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;}
+  .btn-approve:hover{background:rgba(42,184,166,0.22);}
+  .btn-reject{background:rgba(224,82,82,0.1);color:var(--red);border:1px solid rgba(224,82,82,0.25);padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;}
+  .btn-reject:hover{background:rgba(224,82,82,0.2);}
+  .status-pill{font-size:10px;font-family:'DM Mono',monospace;padding:2px 8px;border-radius:10px;margin-left:auto;}
+  .status-pending{background:rgba(232,184,75,0.12);color:var(--amber);border:1px solid rgba(232,184,75,0.3);}
+  .status-approved{background:rgba(42,184,166,0.12);color:var(--teal);border:1px solid rgba(42,184,166,0.3);}
+  .status-rejected{background:rgba(224,82,82,0.1);color:var(--red);border:1px solid rgba(224,82,82,0.25);}
+  /* flash messages */
+  .checkin-flash{display:none;padding:12px 16px;border-radius:8px;background:rgba(42,184,166,0.12);border:1px solid rgba(42,184,166,0.4);margin-bottom:12px;font-size:13px;font-family:'DM Mono',monospace;color:var(--teal);}
+  .checkin-flash.visible{display:block;animation:fadeIn 0.2s ease;}
+  .dd-flash{display:none;padding:12px 16px;border-radius:8px;background:rgba(191,95,255,0.12);border:1px solid rgba(191,95,255,0.4);margin-bottom:12px;font-size:13px;font-family:'DM Mono',monospace;color:var(--purple);}
+  .dd-flash.visible{display:block;animation:fadeIn 0.2s ease;}
+  /* scanner */
+  .scanner-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:1000;flex-direction:column;align-items:center;justify-content:center;}
+  .scanner-overlay.active{display:flex;}
+  .scanner-box{position:relative;width:280px;height:280px;border-radius:16px;overflow:hidden;border:2px solid var(--teal);}
+  .scanner-box video{width:100%;height:100%;object-fit:cover;}
+  .scanner-corner{position:absolute;width:24px;height:24px;border-color:var(--teal);border-style:solid;}
+  .scanner-corner.tl{top:8px;left:8px;border-width:3px 0 0 3px;}
+  .scanner-corner.tr{top:8px;right:8px;border-width:3px 3px 0 0;}
+  .scanner-corner.bl{bottom:8px;left:8px;border-width:0 0 3px 3px;}
+  .scanner-corner.br{bottom:8px;right:8px;border-width:0 3px 3px 0;}
+  .scanner-line{position:absolute;left:12px;right:12px;height:2px;background:var(--teal);opacity:0.7;animation:scanline 2s ease-in-out infinite;}
+  @keyframes scanline{0%,100%{top:12px}50%{top:calc(100% - 12px)}}
+  .scanner-label{color:var(--text);font-size:14px;margin-top:24px;font-family:'DM Mono',monospace;letter-spacing:1px;}
+  .scanner-status{color:var(--sub);font-size:12px;margin-top:8px;}
+  .scanner-result{margin-top:20px;background:var(--surface);border:1px solid var(--teal);border-radius:10px;padding:16px 24px;text-align:center;display:none;}
+  .scanner-result.visible{display:block;animation:fadeIn 0.2s ease;}
+  .scanner-result-name{font-family:'Bebas Neue',sans-serif;font-size:24px;color:var(--teal);}
+  .scanner-btn-row{display:flex;gap:12px;margin-top:20px;}
+  .btn-cancel{background:var(--raised);color:var(--sub);border:1px solid var(--border);padding:12px 24px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;}
+  .toast{position:fixed;bottom:24px;right:24px;background:var(--teal);color:var(--void);padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px;transform:translateY(80px);opacity:0;transition:all 0.3s ease;z-index:2000;}
+  .toast.show{transform:translateY(0);opacity:1;}
+  .toast.error{background:var(--red);color:white;}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="logo-wrap">
+    <img class="logo-img" src="https://opsplpqvordihoktuqzp.supabase.co/storage/v1/object/public/assets/lvbc-logo.png" alt="LVBC" onerror="this.style.display='none'">
+    <div class="logo">LVBC <span>STAFF PANEL</span></div>
+  </div>
+  <div class="staff-badge">● ONLINE</div>
+</header>
+
+<nav>
+  <button class="nav-btn active" onclick="showScreen('dashboard',this);clearActiveMember()">Dashboard</button>
+  <button class="nav-btn" onclick="showScreen('lookup',this)">Member Check-In</button>
+  <button class="nav-btn" onclick="showScreen('ontap',this);loadOnTap()">On Tap</button>
+  <button class="nav-btn" onclick="showScreen('events',this);loadEvents()">Events</button>
+  <button class="nav-btn" onclick="showScreen('rewards',this);syncRewardsMember()">Rewards</button>
+  <button class="nav-btn" onclick="showScreen('admin',this)">Admin</button>
+</nav>
+
+<main>
+
+  <!-- DASHBOARD -->
+  <div class="screen active" id="screen-dashboard">
+    <div class="grid-4">
+      <div class="card"><div class="card-title">Members Today</div><div class="card-value teal" id="stat-today">—</div><div class="card-sub">check-ins</div></div>
+      <div class="card"><div class="card-title">Total Members</div><div class="card-value" id="stat-total">—</div><div class="card-sub">active accounts</div></div>
+      <div class="card"><div class="card-title">Points Awarded</div><div class="card-value amber" id="stat-pts">—</div><div class="card-sub">today</div></div>
+      <div class="card"><div class="card-title">Free Pours</div><div class="card-value" id="stat-pours">—</div><div class="card-sub">given today</div></div>
+    </div>
+    <div class="grid-2">
+      <div>
+        <div class="section-label">Recent Check-Ins</div>
+        <div class="card" id="recent-checkins"><div class="loading">Loading...</div></div>
+      </div>
+      <div>
+        <div class="section-label">Recent Redemptions</div>
+        <div class="card" id="recent-redemptions"><div class="loading">Loading...</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MEMBER CHECK-IN -->
+  <div class="screen" id="screen-lookup">
+    <div class="lookup-toolbar">
+      <input class="search-bar" type="text" placeholder="Search by name or email..." oninput="searchMembers(this.value)" id="member-search-input">
+      <button class="btn btn-scan" onclick="openScanner()">📷 Scan</button>
+      <button class="btn btn-secondary" onclick="clearLookup()">Clear</button>
+    </div>
+    <div class="lookup-wrap">
+      <div>
+        <div class="checkin-flash" id="checkin-flash"></div>
+        <div class="dd-flash" id="dd-flash"></div>
+        <div class="member-profile" id="member-profile">
+          <div class="profile-header">
+            <div class="profile-header-left">
+              <div id="profile-photo-wrap"></div>
+              <div>
+                <div class="profile-name" id="profile-name">—</div>
+                <div class="profile-email" id="profile-email">—</div>
+                <div style="margin-top:6px"><span class="tier" id="profile-tier">—</span></div>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+              <div style="background:var(--raised);border:2px solid var(--teal);border-radius:8px;padding:8px 14px;text-align:center;">
+                <div style="font-size:10px;font-family:'DM Mono',monospace;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:3px">MEMBER ID</div>
+                <div id="profile-member-id" style="font-family:'Bebas Neue',sans-serif;font-size:26px;color:var(--teal);letter-spacing:1px;line-height:1">—</div>
+                <div style="font-size:10px;font-family:'DM Mono',monospace;color:var(--sub);margin-top:2px">enter as table #</div>
+              </div>
+            </div>
+          </div>
+          <div class="profile-stats">
+            <div class="stat-box"><div class="stat-label">Balance</div><div class="stat-val teal" id="profile-balance">—</div></div>
+            <div class="stat-box"><div class="stat-label">Lifetime</div><div class="stat-val" id="profile-lifetime">—</div></div>
+            <div class="stat-box"><div class="stat-label">Member Since</div><div class="stat-val" style="font-size:16px;padding-top:4px" id="profile-since">—</div></div>
+            <div class="stat-box"><div class="stat-label">Free Pours</div><div class="stat-val" id="profile-pour-count">—</div></div>
+          </div>
+          <div class="profile-actions">
+            <button class="btn btn-dd btn-sm" id="dd-btn" onclick="logDDCheckin()">🚗 DD Mode</button>
+            <button class="btn btn-danger btn-sm" onclick="clearLookup()">✕ Clear Member</button>
+          </div>
+          <div style="margin-top:24px">
+            <div class="tap-list-title">ON TAP — FREE POUR STATUS</div>
+            <div class="tap-grid" id="tap-list"><div class="loading">Loading tap list...</div></div>
+          </div>
+        </div>
+        <div class="table-wrap" id="member-results">
+          <div class="loading">Search or scan a member to begin</div>
+        </div>
+      </div>
+      <div>
+        <div class="leaderboard-card">
+          <div class="leaderboard-header">Top Check-Ins — This Month</div>
+          <div id="leaderboard-list"><div class="loading" style="padding:16px">Loading...</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ON TAP -->
+  <div class="screen" id="screen-ontap">
+    <div class="tap-screen-toggle">
+      <button class="tap-toggle-btn active" onclick="setTapFilter('ontap',this)">On Tap</button>
+      <button class="tap-toggle-btn" onclick="setTapFilter('all',this)">All Beers</button>
+      <button class="tap-toggle-btn" onclick="setTapFilter('retired',this)">Retired</button>
+    </div>
+    <div class="tap-screen-grid" id="tap-screen-grid">
+      <div class="loading" style="grid-column:1/-1">Loading...</div>
+    </div>
+  </div>
+
+  <!-- EVENTS -->
+  <div class="screen" id="screen-events">
+    <div class="events-wrap">
+
+      <!-- LEFT: upcoming events list + create form -->
+      <div>
+        <div class="event-form-wrap">
+          <div class="event-form-title">Create New Event</div>
+          <div class="event-form-grid">
+            <div class="form-group">
+              <label class="form-label">Event Name</label>
+              <input class="form-input" type="text" id="ev-name" placeholder="e.g. Trivia Monday">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Event Type</label>
+              <select class="form-select" id="ev-type">
+                <option value="Trivia">Trivia</option>
+                <option value="Bingo">Bingo</option>
+                <option value="Karaoke">Karaoke</option>
+                <option value="Farmers Market">Farmers Market</option>
+                <option value="Special Event">Special Event</option>
+                <option value="LVBC U There">LVBC U There</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Date &amp; Time</label>
+              <input class="form-input" type="datetime-local" id="ev-date">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Points Available</label>
+              <input class="form-input" type="number" id="ev-pts" value="30">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Max Capacity (optional)</label>
+              <input class="form-input" type="number" id="ev-capacity" placeholder="Leave blank for unlimited">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Notes (optional)</label>
+              <input class="form-input" type="text" id="ev-notes" placeholder="e.g. DJ, special guest...">
+            </div>
+          </div>
+          <div class="checkbox-row">
+            <input type="checkbox" id="ev-release">
+            <label for="ev-release">Beer release event — flag on member app</label>
+          </div>
+          <button class="btn btn-primary" onclick="createEvent()">Add to Lineup</button>
+        </div>
+
+        <div class="section-label" style="margin-top:0">Upcoming Events</div>
+        <div id="events-list"><div class="loading">Loading...</div></div>
+      </div>
+
+      <!-- RIGHT: LVBC U There -->
+      <div>
+        <div class="section-label" style="margin-top:0">LVBC U There</div>
+        <div class="uthere-tabs">
+          <button class="uthere-tab active" onclick="setUthereTab('pending',this)">Pending</button>
+          <button class="uthere-tab" onclick="setUthereTab('approved',this)">Approved</button>
+          <button class="uthere-tab" onclick="setUthereTab('rejected',this)">Rejected</button>
+        </div>
+        <div id="uthere-list"><div class="loading">Loading...</div></div>
+
+        <div class="event-form-wrap" style="margin-top:20px">
+          <div class="event-form-title">Create U There Event Directly</div>
+          <div class="event-form-full">
+            <div class="form-group" style="margin-bottom:10px">
+              <label class="form-label">Outing Name</label>
+              <input class="form-input" type="text" id="ut-name" placeholder="e.g. Rangers Game">
+            </div>
+          </div>
+          <div class="event-form-grid">
+            <div class="form-group">
+              <label class="form-label">Outing Type</label>
+              <select class="form-select" id="ut-type">
+                <option value="Sports">Sports</option>
+                <option value="Brewery Visit">Brewery Visit</option>
+                <option value="Concert">Concert</option>
+                <option value="Food & Drink">Food &amp; Drink</option>
+                <option value="Outdoor">Outdoor</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Proposed Date</label>
+              <input class="form-input" type="date" id="ut-date">
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label class="form-label">Description</label>
+            <input class="form-input" type="text" id="ut-desc" placeholder="Brief details...">
+          </div>
+          <button class="btn btn-primary" style="background:var(--purple);color:var(--void)" onclick="createUthereEvent()">Add U There Event</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- REWARDS -->
+  <div class="screen" id="screen-rewards">
+    <div id="rw-active-member-bar" style="display:none;background:var(--raised);border:1px solid var(--teal);border-radius:8px;padding:12px 16px;margin-bottom:16px;align-items:center;justify-content:space-between">
+      <div style="font-size:13px">Active member: <span id="rw-active-name" style="font-weight:600;color:var(--teal)">—</span> <span id="rw-active-tier" class="tier" style="margin-left:8px">—</span></div>
+      <button class="btn btn-danger btn-sm" onclick="clearActiveMember()">✕ Clear</button>
+    </div>
+    <div class="grid-2">
+      <div>
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-title" style="margin-bottom:16px">Process a Redemption</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Member</label>
+              <input class="form-input" type="text" id="rw-member-search" placeholder="Search name or email..." oninput="rwSearchMembers(this.value)">
+              <div class="dropdown-results" id="rw-member-results"></div>
+              <input type="hidden" id="rw-member-id">
+              <div id="rw-member-balance" style="font-size:12px;color:var(--teal);font-family:'DM Mono',monospace;margin-top:6px;display:none"></div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Reward</label>
+              <select class="form-select" id="rw-reward">
+                <option value="100">Treasure box pick — 100 pts</option>
+                <option value="100">Sticker pack — 100 pts</option>
+                <option value="150">Snack item — 150 pts</option>
+                <option value="150">Koozie — 150 pts</option>
+                <option value="250">Pick trivia category — 250 pts</option>
+                <option value="250">Pick music bingo theme — 250 pts</option>
+                <option value="300">Wall of Regulars — 300 pts</option>
+                <option value="400">LVBC pint glass — 400 pts</option>
+                <option value="400">Free snack up to $10 — 400 pts</option>
+                <option value="750">LVBC t-shirt — 750 pts</option>
+                <option value="750">LVBC hat — 750 pts</option>
+                <option value="1000">LVBC hoodie — 1000 pts</option>
+                <option value="1500">Private tasting for 4 — 1500 pts</option>
+                <option value="2000">Custom LVBC item — 2000 pts</option>
+                <option value="2500">Host private taproom event — 2500 pts</option>
+                <option value="5000">Limestone wall inscription — 5000 pts</option>
+                <option value="5000">Brew day experience — 5000 pts</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label class="form-label">Staff Name</label>
+            <input class="form-input" type="text" id="rw-staff" placeholder="Who's processing this?">
+          </div>
+          <div class="form-group" style="margin-bottom:16px">
+            <label class="form-label">Notes (optional)</label>
+            <input class="form-input" type="text" id="rw-notes" placeholder="e.g. embroidered name, color choice...">
+          </div>
+          <div style="display:flex;gap:10px">
+            <button class="btn btn-primary" onclick="submitRedemption()">Process Redemption</button>
+            <button class="btn btn-secondary" onclick="resetRedemption()">Clear</button>
+          </div>
+        </div>
+        <div class="section-label">Reward Tiers Reference</div>
+        <div class="table-wrap">
+          <div class="reward-row"><div><div class="reward-name">Tier 1 — Treasure Box</div><div class="reward-tier-sub">Available to all members</div></div><div class="reward-cost">100–150</div></div>
+          <div class="reward-row"><div><div class="reward-name">Tier 2 — Social Currency</div><div class="reward-tier-sub">Available to all members</div></div><div class="reward-cost">250–500</div></div>
+          <div class="reward-row"><div><div class="reward-name">Tier 3 — Real Merch</div><div class="reward-tier-sub">Paying members only</div></div><div class="reward-cost">750–1000</div></div>
+          <div class="reward-row"><div><div class="reward-name">Tier 4 — Insider Access</div><div class="reward-tier-sub">Paying members only</div></div><div class="reward-cost">1500–2500</div></div>
+          <div class="reward-row"><div><div class="reward-name">Tier 5 — Legacy</div><div class="reward-tier-sub">Paying members only</div></div><div class="reward-cost">5000+</div></div>
+        </div>
+      </div>
+      <div>
+        <div class="section-label">Recent Redemptions</div>
+        <div class="card" id="rewards-log"><div class="loading">Loading...</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN -->
+  <div class="screen" id="screen-admin">
+    <!-- admin section tabs -->
+    <div class="admin-tabs">
+      <button class="admin-tab active" onclick="setAdminTab('members',this)">Members</button>
+      <button class="admin-tab" onclick="setAdminTab('rewards',this)">Rewards</button>
+      <button class="admin-tab" onclick="setAdminTab('scoring',this)">Scoring</button>
+      <button class="admin-tab" onclick="setAdminTab('beers',this)">Beers</button>
+      <button class="admin-tab" onclick="setAdminTab('badges',this)">Badges</button>
+      <button class="admin-tab" onclick="setAdminTab('reports',this)">Reports</button>
+    </div>
+
+    <!-- MEMBERS TAB -->
+    <div class="admin-section active" id="admintab-members">
+      <div class="grid-2" style="margin-bottom:16px">
+        <div class="card">
+          <div class="card-title" style="margin-bottom:16px">Add New Member</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+            <div class="admin-field"><label class="admin-label">Name</label><input class="admin-input" type="text" id="new-name" placeholder="Full name"></div>
+            <div class="admin-field"><label class="admin-label">Email</label><input class="admin-input" type="email" id="new-email" placeholder="email@example.com"></div>
+            <div class="admin-field"><label class="admin-label">Phone</label><input class="admin-input" type="text" id="new-phone" placeholder="512-555-0100"></div>
+            <div class="admin-field"><label class="admin-label">Birthday</label><input class="admin-input" type="date" id="new-birthday"></div>
+            <div class="admin-field"><label class="admin-label">Membership Tier</label>
+              <select class="admin-select" id="new-tier">
+                <option value="Free">Free</option>
+                <option value="Mug Club">Mug Club</option>
+                <option value="Coffee Club">Coffee Club</option>
+                <option value="Full Pour">Full Pour</option>
+              </select>
+            </div>
+          </div>
+          <div id="new-member-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
+          <button class="btn btn-primary" onclick="addNewMember()">Create Member</button>
+        </div>
+        <div class="card">
+          <div class="card-title" style="margin-bottom:4px">All Members</div>
+          <div style="font-size:12px;color:var(--sub);margin-bottom:12px">Click a row to edit</div>
+          <input class="search-bar" style="margin-bottom:12px;width:100%" type="text" placeholder="Search by name or email..." oninput="adminSearchMembers(this.value)" id="admin-search-input">
+          <div id="admin-results"><div class="loading">Loading members...</div></div>
+        </div>
+      </div>
+      <div id="admin-edit-panel" style="display:none">
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title" style="margin-bottom:16px">Edit Member Record</div>
+            <div id="admin-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:14px;font-family:'DM Mono',monospace;"></div>
+            <input type="hidden" id="admin-member-id">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div class="admin-field"><label class="admin-label">Name</label><input class="admin-input" type="text" id="admin-name"></div>
+              <div class="admin-field"><label class="admin-label">Email</label><input class="admin-input" type="email" id="admin-email"></div>
+              <div class="admin-field"><label class="admin-label">Phone</label><input class="admin-input" type="text" id="admin-phone"></div>
+              <div class="admin-field"><label class="admin-label">Birthday</label><input class="admin-input" type="date" id="admin-birthday"></div>
+              <div class="admin-field"><label class="admin-label">Membership Tier</label>
+                <select class="admin-select" id="admin-tier">
+                  <option value="Free">Free</option>
+                  <option value="Mug Club">Mug Club</option>
+                  <option value="Coffee Club">Coffee Club</option>
+                  <option value="Full Pour">Full Pour</option>
+                </select>
+              </div>
+              <div class="admin-field"><label class="admin-label">Status</label>
+                <select class="admin-select" id="admin-active">
+                  <option value="true">Active</option>
+                  <option value="false">Inactive</option>
+                </select>
+              </div>
+              <div class="admin-field"><label class="admin-label">Points Balance</label><input class="admin-input" type="number" id="admin-balance"></div>
+              <div class="admin-field"><label class="admin-label">Lifetime Points</label><input class="admin-input" type="number" id="admin-lifetime" disabled style="opacity:0.4"></div>
+            </div>
+            <div style="display:flex;gap:10px;margin-top:8px">
+              <button class="btn btn-primary" onclick="saveAdminEdit()">Save Changes</button>
+              <button class="btn btn-secondary" onclick="resetPin()">Reset PIN</button>
+              <button class="btn btn-danger btn-sm" onclick="deactivateMember()">Deactivate</button>
+            </div>
+            <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border)">
+              <div class="card-title" style="margin-bottom:12px">Manual Points Adjustment</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+                <div class="admin-field" style="margin-bottom:0"><label class="admin-label">Points (+/-)</label><input class="admin-input" type="number" id="adj-points" placeholder="e.g. 50 or -50"></div>
+                <div class="admin-field" style="margin-bottom:0"><label class="admin-label">Reason</label><input class="admin-input" type="text" id="adj-reason" placeholder="e.g. Bingo win, event attendance"></div>
+              </div>
+              <button class="btn btn-secondary" onclick="applyPointsAdjustment()">Apply Adjustment</button>
+            </div>
+          </div>
+          <div>
+            <div class="card" style="margin-bottom:16px">
+              <div class="card-title" style="margin-bottom:12px">Member Summary</div>
+              <div id="admin-summary"></div>
+            </div>
+            <div class="section-label">Redemption History</div>
+            <div class="card" id="admin-rdm-history"><div class="loading">Select a member</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- REWARDS TAB -->
+    <div class="admin-section" id="admintab-rewards">
+      <div class="grid-2">
+        <div>
+          <div class="section-label" style="margin-top:0">Add New Reward</div>
+          <div class="card" style="margin-bottom:16px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+              <div class="admin-field"><label class="admin-label">Reward Name</label><input class="admin-input" type="text" id="rw-new-name" placeholder="e.g. LVBC Growler"></div>
+              <div class="admin-field"><label class="admin-label">Tier</label>
+                <select class="admin-select" id="rw-new-tier">
+                  <option value="1">Tier 1 — Treasure Box</option>
+                  <option value="2">Tier 2 — Social Currency</option>
+                  <option value="3">Tier 3 — Real Merch</option>
+                  <option value="4">Tier 4 — Insider Access</option>
+                  <option value="5">Tier 5 — Legacy</option>
+                </select>
+              </div>
+              <div class="admin-field"><label class="admin-label">Points Cost</label><input class="admin-input" type="number" id="rw-new-cost" placeholder="e.g. 750"></div>
+              <div class="admin-field"><label class="admin-label">Limit (optional)</label><input class="admin-input" type="text" id="rw-new-limit" placeholder="e.g. once per month"></div>
+            </div>
+            <div class="checkbox-row">
+              <input type="checkbox" id="rw-new-repeatable" checked>
+              <label for="rw-new-repeatable">Repeatable reward</label>
+            </div>
+            <button class="btn btn-primary" onclick="addReward()">Add Reward</button>
+          </div>
+        </div>
+        <div>
+          <div class="section-label" style="margin-top:0">Current Rewards</div>
+          <div id="rewards-admin-list"><div class="loading">Loading...</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCORING TAB -->
+    <div class="admin-section" id="admintab-scoring">
+      <div style="max-width:700px">
+        <div style="font-size:13px;color:var(--sub);margin-bottom:16px">Edit point values for each activity type. Changes take effect on the next check-in.</div>
+        <div id="scoring-list"><div class="loading">Loading...</div></div>
+      </div>
+    </div>
+
+    <!-- BEERS TAB -->
+    <div class="admin-section" id="admintab-beers">
+      <div class="grid-2">
+        <div>
+          <div class="section-label" style="margin-top:0">Add New Beer</div>
+          <div class="card">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+            <div class="admin-field"><label class="admin-label">Beer Name</label><input class="admin-input" type="text" id="beer-new-name" placeholder="e.g. Hazy Daze IPA"></div>
+            <div class="admin-field"><label class="admin-label">Style</label><input class="admin-input" type="text" id="beer-new-style" placeholder="e.g. Hazy IPA"></div>
+            <div class="admin-field"><label class="admin-label">ABV %</label><input class="admin-input" type="number" step="0.1" id="beer-new-abv" placeholder="6.2"></div>
+            <div class="admin-field"><label class="admin-label">IBU</label><input class="admin-input" type="number" id="beer-new-ibu" placeholder="45"></div>
+            <div class="admin-field" style="grid-column:1/-1"><label class="admin-label">Description</label><input class="admin-input" type="text" id="beer-new-desc" placeholder="Brewer's description..."></div>
+            <div class="admin-field" style="grid-column:1/-1"><label class="admin-label">Tasting Notes</label><input class="admin-input" type="text" id="beer-new-notes" placeholder="e.g. Tropical, citrus, hazy finish..."></div>
+            <div class="admin-field"><label class="admin-label">Image URL (optional)</label><input class="admin-input" type="text" id="beer-new-img" placeholder="https://..."></div>
+            <div class="admin-field"><label class="admin-label">Tapped On</label><input class="admin-input" type="date" id="beer-new-tapped"></div>
+          </div>
+          <div class="checkbox-row" style="margin-bottom:16px">
+            <input type="checkbox" id="beer-new-release">
+            <label for="beer-new-release">Mark as new release</label>
+          </div>
+          <div id="beer-add-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
+          <button class="btn btn-primary" onclick="addBeer()">Add Beer to Tap List</button>
+          </div>
+        </div>
+        <div>
+          <div class="section-label" style="margin-top:0">Current Tap List</div>
+          <div id="beer-admin-list"><div class="loading">Loading...</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BADGES TAB -->
+    <div class="admin-section" id="admintab-badges">
+      <div class="grid-2">
+        <div>
+          <div class="section-label" style="margin-top:0">Add New Badge</div>
+          <div class="card">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+            <div class="admin-field"><label class="admin-label">Badge Name</label><input class="admin-input" type="text" id="badge-new-name" placeholder="e.g. Hop Head"></div>
+            <div class="admin-field"><label class="admin-label">Category</label>
+              <select class="admin-select" id="badge-new-cat">
+                <option value="Explorer">Explorer</option>
+                <option value="Coffee Pioneer">Coffee Pioneer</option>
+                <option value="Event Regular">Event Regular</option>
+                <option value="Competitive">Competitive</option>
+                <option value="Milestone">Milestone</option>
+                <option value="Seasonal">Seasonal</option>
+                <option value="Retired Recipe">Retired Recipe</option>
+                <option value="Social">Social</option>
+                <option value="Secret">Secret</option>
+              </select>
+            </div>
+            <div class="admin-field"><label class="admin-label">Rarity</label>
+              <select class="admin-select" id="badge-new-rarity">
+                <option value="Standard">Standard</option>
+                <option value="Rare">Rare</option>
+                <option value="Exclusive">Exclusive</option>
+              </select>
+            </div>
+            <div class="admin-field"><label class="admin-label">Border Color</label><input class="admin-input" type="text" id="badge-new-color" placeholder="#E8BB4B"></div>
+            <div class="admin-field" style="grid-column:1/-1"><label class="admin-label">Description (shown to members)</label><input class="admin-input" type="text" id="badge-new-desc" placeholder="e.g. Try 5 unique IPAs"></div>
+            <div class="admin-field" style="grid-column:1/-1"><label class="admin-label">Trigger (staff only — hidden from members)</label><input class="admin-input" type="text" id="badge-new-trigger" placeholder="e.g. Try 5 unique IPAs (any sub-style)"></div>
+          </div>
+          <div class="checkbox-row" style="margin-bottom:16px">
+            <input type="checkbox" id="badge-new-secret">
+            <label for="badge-new-secret">Secret badge — hide from catalog until earned</label>
+          </div>
+          <div id="badge-add-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
+          <button class="btn btn-primary" onclick="addBadge()">Add Badge</button>
+          </div>
+        </div>
+        <div>
+          <div class="section-label" style="margin-top:0">Badge Catalog</div>
+          <div id="badge-admin-list"><div class="loading">Loading...</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- REPORTS TAB -->
+    <div class="admin-section" id="admintab-reports">
+      <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
+        <button class="tap-toggle-btn active" onclick="setReport('checkins',this)">Check-Ins</button>
+        <button class="tap-toggle-btn" onclick="setReport('points',this)">Points Ledger</button>
+        <button class="tap-toggle-btn" onclick="setReport('topearners',this)">Top Earners</button>
+        <button class="tap-toggle-btn" onclick="setReport('redemptions',this)">Redemptions</button>
+        <button class="tap-toggle-btn" onclick="setReport('newmembers',this)">New Members</button>
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:20px;align-items:center;flex-wrap:wrap">
+        <div class="form-group" style="flex-direction:row;align-items:center;gap:8px;margin-bottom:0">
+          <label class="form-label" style="white-space:nowrap">From</label>
+          <input class="form-input" type="date" id="report-from" style="width:150px">
+        </div>
+        <div class="form-group" style="flex-direction:row;align-items:center;gap:8px;margin-bottom:0">
+          <label class="form-label" style="white-space:nowrap">To</label>
+          <input class="form-input" type="date" id="report-to" style="width:150px">
+        </div>
+        <button class="btn btn-primary" onclick="runReport()">Run Report</button>
+        <button class="btn btn-secondary" onclick="clearReport()">Clear</button>
+      </div>
+      <!-- Email export row -->
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:20px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:8px;flex-wrap:wrap">
+        <div style="font-size:11px;font-family:'DM Mono',monospace;color:var(--sub);letter-spacing:1px;text-transform:uppercase;white-space:nowrap">Email CSV to</div>
+        <select class="form-select" id="report-email-select" style="flex:1;min-width:200px;max-width:320px">
+          <option value="">— Select staff —</option>
+          <option value="rickgreenfield09@gmail.com">Rick Greenfield</option>
+          <option value="manager@lagovistabrewingco.com">Manager</option>
+          <option value="owner@lagovistabrewingco.com">Owner</option>
+        </select>
+        <button class="btn btn-secondary" onclick="exportReportEmail()" id="btn-export-email" style="white-space:nowrap">📧 Send CSV</button>
+        <div id="email-status" style="font-size:12px;font-family:'DM Mono',monospace;color:var(--sub)"></div>
+      </div>
+      <div id="report-output"><div class="loading">Select a report and date range above</div></div>
+    </div>
+
+  </div>
+
+</main>
+
+<!-- SCANNER -->
+<div class="scanner-overlay" id="scanner-overlay">
+  <div class="scanner-box">
+    <video id="scanner-video" autoplay playsinline muted></video>
+    <canvas id="scanner-canvas" style="display:none"></canvas>
+    <div class="scanner-corner tl"></div><div class="scanner-corner tr"></div>
+    <div class="scanner-corner bl"></div><div class="scanner-corner br"></div>
+    <div class="scanner-line"></div>
+  </div>
+  <div class="scanner-label">POINT AT MEMBER QR CODE</div>
+  <div class="scanner-status" id="scanner-status">Initializing camera...</div>
+  <div class="scanner-result" id="scanner-result">
+    <div class="scanner-result-name" id="scanner-found-name">—</div>
+    <div style="font-size:12px;color:var(--sub);margin-top:4px" id="scanner-found-tier">—</div>
+    <div style="font-family:'DM Mono',monospace;font-size:12px;color:var(--teal);margin-top:4px" id="scanner-found-pts">—</div>
+  </div>
+  <div class="scanner-btn-row">
+    <button class="btn-cancel" onclick="closeScanner()">Cancel</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var SUPABASE_URL='https://opsplpqvordihoktuqzp.supabase.co';
+var SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9wc3BscHF2b3JkaWhva3R1cXpwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3OTI0MjMsImV4cCI6MjA5MjM2ODQyM30.SIYWZXqM3o-6q1EdEBn-IpdG90JrLBZbbiNrjj6AG7Y';
+var H={'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=representation'};
+
+async function sb(path,opts){
+  var res=await fetch(SUPABASE_URL+'/rest/v1/'+path,Object.assign({headers:H},opts||{}));
+  var t=await res.text();return t?JSON.parse(t):[];
+}
+
+function showScreen(name,btn){
+  document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
+  document.querySelectorAll('.nav-btn').forEach(function(b){b.classList.remove('active');});
+  document.getElementById('screen-'+name).classList.add('active');
+  btn.classList.add('active');
+  if(name==='dashboard')loadDashboard();
+  if(name==='rewards')loadRewardsLog();
+  if(name==='lookup')loadLeaderboard();
+  if(name==='admin'){loadAdminMemberList();setAdminTab('members',document.querySelector('.admin-tab'));}
+}
+
+function showToast(msg,err){
+  var t=document.getElementById('toast');
+  t.textContent=msg;t.className='toast show'+(err?' error':'');
+  setTimeout(function(){t.className='toast';},3000);
+}
+
+function tierClass(tier){
+  if(tier==='Mug Club')return'tier-mug';
+  if(tier==='Coffee Club')return'tier-coffee';
+  if(tier==='Full Pour')return'tier-full';
+  return'tier-free';
+}
+
+function getInitials(name){
+  if(!name)return'?';
+  return name.split(' ').map(function(p){return p[0];}).join('').substring(0,2).toUpperCase();
+}
+
+// ── POINTS ENGINE ──────────────────────────────────────
+// Determines correct pts and tx type based on visit history and day of week
+async function resolveCheckinPoints(memberId){
+  var existing=await sb('check_ins?member_id=eq.'+memberId+'&select=id&limit=1');
+  if(!existing.length)return{pts:50,type:'checkin_first_visit'};
+  var day=new Date().getDay();// 0=Sun,3=Wed,4=Thu
+  if(day===3)return{pts:25,type:'checkin_wednesday'};
+  if(day===4)return{pts:25,type:'checkin_thursday'};
+  return{pts:15,type:'checkin_standard'};
+}
+
+async function logPointsTransaction(memberId,type,points,notes,processedBy){
+  await sb('points_transactions',{method:'POST',body:JSON.stringify({
+    member_id:memberId,transaction_type:type,points:points,
+    notes:notes||null,processed_by:processedBy||null
+  })});
+}
+
+async function applyCheckin(member,skipIfLocked){
+  if(skipIfLocked&&checkinLocked)return null;
+  var resolved=await resolveCheckinPoints(member.id);
+  var now=new Date().toISOString();
+  checkinLocked=true;
+  disableCheckinControls();
+  await sb('check_ins',{method:'POST',body:JSON.stringify({member_id:member.id,checked_in_at:now,new_release_poured:false,points_awarded:resolved.pts})});
+  await logPointsTransaction(member.id,resolved.type,resolved.pts,null,null);
+  await sb('members?id=eq.'+member.id,{method:'PATCH',body:JSON.stringify({points_balance:member.points_balance+resolved.pts,points_earned_lifetime:member.points_earned_lifetime+resolved.pts})});
+  member.points_balance+=resolved.pts;
+  member.points_earned_lifetime+=resolved.pts;
+  document.getElementById('profile-balance').textContent=member.points_balance;
+  loadLeaderboard();
+  return resolved;
+}
+
+// ── DASHBOARD ──────────────────────────────────────────
+async function loadDashboard(){
+  try{
+    var today=new Date().toISOString().split('T')[0];
+    var members=await sb('members?is_active=eq.true&select=id');
+    var checkins=await sb('check_ins?checked_in_at=gte.'+today+'T00:00:00&select=id,points_awarded,checked_in_at,free_pour_beer,members(name,tier)');
+    var pours=await sb('free_pours?poured_at=gte.'+today+'T00:00:00&select=id');
+    var txToday=await sb('points_transactions?created_at=gte.'+today+'T00:00:00&points=gt.0&select=points');
+    var totalPts=txToday.reduce(function(a,t){return a+(t.points||0);},0);
+    document.getElementById('stat-total').textContent=members.length;
+    document.getElementById('stat-today').textContent=checkins.length;
+    document.getElementById('stat-pts').textContent=totalPts;
+    document.getElementById('stat-pours').textContent=pours.length;
+    var container=document.getElementById('recent-checkins');
+    if(!checkins.length){container.innerHTML='<div class="loading">No check-ins today yet</div>';}
+    else{
+      container.innerHTML=checkins.slice(0,10).map(function(c){
+        var pourLine=c.free_pour_beer?'<div class="checkin-pour">🍺 '+c.free_pour_beer+'</div>':'';
+        return'<div class="checkin-row"><div>'
+          +'<div class="checkin-name">'+(c.members&&c.members.name||'Unknown')+'</div>'
+          +'<div class="checkin-time">'+new Date(c.checked_in_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})+' · <span class="tier '+tierClass(c.members&&c.members.tier)+'">'+(c.members&&c.members.tier||'—')+'</span></div>'
+          +pourLine+'</div><div class="checkin-pts">+'+c.points_awarded+'</div></div>';
+      }).join('');
+    }
+    var rdmContainer=document.getElementById('recent-redemptions');
+    var rdms=await sb('redemptions?select=*,members(name)&order=redeemed_at.desc&limit=8');
+    if(!rdms.length){rdmContainer.innerHTML='<div class="loading">No redemptions yet</div>';}
+    else{
+      rdmContainer.innerHTML=rdms.map(function(r){
+        return'<div class="rdm-row"><div>'
+          +'<div class="rdm-name">'+(r.members&&r.members.name||'Unknown')+'</div>'
+          +'<div class="rdm-meta"><span class="tier-pill">T'+r.tier+'</span>'+r.reward_name+'</div>'
+          +'</div><div class="rdm-pts">-'+r.points_spent+'</div></div>';
+      }).join('');
+    }
+  }catch(e){console.error(e);}
+}
+
+// ── LEADERBOARD ────────────────────────────────────────
+async function loadLeaderboard(){
+  var el=document.getElementById('leaderboard-list');
+  try{
+    var now=new Date();
+    var monthStart=new Date(now.getFullYear(),now.getMonth(),1).toISOString();
+    var rows=await sb('check_ins?checked_in_at=gte.'+monthStart+'&select=member_id,members(id,name,tier,profile_photo_url)');
+    if(!rows.length){el.innerHTML='<div class="loading" style="padding:16px">No check-ins this month yet</div>';return;}
+    var counts={};var memberInfo={};
+    rows.forEach(function(r){
+      var mid=r.member_id;counts[mid]=(counts[mid]||0)+1;
+      if(!memberInfo[mid]&&r.members)memberInfo[mid]=r.members;
+    });
+    var sorted=Object.keys(counts).sort(function(a,b){return counts[b]-counts[a];}).slice(0,10);
+    el.innerHTML=sorted.map(function(mid,i){
+      var m=memberInfo[mid]||{name:'Unknown',tier:'Free'};
+      var initials=getInitials(m.name);
+      var photo=m.profile_photo_url
+        ?'<img style="width:32px;height:32px;border-radius:50%;object-fit:cover;border:1px solid var(--border);flex-shrink:0" src="'+m.profile_photo_url+'" onerror="this.style.display=\'none\'">'
+        :'<div class="lb-photo-initials">'+initials+'</div>';
+      return'<div class="lb-row" onclick="loadMemberById('+mid+')">'
+        +'<div class="lb-rank'+(i<3?' top':'')+'">'+( i+1)+'</div>'+photo
+        +'<div style="flex:1"><div style="font-size:13px;font-weight:500">'+m.name+'</div><div><span class="tier '+tierClass(m.tier)+'">'+m.tier+'</span></div></div>'
+        +'<div style="text-align:right"><div class="lb-count">'+counts[mid]+'</div><div class="lb-count-label">visits</div></div>'
+        +'</div>';
+    }).join('');
+  }catch(e){el.innerHTML='<div class="loading" style="padding:16px">Error</div>';}
+}
+
+async function loadMemberById(id){
+  try{
+    var members=await sb('members?id=eq.'+id+'&select=*');
+    if(members.length)loadMemberProfile(members[0]);
+  }catch(e){console.error(e);}
+}
+
+// ── MEMBER LOOKUP ──────────────────────────────────────
+var currentMember=null;
+var allBeers=[];
+var checkinLocked=false;
+
+async function loadBeers(){
+  if(!allBeers.length){
+    allBeers=await sb('beers?is_on_tap=eq.true&retired=eq.false&select=*&order=is_new_release.desc,name.asc');
+  }
+  return allBeers;
+}
+
+var searchTimeout;
+async function searchMembers(val){
+  document.getElementById('member-profile').classList.remove('visible');
+  document.getElementById('member-results').style.display='block';
+  currentMember=null;checkinLocked=false;
+  if(!val||val.length<2){document.getElementById('member-results').innerHTML='<div class="loading">Search or scan a member to begin</div>';return;}
+  clearTimeout(searchTimeout);
+  searchTimeout=setTimeout(async function(){
+    try{
+      var results=await sb('members?or=(name.ilike.*'+val+'*,email.ilike.*'+val+'*)&select=*');
+      var wrap=document.getElementById('member-results');
+      if(!results.length){wrap.innerHTML='<div class="loading">No members found</div>';return;}
+      if(results.length===1){loadMemberProfile(results[0]);return;}
+      wrap.innerHTML='<table><thead><tr><th>Name</th><th>Email</th><th>Tier</th><th>Balance</th></tr></thead><tbody>'
+        +results.map(function(m){
+          return'<tr onclick="loadMemberProfile('+JSON.stringify(m).replace(/"/g,'&quot;')+')" style="cursor:pointer">'
+            +'<td>'+m.name+'</td><td style="font-family:\'DM Mono\',monospace;font-size:12px;color:var(--sub)">'+m.email+'</td>'
+            +'<td><span class="tier '+tierClass(m.tier)+'">'+m.tier+'</span></td>'
+            +'<td style="font-family:\'DM Mono\',monospace">'+m.points_balance+'</td></tr>';
+        }).join('')+'</tbody></table>';
+    }catch(e){console.error(e);}
+  },300);
+}
+
+async function loadMemberProfile(member){
+  currentMember=member;checkinLocked=false;
+  document.getElementById('member-results').style.display='none';
+  document.getElementById('checkin-flash').classList.remove('visible');
+  document.getElementById('dd-flash').classList.remove('visible');
+  document.getElementById('member-profile').classList.add('visible');
+  document.getElementById('profile-name').textContent=member.name;
+  document.getElementById('profile-email').textContent=member.email;
+  document.getElementById('profile-balance').textContent=member.points_balance;
+  document.getElementById('profile-lifetime').textContent=member.points_earned_lifetime;
+  document.getElementById('profile-since').textContent=new Date(member.joined_at).toLocaleDateString('en-US',{month:'short',year:'numeric'});
+  var te=document.getElementById('profile-tier');te.textContent=member.tier;te.className='tier '+tierClass(member.tier);
+  var photoWrap=document.getElementById('profile-photo-wrap');
+  photoWrap.innerHTML=member.profile_photo_url
+    ?'<img class="profile-photo" src="'+member.profile_photo_url+'" alt="'+member.name+'" onerror="this.outerHTML=\'<div class=\\"profile-photo-initials\\">'+getInitials(member.name)+'</div>\'">'
+    :'<div class="profile-photo-initials">'+getInitials(member.name)+'</div>';
+  var tokens=await sb('qr_tokens?member_id=eq.'+member.id+'&select=token&limit=1');
+    document.getElementById('profile-member-id').textContent=member.id||'—';
+  var pourCount=await sb('free_pours?member_id=eq.'+member.id+'&select=id');
+  document.getElementById('profile-pour-count').textContent=pourCount.length;
+  enableDDBtn();
+  await renderTapList(member.id);
+}
+
+async function loadMemberProfileFromScan(member){
+  await loadMemberProfile(member);
+  // auto check-in on scan
+  try{
+    var resolved=await applyCheckin(member,false);
+    var flash=document.getElementById('checkin-flash');
+    flash.textContent='✓ Checked in · +'+resolved.pts+' pts · '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    flash.classList.add('visible');
+    showToast('✓ '+member.name+' checked in · +'+resolved.pts+' pts');
+  }catch(e){
+    console.error(e);showToast('Error logging check-in',true);
+    checkinLocked=false;enableDDBtn();
+  }
+}
+
+async function logDDCheckin(){
+  if(!currentMember)return;
+  var pts=15;
+  var now=new Date().toISOString();
+  disableDDBtn();
+  try{
+    await sb('check_ins',{method:'POST',body:JSON.stringify({member_id:currentMember.id,checked_in_at:now,new_release_poured:false,points_awarded:pts})});
+    await logPointsTransaction(currentMember.id,'checkin_dd',pts,'Designated driver',null);
+    await sb('members?id=eq.'+currentMember.id,{method:'PATCH',body:JSON.stringify({points_balance:currentMember.points_balance+pts,points_earned_lifetime:currentMember.points_earned_lifetime+pts})});
+    currentMember.points_balance+=pts;currentMember.points_earned_lifetime+=pts;
+    document.getElementById('profile-balance').textContent=currentMember.points_balance;
+    var flash=document.getElementById('dd-flash');
+    flash.textContent='🚗 DD Mode · +'+pts+' pts · Thank you for being the driver!';
+    flash.classList.add('visible');
+    document.getElementById('checkin-flash').classList.remove('visible');
+    showToast('🚗 DD check-in · +'+pts+' pts');
+    checkinLocked=true;loadLeaderboard();
+  }catch(e){
+    console.error(e);showToast('Error logging DD check-in',true);enableDDBtn();
+  }
+}
+
+function disableCheckinControls(){
+  // no dropdown anymore — just lock DD btn after scan check-in
+  disableDDBtn();
+}
+function disableDDBtn(){
+  document.getElementById('dd-btn').disabled=true;
+  document.getElementById('dd-btn').style.opacity='0.4';
+}
+function enableDDBtn(){
+  document.getElementById('dd-btn').disabled=false;
+  document.getElementById('dd-btn').style.opacity='1';
+}
+
+async function renderTapList(memberId){
+  var tapList=document.getElementById('tap-list');
+  tapList.innerHTML='<div class="loading" style="grid-column:1/-1">Loading...</div>';
+  try{
+    var beers=await loadBeers();
+    var memberPours=await sb('free_pours?member_id=eq.'+memberId+'&select=beer_id');
+    var pouredBeerIds=memberPours.map(function(p){return p.beer_id;});
+    tapList.innerHTML=beers.map(function(b){
+      var isNew=b.is_new_release;var alreadyPoured=pouredBeerIds.indexOf(b.id)>-1;
+      var tileClass='beer-tile'+(isNew?' new-release':'')+(alreadyPoured?' already-poured':'');
+      var badge=isNew?(alreadyPoured?'<div class="pour-badge done">✓ Already poured</div>':'<div class="pour-badge new">★ Free pour available</div>'):'';
+      var pourBtn=isNew?('<button class="btn-pour" '+(alreadyPoured?'disabled':'')+' onclick="logFreePour('+b.id+',\''+b.name.replace(/'/g,"\\'")+'\')">'+(alreadyPoured?'Already Poured':'Give Free Pour')+'</button>'):'';
+      return'<div class="'+tileClass+'">'+badge+'<div class="beer-name">'+b.name+'</div><div class="beer-style">'+b.style+'</div><div class="beer-abv">'+b.abv+'% ABV</div>'+pourBtn+'</div>';
+    }).join('');
+  }catch(e){tapList.innerHTML='<div class="loading" style="grid-column:1/-1">Error</div>';}
+}
+
+async function logFreePour(beerId,beerName){
+  if(!currentMember)return;
+  var now=new Date().toISOString();
+  try{
+    // check-in if not already done this visit
+    if(!checkinLocked){
+      var resolved=await applyCheckin(currentMember,false);
+      var flash=document.getElementById('checkin-flash');
+      flash.textContent='✓ Checked in · +'+resolved.pts+' pts · Free pour logged';
+      flash.classList.add('visible');
+    }
+    await sb('free_pours',{method:'POST',body:JSON.stringify({member_id:currentMember.id,beer_id:beerId,poured_at:now})});
+    var pourCount=await sb('free_pours?member_id=eq.'+currentMember.id+'&select=id');
+    document.getElementById('profile-pour-count').textContent=pourCount.length;
+    showToast('🍺 Free pour logged — '+beerName);
+    await renderTapList(currentMember.id);
+  }catch(e){showToast('Error logging pour',true);}
+}
+
+function clearLookup(){
+  currentMember=null;checkinLocked=false;
+  document.getElementById('member-search-input').value='';
+  document.getElementById('member-profile').classList.remove('visible');
+  document.getElementById('member-results').style.display='block';
+  document.getElementById('member-results').innerHTML='<div class="loading">Search or scan a member to begin</div>';
+  document.getElementById('checkin-flash').classList.remove('visible');
+  document.getElementById('dd-flash').classList.remove('visible');
+  enableDDBtn();hideRewardsMemberBar();
+}
+
+function clearActiveMember(){clearLookup();resetRedemption();}
+
+function syncRewardsMember(){
+  if(!currentMember)return;
+  document.getElementById('rw-active-member-bar').style.display='flex';
+  document.getElementById('rw-active-name').textContent=currentMember.name;
+  var te=document.getElementById('rw-active-tier');te.textContent=currentMember.tier;te.className='tier '+tierClass(currentMember.tier);
+  document.getElementById('rw-member-search').value=currentMember.name;
+  document.getElementById('rw-member-id').value=currentMember.id;
+  var balDiv=document.getElementById('rw-member-balance');
+  balDiv.style.display='block';balDiv.textContent='Current balance: '+currentMember.points_balance+' pts';
+  rwSelectedMember={id:currentMember.id,name:currentMember.name,balance:currentMember.points_balance,tier:currentMember.tier};
+}
+function hideRewardsMemberBar(){document.getElementById('rw-active-member-bar').style.display='none';}
+
+// ── ON TAP ─────────────────────────────────────────────
+var tapFilter='ontap';
+var allTapBeers=[];
+
+async function loadOnTap(){
+  allTapBeers=await sb('beers?select=*&order=is_on_tap.desc,is_new_release.desc,name.asc');
+  renderTapScreen();
+}
+
+function setTapFilter(filter,btn){
+  tapFilter=filter;
+  document.querySelectorAll('.tap-toggle-btn').forEach(function(b){b.classList.remove('active');});
+  btn.classList.add('active');
+  renderTapScreen();
+}
+
+function renderTapScreen(){
+  var grid=document.getElementById('tap-screen-grid');
+  var beers=allTapBeers.filter(function(b){
+    if(tapFilter==='ontap')return b.is_on_tap&&!b.retired;
+    if(tapFilter==='retired')return b.retired;
+    return true;
+  });
+  if(!beers.length){grid.innerHTML='<div class="loading" style="grid-column:1/-1">No beers in this view</div>';return;}
+  grid.innerHTML=beers.map(function(b){
+    var badges='';
+    if(b.is_new_release&&!b.retired)badges+='<span class="tap-badge tap-badge-new">★ New Release</span>';
+    if(b.retired)badges+='<span class="tap-badge tap-badge-retired">Retired</span>';
+    if(b.abv)badges+='<span class="tap-badge tap-badge-abv">'+b.abv+'% ABV</span>';
+
+    var flavorGrid='';
+    if(b.ibu)flavorGrid+='<div class="tap-flavor-item"><div class="tap-flavor-label">IBU</div><div class="tap-flavor-val">'+b.ibu+'</div></div>';
+    if(b.srm)flavorGrid+='<div class="tap-flavor-item"><div class="tap-flavor-label">Color (SRM)</div><div class="tap-flavor-val">'+b.srm+'</div></div>';
+    if(b.og)flavorGrid+='<div class="tap-flavor-item"><div class="tap-flavor-label">OG</div><div class="tap-flavor-val">'+b.og+'</div></div>';
+    if(b.fg)flavorGrid+='<div class="tap-flavor-item"><div class="tap-flavor-label">FG</div><div class="tap-flavor-val">'+b.fg+'</div></div>';
+    if(flavorGrid)flavorGrid='<div class="tap-card-divider"></div><div class="tap-flavor-grid">'+flavorGrid+'</div>';
+
+    var thumb=b.image_url
+      ?'<div class="tap-card-thumb"><img src="'+b.image_url+'" alt="'+b.name+'" onerror="this.parentElement.innerHTML=\'🍺\'"></div>'
+      :'<div class="tap-card-thumb">🍺</div>';
+
+    var tappedOn=b.tapped_on?'<div style="font-size:11px;color:var(--muted);font-family:\'DM Mono\',monospace;margin-top:6px">Tapped '+new Date(b.tapped_on).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+'</div>':'';
+
+    var actions='';
+    if(!b.retired){
+      var newRelLabel=b.is_new_release?'Remove New Release':'★ Mark New Release';
+      actions='<div class="tap-card-actions">'
+        +'<button class="btn-new-release-toggle" onclick="toggleNewRelease('+b.id+','+b.is_new_release+')">'+newRelLabel+'</button>'
+        +'<button class="btn-retire" onclick="retireBeer('+b.id+',\''+b.name.replace(/'/g,"\\'")+'\')">Retire</button>'
+        +'</div>';
+    }
+
+    return'<div class="tap-card'+(b.is_new_release&&!b.retired?' new-release':'')+(b.retired?' retired-card':'')+'">'
+      +'<div class="tap-card-inner">'
+      +'<div class="tap-card-body">'
+      +(badges?'<div class="tap-card-badges">'+badges+'</div>':'')
+      +'<div class="tap-card-name">'+b.name+'</div>'
+      +'<div class="tap-card-style">'+( b.style||'')+'</div>'
+      +(b.description?'<div class="tap-section-title">Description</div><div class="tap-section-text">'+b.description+'</div>':'')
+      +(b.tasting_notes?'<div class="tap-section-title">Tasting Notes</div><div class="tap-section-text">'+b.tasting_notes+'</div>':'')
+      +flavorGrid+tappedOn+actions
+      +'</div>'
+      +thumb
+      +'</div></div>';
+  }).join('');
+}
+
+async function toggleNewRelease(beerId,currentState){
+  var newState=!currentState;
+  try{
+    await sb('beers?id=eq.'+beerId,{method:'PATCH',body:JSON.stringify({is_new_release:newState})});
+    allTapBeers=allTapBeers.map(function(b){return b.id===beerId?Object.assign({},b,{is_new_release:newState}):b;});
+    allBeers=[];
+    renderTapScreen();
+    showToast(newState?'★ Marked as new release':'New release flag removed');
+  }catch(e){showToast('Error updating beer',true);}
+}
+
+async function retireBeer(beerId,beerName){
+  if(!confirm('Retire "'+beerName+'"?\n\nThis will remove it from the active tap list. The beer record is not deleted — to restore it, go to On Tap → Retired, find the beer, and use Add Beer to bring it back.'))return;
+  try{
+    await sb('beers?id=eq.'+beerId,{method:'PATCH',body:JSON.stringify({retired:true,is_on_tap:false,retired_on:new Date().toISOString()})});
+    allTapBeers=allTapBeers.map(function(b){return b.id===beerId?Object.assign({},b,{retired:true,is_on_tap:false}):b;});
+    allBeers=[];
+    renderTapScreen();
+    showToast('🪦 '+beerName+' retired');
+  }catch(e){showToast('Error retiring beer',true);}
+}
+
+// ── EVENTS ─────────────────────────────────────────────
+var uthereTab='pending';
+
+function eventTypeClass(type){
+  var t=(type||'').toLowerCase();
+  if(t==='trivia')return'etype-trivia';
+  if(t==='bingo')return'etype-bingo';
+  if(t==='karaoke')return'etype-karaoke';
+  if(t.indexOf('special')>-1)return'etype-special';
+  if(t.indexOf('market')>-1)return'etype-market';
+  if(t.indexOf('u there')>-1||t.indexOf('uthere')>-1)return'etype-uthere';
+  return'etype-default';
+}
+
+async function loadEvents(){
+  await Promise.all([loadEventsList(),loadUthereList()]);
+}
+
+async function loadEventsList(){
+  var el=document.getElementById('events-list');
+  try{
+    var now=new Date().toISOString();
+    var events=await sb('events?event_date=gte.'+now+'&order=event_date.asc&limit=20');
+    if(!events.length){el.innerHTML='<div class="loading">No upcoming events — create one above</div>';return;}
+    el.innerHTML=events.map(function(e){
+      var d=new Date(e.event_date);
+      var month=d.toLocaleDateString('en-US',{month:'short'}).toUpperCase();
+      var day=d.getDate();
+      var time=d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+      var releaseBadge=e.is_beer_release?'<span style="font-size:10px;font-family:\'DM Mono\',monospace;padding:2px 8px;border-radius:10px;background:rgba(232,184,75,0.12);color:var(--amber);border:1px solid rgba(232,184,75,0.3);margin-left:6px">🍺 Release</span>':'';
+      var capacity=e.max_capacity?'<span style="margin-left:8px">· Cap: '+e.max_capacity+'</span>':'';
+      return'<div class="event-card'+(e.is_beer_release?' beer-release':'')+'">'
+        +'<div class="event-date-block"><div class="event-date-month">'+month+'</div><div class="event-date-day">'+day+'</div><div class="event-date-time">'+time+'</div></div>'
+        +'<div class="event-info">'
+        +'<span class="event-type-badge '+eventTypeClass(e.event_type)+'">'+e.event_type+'</span>'+releaseBadge
+        +'<div class="event-name">'+e.event_name+'</div>'
+        +'<div class="event-meta">'+e.points_available+' pts available'+capacity+(e.notes?' · '+e.notes:'')+'</div>'
+        +'</div>'
+        +'<div style="text-align:right;flex-shrink:0">'
+        +'<div class="event-pts">'+e.points_available+'</div><div class="event-pts-label">pts</div>'
+        +'<button class="btn-retire" style="margin-top:8px;font-size:11px;padding:4px 10px" onclick="deleteEvent('+e.id+')">Remove</button>'
+        +'</div></div>';
+    }).join('');
+  }catch(err){el.innerHTML='<div class="loading">Error loading events</div>';console.error(err);}
+}
+
+async function createEvent(){
+  var name=document.getElementById('ev-name').value.trim();
+  var type=document.getElementById('ev-type').value;
+  var date=document.getElementById('ev-date').value;
+  var pts=parseInt(document.getElementById('ev-pts').value)||30;
+  var cap=document.getElementById('ev-capacity').value;
+  var notes=document.getElementById('ev-notes').value.trim();
+  var release=document.getElementById('ev-release').checked;
+  if(!name){showToast('Enter an event name',true);return;}
+  if(!date){showToast('Select a date and time',true);return;}
+  try{
+    await sb('events',{method:'POST',body:JSON.stringify({
+      event_name:name,event_type:type,
+      event_date:new Date(date).toISOString(),
+      points_available:pts,
+      max_capacity:cap?parseInt(cap):null,
+      notes:notes||null,
+      is_beer_release:release
+    })});
+    document.getElementById('ev-name').value='';
+    document.getElementById('ev-date').value='';
+    document.getElementById('ev-capacity').value='';
+    document.getElementById('ev-notes').value='';
+    document.getElementById('ev-release').checked=false;
+    document.getElementById('ev-pts').value='30';
+    showToast('✓ Event added to lineup');
+    await loadEventsList();
+  }catch(e){showToast('Error creating event',true);console.error(e);}
+}
+
+async function deleteEvent(id){
+  if(!confirm('Remove this event from the lineup?'))return;
+  try{
+    await sb('events?id=eq.'+id,{method:'DELETE'});
+    showToast('Event removed');
+    await loadEventsList();
+  }catch(e){showToast('Error removing event',true);}
+}
+
+async function loadUthereList(){
+  var el=document.getElementById('uthere-list');
+  try{
+    var rows=await sb('lvbc_u_there?status=eq.'+uthereTab+'&order=vote_count.desc,created_at.asc');
+    if(!rows.length){
+      var labels={pending:'No pending nominations',approved:'No approved outings yet',rejected:'No rejected nominations'};
+      el.innerHTML='<div class="loading">'+( labels[uthereTab]||'None')+'</div>';return;
+    }
+    el.innerHTML=rows.map(function(r){
+      var dateLine=r.proposed_date?'Proposed: '+new Date(r.proposed_date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'No date proposed';
+      var actions='';
+      if(r.status==='pending'){
+        actions='<button class="btn-approve" onclick="setUthereStatus('+r.id+',\'approved\')">Approve</button>'
+          +'<button class="btn-reject" onclick="setUthereStatus('+r.id+',\'rejected\')">Reject</button>';
+      } else if(r.status==='approved'){
+        actions='<button class="btn-reject" onclick="setUthereStatus('+r.id+',\'rejected\')">Reject</button>';
+      } else {
+        actions='<button class="btn-approve" onclick="setUthereStatus('+r.id+',\'pending\')">Restore</button>';
+      }
+      return'<div class="nomination-card '+r.status+'">'
+        +'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px">'
+        +'<div><div class="nomination-name">'+r.outing_name+'</div>'
+        +'<div class="nomination-meta">'+r.outing_type+' · '+dateLine+(r.nominated_by?' · Nominated by '+r.nominated_by:'')+'</div></div>'
+        +'<span class="status-pill status-'+r.status+'">'+r.status+'</span>'
+        +'</div>'
+        +(r.description?'<div class="nomination-desc">'+r.description+'</div>':'')
+        +'<div class="nomination-actions">'
+        +'<div style="display:flex;align-items:baseline;gap:4px"><span class="vote-count">'+r.vote_count+'</span><span class="vote-label">votes</span></div>'
+        +actions
+        +'</div></div>';
+    }).join('');
+  }catch(err){el.innerHTML='<div class="loading">Error loading</div>';console.error(err);}
+}
+
+function setUthereTab(tab,btn){
+  uthereTab=tab;
+  document.querySelectorAll('.uthere-tab').forEach(function(b){b.classList.remove('active');});
+  btn.classList.add('active');
+  loadUthereList();
+}
+
+async function setUthereStatus(id,status){
+  try{
+    await sb('lvbc_u_there?id=eq.'+id,{method:'PATCH',body:JSON.stringify({status:status})});
+    if(status==='approved')showToast('✓ Outing approved');
+    else if(status==='rejected')showToast('Nomination rejected');
+    else showToast('Nomination restored to pending');
+    await loadUthereList();
+  }catch(e){showToast('Error updating nomination',true);}
+}
+
+async function createUthereEvent(){
+  var name=document.getElementById('ut-name').value.trim();
+  var type=document.getElementById('ut-type').value;
+  var date=document.getElementById('ut-date').value;
+  var desc=document.getElementById('ut-desc').value.trim();
+  if(!name){showToast('Enter an outing name',true);return;}
+  try{
+    await sb('lvbc_u_there',{method:'POST',body:JSON.stringify({
+      outing_name:name,outing_type:type,
+      proposed_date:date||null,
+      description:desc||null,
+      status:'approved',
+      vote_count:0,
+      nominated_by:'Staff'
+    })});
+    document.getElementById('ut-name').value='';
+    document.getElementById('ut-date').value='';
+    document.getElementById('ut-desc').value='';
+    showToast('✓ U There event added');
+    uthereTab='approved';
+    document.querySelectorAll('.uthere-tab').forEach(function(b){
+      b.classList.toggle('active',b.textContent.toLowerCase()==='approved');
+    });
+    await loadUthereList();
+  }catch(e){showToast('Error creating event',true);console.error(e);}
+}
+
+// ── SCANNER ────────────────────────────────────────────
+var zxingReader=null;
+
+async function openScanner(){
+  document.getElementById('scanner-overlay').classList.add('active');
+  document.getElementById('scanner-result').classList.remove('visible');
+  document.getElementById('scanner-status').textContent='Initializing camera...';
+  try{
+    zxingReader=new ZXing.BrowserQRCodeReader();
+    document.getElementById('scanner-status').textContent='Ready — point at QR code';
+    zxingReader.decodeFromVideoDevice(null,'scanner-video',function(result,err){
+      if(result){zxingReader.reset();lookupTokenAndLoad(result.getText());}
+    });
+  }catch(e){document.getElementById('scanner-status').textContent='Camera access denied';console.error(e);}
+}
+
+async function lookupTokenAndLoad(token){
+  document.getElementById('scanner-status').textContent='Looking up member...';
+  try{
+    var tokens=await sb('qr_tokens?token=eq.'+token+'&select=member_id');
+    if(!tokens.length){
+      document.getElementById('scanner-status').textContent='Token not found — try again';
+      zxingReader=new ZXing.BrowserQRCodeReader();
+      zxingReader.decodeFromVideoDevice(null,'scanner-video',function(result,err){if(result){zxingReader.reset();lookupTokenAndLoad(result.getText());}});
+      return;
+    }
+    var members=await sb('members?id=eq.'+tokens[0].member_id+'&select=*');
+    if(!members.length){document.getElementById('scanner-status').textContent='Member not found';return;}
+    var member=members[0];
+    document.getElementById('scanner-found-name').textContent=member.name;
+    document.getElementById('scanner-found-tier').textContent=member.tier;
+    document.getElementById('scanner-found-pts').textContent=member.points_balance+' pts';
+    document.getElementById('scanner-result').classList.add('visible');
+    document.getElementById('scanner-status').textContent='Member found — loading...';
+    setTimeout(function(){closeScanner();loadMemberProfileFromScan(member);},800);
+  }catch(e){console.error(e);}
+}
+
+function closeScanner(){
+  if(zxingReader){try{zxingReader.reset();}catch(e){}zxingReader=null;}
+  document.getElementById('scanner-overlay').classList.remove('active');
+}
+
+// ── REWARDS ────────────────────────────────────────────
+var rwSelectedMember=null;
+
+async function rwSearchMembers(val){
+  var resultsDiv=document.getElementById('rw-member-results');
+  if(!val||val.length<2){resultsDiv.style.display='none';return;}
+  var results=await sb('members?or=(name.ilike.*'+val+'*,email.ilike.*'+val+'*)&select=id,name,tier,points_balance');
+  if(!results.length){resultsDiv.style.display='none';return;}
+  resultsDiv.style.display='block';
+  resultsDiv.innerHTML=results.map(function(m){
+    return'<div class="dropdown-item" onclick="selectRwMember('+m.id+',\''+m.name.replace(/'/g,"\\'")+'\','+m.points_balance+',\''+m.tier+'\')">'
+      +'<span>'+m.name+' <span class="tier '+tierClass(m.tier)+'" style="margin-left:8px">'+m.tier+'</span></span>'
+      +'<span style="font-family:\'DM Mono\',monospace;font-size:12px;color:var(--teal)">'+m.points_balance+' pts</span></div>';
+  }).join('');
+}
+
+function selectRwMember(id,name,balance,tier){
+  rwSelectedMember={id:id,name:name,balance:balance,tier:tier};
+  document.getElementById('rw-member-search').value=name;
+  document.getElementById('rw-member-id').value=id;
+  document.getElementById('rw-member-results').style.display='none';
+  var balDiv=document.getElementById('rw-member-balance');
+  balDiv.style.display='block';balDiv.textContent='Current balance: '+balance+' pts';
+}
+
+async function submitRedemption(){
+  if(!rwSelectedMember){showToast('Select a member first',true);return;}
+  var sel=document.getElementById('rw-reward');
+  var cost=parseInt(sel.value);
+  var rewardText=sel.options[sel.selectedIndex].text;
+  var staff=document.getElementById('rw-staff').value;
+  var notes=document.getElementById('rw-notes').value;
+  if(rwSelectedMember.balance<cost){showToast('Insufficient points · '+rwSelectedMember.balance+' / '+cost+' needed',true);return;}
+  var isPaying=['Mug Club','Coffee Club','Full Pour'].includes(rwSelectedMember.tier);
+  if(cost>=750&&!isPaying){showToast('Tier 3+ rewards require a paid membership',true);return;}
+  var tierNum=cost<=200?1:cost<=500?2:cost<=1000?3:cost<=2500?4:5;
+  var rewardName=rewardText.split(' — ')[0];
+  try{
+    await sb('members?id=eq.'+rwSelectedMember.id,{method:'PATCH',body:JSON.stringify({points_balance:rwSelectedMember.balance-cost})});
+    await sb('redemptions',{method:'POST',body:JSON.stringify({member_id:rwSelectedMember.id,tier:tierNum,reward_name:rewardName,points_spent:cost,processed_by:staff||null,notes:notes||null})});
+    await logPointsTransaction(rwSelectedMember.id,'redemption',-cost,rewardName,staff||null);
+    showToast('✓ Redeemed · '+rewardName);
+    resetRedemption();loadRewardsLog();
+  }catch(e){showToast('Error processing redemption',true);}
+}
+
+function resetRedemption(){
+  rwSelectedMember=null;
+  document.getElementById('rw-member-search').value='';
+  document.getElementById('rw-member-id').value='';
+  document.getElementById('rw-member-results').style.display='none';
+  document.getElementById('rw-member-balance').style.display='none';
+  document.getElementById('rw-staff').value='';
+  document.getElementById('rw-notes').value='';
+}
+
+async function loadRewardsLog(){
+  var el=document.getElementById('rewards-log');
+  var rdms=await sb('redemptions?select=*,members(name)&order=redeemed_at.desc&limit=12');
+  if(!rdms.length){el.innerHTML='<div class="loading">No redemptions yet</div>';return;}
+  el.innerHTML=rdms.map(function(r){
+    var d=new Date(r.redeemed_at).toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+    return'<div class="rdm-row"><div>'
+      +'<div class="rdm-name">'+(r.members&&r.members.name||'Unknown')+'</div>'
+      +'<div class="rdm-meta"><span class="tier-pill">T'+r.tier+'</span>'+r.reward_name+(r.notes?' · '+r.notes:'')+'</div>'
+      +'<div class="rdm-meta">'+d+(r.processed_by?' · '+r.processed_by:'')+'</div>'
+      +'</div><div class="rdm-pts">-'+r.points_spent+'</div></div>';
+  }).join('');
+}
+
+
+// ── ADMIN ──────────────────────────────────────────────
+var adminSearchTimeout;
+var currentAdminMember=null;
+var currentReport='checkins';
+
+function setAdminTab(tab,btn){
+  document.querySelectorAll('.admin-section').forEach(function(s){s.classList.remove('active');});
+  document.querySelectorAll('.admin-tab').forEach(function(b){b.classList.remove('active');});
+  document.getElementById('admintab-'+tab).classList.add('active');
+  btn.classList.add('active');
+  if(tab==='rewards')loadRewardsAdmin();
+  if(tab==='scoring')loadScoringAdmin();
+  if(tab==='beers')loadBeersAdmin();
+  if(tab==='badges')loadBadgesAdmin();
+  if(tab==='reports')initReports();
+}
+
+async function loadAdminMemberList(){
+  var el=document.getElementById('admin-results');
+  try{
+    var members=await sb('members?order=name.asc&select=id,name,email,tier,points_balance,is_active');
+    if(!members.length){el.innerHTML='<div class="loading">No members yet</div>';return;}
+    el.innerHTML='<table><thead><tr><th>Name</th><th>Email</th><th>Tier</th><th>Balance</th><th>Status</th></tr></thead><tbody>'
+      +members.map(function(m){
+        return'<tr onclick="loadAdminMember('+JSON.stringify(m).replace(/"/g,'&quot;')+')" style="cursor:pointer">'
+          +'<td>'+m.name+'</td>'
+          +'<td style="font-family:\'DM Mono\',monospace;font-size:12px;color:var(--sub)">'+m.email+'</td>'
+          +'<td><span class="tier '+tierClass(m.tier)+'">'+m.tier+'</span></td>'
+          +'<td style="font-family:\'DM Mono\',monospace">'+m.points_balance+'</td>'
+          +'<td style="font-size:12px;color:'+(m.is_active?'var(--teal)':'var(--red)')+'">'+( m.is_active?'Active':'Inactive')+'</td></tr>';
+      }).join('')+'</tbody></table>';
+  }catch(e){el.innerHTML='<div class="loading">Error loading</div>';}
+}
+
+async function adminSearchMembers(val){
+  document.getElementById('admin-edit-panel').style.display='none';
+  if(!val||val.length<2){loadAdminMemberList();return;}
+  clearTimeout(adminSearchTimeout);
+  adminSearchTimeout=setTimeout(async function(){
+    var results=await sb('members?or=(name.ilike.*'+val+'*,email.ilike.*'+val+'*)&select=*');
+    var wrap=document.getElementById('admin-results');
+    if(!results.length){wrap.innerHTML='<div class="loading">No members found</div>';return;}
+    wrap.innerHTML='<table><thead><tr><th>Name</th><th>Email</th><th>Tier</th><th>Balance</th></tr></thead><tbody>'
+      +results.map(function(m){
+        return'<tr onclick="loadAdminMember('+JSON.stringify(m).replace(/"/g,'&quot;')+')" style="cursor:pointer">'
+          +'<td>'+m.name+'</td><td style="font-family:\'DM Mono\',monospace;font-size:12px;color:var(--sub)">'+m.email+'</td>'
+          +'<td><span class="tier '+tierClass(m.tier)+'">'+m.tier+'</span></td>'
+          +'<td style="font-family:\'DM Mono\',monospace">'+m.points_balance+'</td></tr>';
+      }).join('')+'</tbody></table>';
+  },300);
+}
+
+async function addNewMember(){
+  var name=document.getElementById('new-name').value.trim();
+  var email=document.getElementById('new-email').value.trim();
+  var phone=document.getElementById('new-phone').value.trim();
+  var birthday=document.getElementById('new-birthday').value;
+  var tier=document.getElementById('new-tier').value;
+  if(!name||!email){showNewMemberAlert('Name and email are required','error');return;}
+  try{
+    await sb('members',{method:'POST',body:JSON.stringify({name:name,email:email,phone:phone||null,birthday:birthday||null,tier:tier,points_balance:0,points_earned_lifetime:0,is_active:true,joined_at:new Date().toISOString()})});
+    showNewMemberAlert('✓ Member created — '+name,'success');
+    ['new-name','new-email','new-phone','new-birthday'].forEach(function(id){document.getElementById(id).value='';});
+    document.getElementById('new-tier').value='Free';
+    loadAdminMemberList();
+  }catch(e){showNewMemberAlert('Error creating member — email may already exist','error');}
+}
+
+function showNewMemberAlert(msg,type){
+  var el=document.getElementById('new-member-alert');
+  el.textContent=msg;el.style.display='block';
+  el.style.background=type==='success'?'rgba(42,184,166,0.15)':'rgba(224,82,82,0.15)';
+  el.style.border='1px solid '+(type==='success'?'var(--teal)':'var(--red)');
+  el.style.color=type==='success'?'var(--teal)':'var(--red)';
+  setTimeout(function(){el.style.display='none';},4000);
+}
+
+async function loadAdminMember(m){
+  currentAdminMember=m;
+  document.getElementById('admin-edit-panel').style.display='block';
+  document.getElementById('admin-edit-panel').scrollIntoView({behavior:'smooth',block:'start'});
+  document.getElementById('admin-member-id').value=m.id;
+  document.getElementById('admin-name').value=m.name||'';
+  document.getElementById('admin-email').value=m.email||'';
+  document.getElementById('admin-phone').value=m.phone||'';
+  document.getElementById('admin-birthday').value=m.birthday||'';
+  document.getElementById('admin-tier').value=m.tier||'Free';
+  document.getElementById('admin-active').value=m.is_active?'true':'false';
+  document.getElementById('admin-balance').value=m.points_balance||0;
+  document.getElementById('admin-lifetime').value=m.points_earned_lifetime||0;
+  document.getElementById('adj-points').value='';document.getElementById('adj-reason').value='';
+  var checkins=await sb('check_ins?member_id=eq.'+m.id+'&select=id');
+  var pours=await sb('free_pours?member_id=eq.'+m.id+'&select=id');
+  document.getElementById('admin-summary').innerHTML=
+    '<div class="admin-summary-row"><span>Member ID</span><span class="admin-summary-val">'+m.id+'</span></div>'
+    +'<div class="admin-summary-row"><span>Joined</span><span class="admin-summary-val">'+(m.joined_at?new Date(m.joined_at).toLocaleDateString():'—')+'</span></div>'
+    +'<div class="admin-summary-row"><span>Total Check-ins</span><span class="admin-summary-val">'+checkins.length+'</span></div>'
+    +'<div class="admin-summary-row"><span>Free Pours Given</span><span class="admin-summary-val">'+pours.length+'</span></div>'
+    +'<div class="admin-summary-row"><span>Points Balance</span><span class="admin-summary-val">'+m.points_balance+'</span></div>'
+    +'<div class="admin-summary-row"><span>Lifetime Points</span><span class="admin-summary-val">'+m.points_earned_lifetime+'</span></div>';
+  var rdmEl=document.getElementById('admin-rdm-history');
+  var rdms=await sb('redemptions?member_id=eq.'+m.id+'&order=redeemed_at.desc&select=*');
+  if(!rdms.length){rdmEl.innerHTML='<div class="loading">No redemptions yet</div>';return;}
+  rdmEl.innerHTML=rdms.map(function(r){
+    var d=new Date(r.redeemed_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    return'<div class="rdm-row"><div><div class="rdm-name" style="font-size:13px">'+r.reward_name+'</div>'
+      +'<div class="rdm-meta"><span class="tier-pill">T'+r.tier+'</span>'+d+(r.notes?' · '+r.notes:'')+'</div>'
+      +'</div><div class="rdm-pts" style="font-size:17px">-'+r.points_spent+'</div></div>';
+  }).join('');
+}
+
+async function saveAdminEdit(){
+  var id=document.getElementById('admin-member-id').value;
+  var updates={name:document.getElementById('admin-name').value,email:document.getElementById('admin-email').value,phone:document.getElementById('admin-phone').value,birthday:document.getElementById('admin-birthday').value||null,tier:document.getElementById('admin-tier').value,is_active:document.getElementById('admin-active').value==='true',points_balance:parseInt(document.getElementById('admin-balance').value)||0};
+  try{
+    await sb('members?id=eq.'+id,{method:'PATCH',body:JSON.stringify(updates)});
+    if(currentAdminMember)currentAdminMember=Object.assign(currentAdminMember,updates);
+    showAdminAlert('✓ Member record updated','success');
+    loadAdminMemberList();
+  }catch(e){showAdminAlert('Error saving changes','error');}
+}
+
+async function deactivateMember(){
+  if(!currentAdminMember)return;
+  if(!confirm('Deactivate '+currentAdminMember.name+'? They will no longer be able to log in or earn points.'))return;
+  try{
+    await sb('members?id=eq.'+currentAdminMember.id,{method:'PATCH',body:JSON.stringify({is_active:false})});
+    showAdminAlert('✓ Member deactivated','success');
+    document.getElementById('admin-active').value='false';
+    currentAdminMember.is_active=false;
+    loadAdminMemberList();
+  }catch(e){showAdminAlert('Error deactivating member','error');}
+}
+
+async function applyPointsAdjustment(){
+  var id=document.getElementById('admin-member-id').value;
+  var pts=parseInt(document.getElementById('adj-points').value);
+  var reason=document.getElementById('adj-reason').value.trim();
+  if(!pts||isNaN(pts)){showAdminAlert('Enter a points value','error');return;}
+  if(!reason){showAdminAlert('Enter a reason for the adjustment','error');return;}
+  if(!currentAdminMember){showAdminAlert('No member loaded','error');return;}
+  var newBalance=currentAdminMember.points_balance+pts;
+  var newLifetime=pts>0?currentAdminMember.points_earned_lifetime+pts:currentAdminMember.points_earned_lifetime;
+  if(newBalance<0){showAdminAlert('Balance cannot go below 0','error');return;}
+  try{
+    await sb('members?id=eq.'+id,{method:'PATCH',body:JSON.stringify({points_balance:newBalance,points_earned_lifetime:newLifetime})});
+    await logPointsTransaction(parseInt(id),'manual_adjustment',pts,reason,'admin');
+    currentAdminMember.points_balance=newBalance;currentAdminMember.points_earned_lifetime=newLifetime;
+    document.getElementById('admin-balance').value=newBalance;
+    document.getElementById('admin-lifetime').value=newLifetime;
+    document.getElementById('adj-points').value='';document.getElementById('adj-reason').value='';
+    showAdminAlert((pts>0?'+':'')+pts+' pts applied — '+reason,'success');
+  }catch(e){showAdminAlert('Error applying adjustment','error');}
+}
+
+async function resetPin(){
+  var id=document.getElementById('admin-member-id').value;
+  try{
+    await sb('members?id=eq.'+id,{method:'PATCH',body:JSON.stringify({pin:null})});
+    showAdminAlert('✓ PIN cleared — member will set a new one on next login','success');
+  }catch(e){showAdminAlert('Error resetting PIN','error');}
+}
+
+function showAdminAlert(msg,type){
+  var el=document.getElementById('admin-alert');
+  el.textContent=msg;el.style.display='block';
+  el.style.background=type==='success'?'rgba(42,184,166,0.15)':'rgba(224,82,82,0.15)';
+  el.style.border='1px solid '+(type==='success'?'var(--teal)':'var(--red)');
+  el.style.color=type==='success'?'var(--teal)':'var(--red)';
+  setTimeout(function(){el.style.display='none';},4000);
+}
+
+// ── REWARDS ADMIN ──────────────────────────────────────
+async function loadRewardsAdmin(){
+  var el=document.getElementById('rewards-admin-list');
+  try{
+    var rewards=await sb('rewards?order=tier.asc,points_cost.asc');
+    if(!rewards.length){el.innerHTML='<div class="loading">No rewards yet</div>';return;}
+    el.innerHTML='<div class="table-wrap">'
+      +rewards.map(function(r){
+        return'<div class="reward-admin-row">'
+          +'<div><span class="tier-pill">T'+r.tier+'</span><span style="font-weight:500;font-size:13px">'+r.reward_name+'</span>'
+          +(r.tier_limit?'<div style="font-size:11px;color:var(--muted);font-family:\'DM Mono\',monospace;margin-top:2px">'+r.tier_limit+'</div>':'')+'</div>'
+          +'<div style="display:flex;align-items:center;gap:10px">'
+          +'<input type="number" class="scoring-input" value="'+r.points_cost+'" id="rw-cost-'+r.id+'" style="width:90px">'
+          +'<button class="scoring-save" onclick="saveRewardCost('+r.id+')">Save</button>'
+          +'<button class="btn-retire" onclick="toggleRewardActive('+r.id+','+r.is_active+')" style="font-size:11px;padding:4px 10px">'+(r.is_active?'Disable':'Enable')+'</button>'
+          +'</div></div>';
+      }).join('')+'</div>';
+  }catch(e){el.innerHTML='<div class="loading">Error loading</div>';}
+}
+
+async function saveRewardCost(id){
+  var val=parseInt(document.getElementById('rw-cost-'+id).value);
+  if(!val||val<1){showToast('Enter a valid point cost',true);return;}
+  try{await sb('rewards?id=eq.'+id,{method:'PATCH',body:JSON.stringify({points_cost:val})});showToast('✓ Reward updated');}
+  catch(e){showToast('Error saving',true);}
+}
+
+async function toggleRewardActive(id,current){
+  try{await sb('rewards?id=eq.'+id,{method:'PATCH',body:JSON.stringify({is_active:!current})});showToast(current?'Reward disabled':'Reward enabled');loadRewardsAdmin();}
+  catch(e){showToast('Error updating',true);}
+}
+
+async function addReward(){
+  var name=document.getElementById('rw-new-name').value.trim();
+  var tier=parseInt(document.getElementById('rw-new-tier').value);
+  var cost=parseInt(document.getElementById('rw-new-cost').value);
+  var limit=document.getElementById('rw-new-limit').value.trim();
+  var rep=document.getElementById('rw-new-repeatable').checked;
+  if(!name||!cost){showToast('Name and points cost required',true);return;}
+  try{
+    await sb('rewards',{method:'POST',body:JSON.stringify({reward_name:name,tier:tier,points_cost:cost,tier_limit:limit||null,repeatable:rep,is_active:true})});
+    showToast('✓ Reward added');
+    ['rw-new-name','rw-new-cost','rw-new-limit'].forEach(function(id){document.getElementById(id).value='';});
+    loadRewardsAdmin();
+  }catch(e){showToast('Error adding reward',true);}
+}
+
+// ── SCORING ADMIN ──────────────────────────────────────
+async function loadScoringAdmin(){
+  var el=document.getElementById('scoring-list');
+  try{
+    var rules=await sb('point_rules?order=id.asc');
+    if(!rules.length){el.innerHTML='<div class="loading">No rules found</div>';return;}
+    el.innerHTML='<div class="table-wrap">'
+      +rules.map(function(r){
+        return'<div class="scoring-row">'
+          +'<div><div class="scoring-label">'+r.label+'</div><div class="scoring-desc">'+( r.description||r.transaction_type)+'</div></div>'
+          +'<div style="display:flex;align-items:center;gap:10px">'
+          +'<input type="number" class="scoring-input" value="'+r.points+'" id="score-'+r.id+'">'
+          +'<button class="scoring-save" onclick="saveScoringRule('+r.id+')">Save</button>'
+          +'</div></div>';
+      }).join('')+'</div>';
+  }catch(e){el.innerHTML='<div class="loading">Error loading</div>';}
+}
+
+async function saveScoringRule(id){
+  var val=parseInt(document.getElementById('score-'+id).value);
+  if(isNaN(val)){showToast('Enter a valid number',true);return;}
+  try{await sb('point_rules?id=eq.'+id,{method:'PATCH',body:JSON.stringify({points:val})});showToast('✓ Scoring rule updated');}
+  catch(e){showToast('Error saving',true);}
+}
+
+// ── BEERS ADMIN ────────────────────────────────────────
+async function loadBeersAdmin(){
+  var el=document.getElementById('beer-admin-list');
+  try{
+    var beers=await sb('beers?retired=eq.false&order=is_new_release.desc,name.asc&select=id,name,style,abv,is_on_tap,is_new_release');
+    if(!beers.length){el.innerHTML='<div class="loading">No beers on tap</div>';return;}
+    el.innerHTML='<div class="table-wrap"><table><thead><tr><th>Name</th><th>Style</th><th>ABV</th><th>Status</th><th></th></tr></thead><tbody>'
+      +beers.map(function(b){
+        var status=b.is_new_release?'<span class="pour-badge new">New</span>':'<span style="font-size:11px;color:var(--sub)">Active</span>';
+        return'<tr><td style="font-weight:500">'+b.name+'</td>'
+          +'<td style="font-size:12px;color:var(--sub)">'+( b.style||'—')+'</td>'
+          +'<td style="font-family:\'DM Mono\',monospace;font-size:12px">'+( b.abv||'—')+'%</td>'
+          +'<td>'+status+'</td>'
+          +'<td><button class="btn-retire" style="font-size:11px;padding:3px 8px" onclick="retireBeerAdmin('+b.id+',\''+b.name.replace(/'/g,"\\'")+'\')" >Retire</button></td></tr>';
+      }).join('')+'</tbody></table></div>';
+  }catch(e){el.innerHTML='<div class="loading">Error loading</div>';}
+}
+
+async function addBeer(){
+  var name=document.getElementById('beer-new-name').value.trim();
+  var style=document.getElementById('beer-new-style').value.trim();
+  var abv=parseFloat(document.getElementById('beer-new-abv').value);
+  var ibu=document.getElementById('beer-new-ibu').value;
+  var desc=document.getElementById('beer-new-desc').value.trim();
+  var notes=document.getElementById('beer-new-notes').value.trim();
+  var img=document.getElementById('beer-new-img').value.trim();
+  var tapped=document.getElementById('beer-new-tapped').value;
+  var isNew=document.getElementById('beer-new-release').checked;
+  if(!name){showBeerAlert('Beer name is required','error');return;}
+  try{
+    await sb('beers',{method:'POST',body:JSON.stringify({name:name,style:style||null,abv:abv||null,ibu:ibu?parseInt(ibu):null,description:desc||null,tasting_notes:notes||null,image_url:img||null,tapped_on:tapped?new Date(tapped).toISOString():new Date().toISOString(),is_on_tap:true,is_new_release:isNew,retired:false})});
+    showBeerAlert('✓ '+name+' added to tap list','success');
+    ['beer-new-name','beer-new-style','beer-new-abv','beer-new-ibu','beer-new-desc','beer-new-notes','beer-new-img','beer-new-tapped'].forEach(function(id){document.getElementById(id).value='';});
+    document.getElementById('beer-new-release').checked=false;
+    allBeers=[];allTapBeers=[];loadBeersAdmin();
+  }catch(e){showBeerAlert('Error adding beer','error');console.error(e);}
+}
+
+async function retireBeerAdmin(id,name){
+  if(!confirm('Retire "'+name+'"?\n\nThis will remove it from the active tap list. The beer record is not deleted — to restore it, go to On Tap → Retired, find the beer, and use Add Beer to bring it back.'))return;
+  try{
+    await sb('beers?id=eq.'+id,{method:'PATCH',body:JSON.stringify({retired:true,is_on_tap:false,retired_on:new Date().toISOString()})});
+    allBeers=[];allTapBeers=[];
+    showBeerAlert('✓ '+name+' retired','success');loadBeersAdmin();
+  }catch(e){showBeerAlert('Error retiring beer','error');}
+}
+
+function showBeerAlert(msg,type){
+  var el=document.getElementById('beer-add-alert');
+  el.textContent=msg;el.style.display='block';
+  el.style.background=type==='success'?'rgba(42,184,166,0.15)':'rgba(224,82,82,0.15)';
+  el.style.border='1px solid '+(type==='success'?'var(--teal)':'var(--red)');
+  el.style.color=type==='success'?'var(--teal)':'var(--red)';
+  setTimeout(function(){el.style.display='none';},4000);
+}
+
+// ── BADGES ADMIN ───────────────────────────────────────
+async function loadBadgesAdmin(){
+  var el=document.getElementById('badge-admin-list');
+  try{
+    var badges=await sb('badges?order=category.asc,name.asc');
+    if(!badges.length){el.innerHTML='<div class="loading">No badges yet</div>';return;}
+    var grouped={};
+    badges.forEach(function(b){grouped[b.category]=grouped[b.category]||[];grouped[b.category].push(b);});
+    el.innerHTML=Object.keys(grouped).map(function(cat){
+      return'<div style="margin-bottom:16px">'
+        +'<div class="section-label" style="margin-top:0;margin-bottom:8px">'+cat+'</div>'
+        +'<div class="table-wrap">'
+        +grouped[cat].map(function(b){
+          var rarityClass=b.rarity==='Rare'?'rarity-rare':b.rarity==='Exclusive'?'rarity-exclusive':'rarity-standard';
+          return'<div class="badge-admin-row">'
+            +'<div class="badge-color-dot" style="background:'+( b.border_color||'var(--muted)')+'"></div>'
+            +'<div style="flex:1"><div style="font-size:13px;font-weight:500">'+b.name+'</div>'
+            +'<div style="font-size:11px;color:var(--sub);font-family:\'DM Mono\',monospace">'+( b.description||'')+'</div></div>'
+            +'<span class="rarity-pill '+rarityClass+'">'+b.rarity+'</span>'
+            +(b.is_secret?'<span style="font-size:10px;font-family:\'DM Mono\',monospace;color:var(--purple);margin-left:6px">SECRET</span>':'')
+            +'</div>';
+        }).join('')+'</div></div>';
+    }).join('');
+  }catch(e){el.innerHTML='<div class="loading">Error loading</div>';}
+}
+
+async function addBadge(){
+  var name=document.getElementById('badge-new-name').value.trim();
+  var cat=document.getElementById('badge-new-cat').value;
+  var rarity=document.getElementById('badge-new-rarity').value;
+  var color=document.getElementById('badge-new-color').value.trim();
+  var desc=document.getElementById('badge-new-desc').value.trim();
+  var trigger=document.getElementById('badge-new-trigger').value.trim();
+  var secret=document.getElementById('badge-new-secret').checked;
+  if(!name){showBadgeAlert('Badge name is required','error');return;}
+  try{
+    await sb('badges',{method:'POST',body:JSON.stringify({name:name,category:cat,rarity:rarity,border_color:color||null,description:desc||null,trigger_description:trigger||null,is_secret:secret,is_active:true})});
+    showBadgeAlert('✓ Badge added — '+name,'success');
+    ['badge-new-name','badge-new-color','badge-new-desc','badge-new-trigger'].forEach(function(id){document.getElementById(id).value='';});
+    document.getElementById('badge-new-secret').checked=false;
+    loadBadgesAdmin();
+  }catch(e){showBadgeAlert('Error adding badge','error');}
+}
+
+function showBadgeAlert(msg,type){
+  var el=document.getElementById('badge-add-alert');
+  el.textContent=msg;el.style.display='block';
+  el.style.background=type==='success'?'rgba(42,184,166,0.15)':'rgba(224,82,82,0.15)';
+  el.style.border='1px solid '+(type==='success'?'var(--teal)':'var(--red)');
+  el.style.color=type==='success'?'var(--teal)':'var(--red)';
+  setTimeout(function(){el.style.display='none';},4000);
+}
+
+// ── REPORTS ────────────────────────────────────────────
+function initReports(){
+  var now=new Date();
+  var firstOfMonth=new Date(now.getFullYear(),now.getMonth(),1).toISOString().split('T')[0];
+  var today=now.toISOString().split('T')[0];
+  if(!document.getElementById('report-from').value)document.getElementById('report-from').value=firstOfMonth;
+  if(!document.getElementById('report-to').value)document.getElementById('report-to').value=today;
+}
+
+// ── REPORTS HELPERS ─────────────────────────────────────
+var EMAILJS_SERVICE_ID = 'service_lvbc';
+var EMAILJS_TEMPLATE_ID = 'template_lvbc_report';
+var EMAILJS_PUBLIC_KEY = 'YOUR_EMAILJS_PUBLIC_KEY';
+
+function clearReport(){
+  document.getElementById('report-from').value='';
+  document.getElementById('report-to').value='';
+  document.getElementById('report-output').innerHTML='<div class="loading">Select a report and date range above</div>';
+  document.getElementById('email-status').textContent='';
+}
+
+function reportToCSV(){
+  var tbl=document.querySelector('.report-table');
+  if(!tbl)return null;
+  var rows=tbl.querySelectorAll('tr');
+  var csv=[];
+  rows.forEach(function(r){
+    var cells=r.querySelectorAll('th,td');
+    var line=[];
+    cells.forEach(function(cell){
+      var t=cell.innerText.replace(/"/g,'""').trim();
+      line.push('"'+t+'"');
+    });
+    csv.push(line.join(','));
+  });
+  return csv.join('\n');
+}
+
+async function exportReportEmail(){
+  var email=document.getElementById('report-email-select').value;
+  if(!email){showToast('Select a staff email first',true);return;}
+  var csv=reportToCSV();
+  if(!csv){showToast('Run a report first',true);return;}
+  var from=document.getElementById('report-from').value||'—';
+  var to=document.getElementById('report-to').value||'—';
+  var statusEl=document.getElementById('email-status');
+  var btn=document.getElementById('btn-export-email');
+  btn.disabled=true;
+  statusEl.textContent='Sending...';
+  statusEl.style.color='var(--sub)';
+  try{
+    // EmailJS send
+    await emailjs.init(EMAILJS_PUBLIC_KEY);
+    await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+      to_email: email,
+      report_type: currentReport||'report',
+      date_from: from,
+      date_to: to,
+      csv_data: csv,
+      sent_at: new Date().toLocaleString('en-US',{timeZone:'America/Chicago'})
+    });
+    statusEl.textContent='✓ Sent to '+email;
+    statusEl.style.color='var(--teal)';
+    showToast('Report sent!');
+  }catch(err){
+    console.error('EmailJS error:',err);
+    // Fallback: download as CSV file
+    var blob=new Blob([csv],{type:'text/csv'});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;a.download='lvbc-report-'+currentReport+'-'+from+'-to-'+to+'.csv';
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    statusEl.textContent='EmailJS not configured — downloaded instead';
+    statusEl.style.color='var(--amber)';
+  }
+  btn.disabled=false;
+}
+
+function setReport(type,btn){
+  currentReport=type;
+  document.querySelectorAll('#admintab-reports .tap-toggle-btn').forEach(function(b){b.classList.remove('active');});
+  btn.classList.add('active');
+  document.getElementById('report-output').innerHTML='<div class="loading">Click Run Report to load data</div>';
+}
+
+async function runReport(){
+  var from=document.getElementById('report-from').value;
+  var to=document.getElementById('report-to').value;
+  if(!from||!to){showToast('Select a date range',true);return;}
+  var fromISO=from+'T00:00:00';var toISO=to+'T23:59:59';
+  var el=document.getElementById('report-output');
+  el.innerHTML='<div class="loading">Loading...</div>';
+  try{
+    if(currentReport==='checkins'){
+      var rows=await sb('check_ins?checked_in_at=gte.'+fromISO+'&checked_in_at=lte.'+toISO+'&select=checked_in_at,points_awarded,members(name,tier)&order=checked_in_at.desc');
+      var total=rows.reduce(function(a,r){return a+(r.points_awarded||0);},0);
+      el.innerHTML='<div class="report-summary">'
+        +'<div class="card"><div class="card-title">Check-Ins</div><div class="card-value teal">'+rows.length+'</div></div>'
+        +'<div class="card"><div class="card-title">Points Awarded</div><div class="card-value amber">'+total+'</div></div>'
+        +'</div>'
+        +'<table class="report-table"><thead><tr><th>Member</th><th>Tier</th><th>Date</th><th>Points</th></tr></thead><tbody>'
+        +rows.map(function(r){
+          return'<tr><td>'+(r.members&&r.members.name||'Unknown')+'</td>'
+            +'<td><span class="tier '+tierClass(r.members&&r.members.tier)+'">'+( r.members&&r.members.tier||'—')+'</span></td>'
+            +'<td style="font-family:\'DM Mono\',monospace;font-size:12px">'+new Date(r.checked_in_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+'</td>'
+            +'<td style="font-family:\'DM Mono\',monospace;color:var(--teal)">+'+r.points_awarded+'</td></tr>';
+        }).join('')+'</tbody></table>';
+    }else if(currentReport==='points'){
+      var rows=await sb('points_transactions?created_at=gte.'+fromISO+'&created_at=lte.'+toISO+'&select=created_at,transaction_type,points,notes,processed_by,members(name)&order=created_at.desc');
+      var earned=rows.filter(function(r){return r.points>0;}).reduce(function(a,r){return a+r.points;},0);
+      var spent=rows.filter(function(r){return r.points<0;}).reduce(function(a,r){return a+r.points;},0);
+      el.innerHTML='<div class="report-summary">'
+        +'<div class="card"><div class="card-title">Transactions</div><div class="card-value">'+rows.length+'</div></div>'
+        +'<div class="card"><div class="card-title">Points Earned</div><div class="card-value teal">'+earned+'</div></div>'
+        +'<div class="card"><div class="card-title">Points Spent</div><div class="card-value amber">'+Math.abs(spent)+'</div></div>'
+        +'</div>'
+        +'<table class="report-table"><thead><tr><th>Member</th><th>Type</th><th>Points</th><th>Notes</th><th>Date</th></tr></thead><tbody>'
+        +rows.map(function(r){
+          return'<tr><td>'+(r.members&&r.members.name||'Unknown')+'</td>'
+            +'<td style="font-size:11px;font-family:\'DM Mono\',monospace;color:var(--sub)">'+r.transaction_type+'</td>'
+            +'<td style="font-family:\'DM Mono\',monospace;color:'+(r.points>0?'var(--teal)':'var(--red)')+'">'+( r.points>0?'+':'')+r.points+'</td>'
+            +'<td style="font-size:12px;color:var(--sub)">'+( r.notes||'—')+'</td>'
+            +'<td style="font-size:12px;font-family:\'DM Mono\',monospace">'+new Date(r.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})+'</td></tr>';
+        }).join('')+'</tbody></table>';
+    }else if(currentReport==='topearners'){
+      var rows=await sb('points_transactions?created_at=gte.'+fromISO+'&created_at=lte.'+toISO+'&points=gt.0&select=member_id,points,members(name,tier)');
+      var totals={};var info={};
+      rows.forEach(function(r){totals[r.member_id]=(totals[r.member_id]||0)+r.points;if(!info[r.member_id]&&r.members)info[r.member_id]=r.members;});
+      var sorted=Object.keys(totals).sort(function(a,b){return totals[b]-totals[a];}).slice(0,20);
+      el.innerHTML='<table class="report-table"><thead><tr><th>Rank</th><th>Member</th><th>Tier</th><th>Points Earned</th></tr></thead><tbody>'
+        +sorted.map(function(mid,i){
+          var m=info[mid]||{};
+          return'<tr><td style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:'+(i<3?'var(--amber)':'var(--muted)')+'">'+( i+1)+'</td>'
+            +'<td style="font-weight:500">'+(m.name||'Unknown')+'</td>'
+            +'<td><span class="tier '+tierClass(m.tier)+'">'+( m.tier||'—')+'</span></td>'
+            +'<td style="font-family:\'DM Mono\',monospace;font-size:15px;color:var(--teal)">'+totals[mid]+'</td></tr>';
+        }).join('')+'</tbody></table>';
+    }else if(currentReport==='redemptions'){
+      var rows=await sb('redemptions?redeemed_at=gte.'+fromISO+'&redeemed_at=lte.'+toISO+'&select=*,members(name,tier)&order=redeemed_at.desc');
+      var total=rows.reduce(function(a,r){return a+(r.points_spent||0);},0);
+      el.innerHTML='<div class="report-summary">'
+        +'<div class="card"><div class="card-title">Redemptions</div><div class="card-value teal">'+rows.length+'</div></div>'
+        +'<div class="card"><div class="card-title">Points Redeemed</div><div class="card-value amber">'+total+'</div></div>'
+        +'</div>'
+        +'<table class="report-table"><thead><tr><th>Member</th><th>Reward</th><th>Tier</th><th>Points</th><th>Date</th></tr></thead><tbody>'
+        +rows.map(function(r){
+          return'<tr><td>'+(r.members&&r.members.name||'Unknown')+'</td>'
+            +'<td>'+r.reward_name+'</td>'
+            +'<td><span class="tier-pill">T'+r.tier+'</span></td>'
+            +'<td style="font-family:\'DM Mono\',monospace;color:var(--amber)">-'+r.points_spent+'</td>'
+            +'<td style="font-size:12px;font-family:\'DM Mono\',monospace">'+new Date(r.redeemed_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})+'</td></tr>';
+        }).join('')+'</tbody></table>';
+    }else if(currentReport==='newmembers'){
+      var rows=await sb('members?joined_at=gte.'+fromISO+'&joined_at=lte.'+toISO+'&order=joined_at.desc&select=name,email,tier,points_balance,joined_at');
+      el.innerHTML='<div class="report-summary">'
+        +'<div class="card"><div class="card-title">New Members</div><div class="card-value teal">'+rows.length+'</div></div>'
+        +'</div>'
+        +'<table class="report-table"><thead><tr><th>Name</th><th>Email</th><th>Tier</th><th>Joined</th></tr></thead><tbody>'
+        +rows.map(function(m){
+          return'<tr><td style="font-weight:500">'+m.name+'</td>'
+            +'<td style="font-size:12px;font-family:\'DM Mono\',monospace;color:var(--sub)">'+m.email+'</td>'
+            +'<td><span class="tier '+tierClass(m.tier)+'">'+m.tier+'</span></td>'
+            +'<td style="font-size:12px;font-family:\'DM Mono\',monospace">'+new Date(m.joined_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+'</td></tr>';
+        }).join('')+'</tbody></table>';
+    }
+  }catch(e){el.innerHTML='<div class="loading">Error loading report</div>';console.error(e);}
+}
+
+loadDashboard();
+loadLeaderboard();
+</script>
+</body>
+</html>
