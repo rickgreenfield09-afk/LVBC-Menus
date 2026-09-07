@@ -51,6 +51,7 @@
         <div class="sub-tabs">
           <button class="sub-tab active" onclick="setMenuTab('taplist', this)">Tap List</button>
           <button class="sub-tab" onclick="setMenuTab('wine', this)">Wine &amp; N/A</button>
+          <button class="sub-tab" onclick="setMenuTab('coffee', this)">Coffee</button>
           <button class="sub-tab" onclick="setMenuTab('gen', this)">Menu Generator</button>
         </div>
 
@@ -191,11 +192,93 @@
           </div>
         </div>
 
+        <!-- COFFEE -->
+        <div class="sub-sec" id="menutab-coffee">
+          <div class="sub-tabs" style="margin-bottom:16px;">
+            <button class="sub-tab active" id="coffee-subtab-menu" onclick="setCoffeeSubTab('menu', this)">Menu Items</button>
+            <button class="sub-tab" id="coffee-subtab-recipes" onclick="setCoffeeSubTab('recipes', this)">Recipe Reference</button>
+          </div>
+
+          <!-- COFFEE MENU ITEMS -->
+          <div class="sub-sec active" id="coffeetab-menu">
+            <div class="grid-2">
+              <div class="grid2-col" id="coffee-form-col">
+                <div class="menu-col-header">
+                  <div class="section-label" style="margin:0;" id="cf-form-label">Add Menu Item</div>
+                  <button class="btn btn-sm btn-secondary" id="cf-cancel-edit" style="visibility:hidden;" onclick="cancelCoffeeEdit()">✕ Cancel Edit</button>
+                </div>
+                <div class="card">
+                  <div class="form-row">
+                    <div class="form-group"><label class="form-label">Drink Name</label><input class="form-input" style="width:100%;" type="text" id="cf-name" placeholder="e.g. Latte"></div>
+                    <div class="form-group"><label class="form-label">Size</label><input class="form-input" style="width:100%;" type="text" id="cf-size" placeholder="e.g. 8 oz"></div>
+                  </div>
+                  <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Price</label><input class="form-input" style="width:100%;" type="text" id="cf-price" placeholder="e.g. 4.50"></div>
+                  <div id="coffee-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
+                  <div style="display:flex;gap:8px;">
+                    <button class="btn btn-primary" id="btn-save-coffee" style="flex:1;" onclick="saveCoffeeItem()">Add to Menu</button>
+                  </div>
+                </div>
+              </div>
+              <div class="grid2-col">
+                <div class="menu-col-header">
+                  <div class="section-label" style="margin:0;">Coffee Menu</div>
+                  <div style="display:flex;gap:6px;">
+                    <button class="tap-toggle-btn active" id="cff-current" onclick="setCoffeeFilter('active')">Current</button>
+                    <button class="tap-toggle-btn" id="cff-retired" onclick="setCoffeeFilter('archived')">Retired</button>
+                  </div>
+                </div>
+                <div id="coffee-list"><div class="loading">Loading...</div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- COFFEE RECIPES (staff reference — never printed) -->
+          <div class="sub-sec" id="coffeetab-recipes">
+            <div class="grid-2">
+              <div class="grid2-col" id="coffee-recipe-form-col">
+                <div class="menu-col-header">
+                  <div class="section-label" style="margin:0;" id="cr-form-label">Add Recipe</div>
+                  <button class="btn btn-sm btn-secondary" id="cr-cancel-edit" style="visibility:hidden;" onclick="cancelRecipeEdit()">✕ Cancel Edit</button>
+                </div>
+                <div class="card">
+                  <div class="form-row">
+                    <div class="form-group"><label class="form-label">Drink Name</label><input class="form-input" style="width:100%;" type="text" id="cr-name" placeholder="e.g. Latte"></div>
+                    <div class="form-group"><label class="form-label">Size (optional)</label><input class="form-input" style="width:100%;" type="text" id="cr-size" placeholder="e.g. 8 oz"></div>
+                  </div>
+                  <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Recipe</label>
+                    <textarea class="form-ta" id="cr-recipe" placeholder="e.g. 2 oz espresso + start with 4 oz milk, steam to end with 6 oz" rows="3"></textarea>
+                  </div>
+                  <div id="recipe-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
+                  <div style="display:flex;gap:8px;">
+                    <button class="btn btn-primary" id="btn-save-recipe" style="flex:1;" onclick="saveRecipe()">Add Recipe</button>
+                  </div>
+                </div>
+              </div>
+              <div class="grid2-col">
+                <div class="menu-col-header">
+                  <div class="section-label" style="margin:0;">Recipes</div>
+                </div>
+                <div id="recipe-list"><div class="loading">Loading...</div></div>
+              </div>
+            </div>
+
+            <div class="section-label" style="margin-top:24px;">Dial-In / Milk / Shot Guide</div>
+            <div class="card">
+              <div class="form-group" style="margin-bottom:12px;">
+                <textarea class="form-ta" id="cg-content" rows="14" style="font-family:'DM Mono',monospace;font-size:13px;"></textarea>
+              </div>
+              <button class="btn btn-primary btn-sm" onclick="saveCoffeeGuide()">Save Guide</button>
+              <span id="coffee-guide-status" style="font-size:12px;color:var(--muted);margin-left:10px;"></span>
+            </div>
+          </div>
+        </div>
+
         <!-- MENU GENERATOR -->
         <div class="sub-sec" id="menutab-gen">
           <div class="section-label" style="margin-top:0;">Print-Ready Menus</div>
           <div class="gen-grid">
             <div class="gen-card"><div class="gen-card-title">Tap List</div><div class="gen-card-desc">Full 8.5×11 tap menu with categories, badges, ABV, and pricing.</div><button class="btn btn-primary btn-sm" onclick="genTapList()">Generate Tap List</button></div>
+            <div class="gen-card"><div class="gen-card-title">Coffee Menu</div><div class="gen-card-desc">Full 8.5×11 coffee menu grouped by drink, with sizes, pricing, and the Make It Yours footer.</div><button class="btn btn-primary btn-sm" onclick="genCoffeeMenu()">Generate Coffee Menu</button></div>
             <div class="gen-card"><div class="gen-card-title">Tap Half-Sheet</div><div class="gen-card-desc">Two half-cards per page, landscape-rotated, for table displays.</div><button class="btn btn-primary btn-sm" onclick="genTapHalf()">Generate Half-Sheet</button></div>
             <div class="gen-card"><div class="gen-card-title">Wine &amp; N/A Menu</div><div class="gen-card-desc">Full wine menu with glass/bottle badges, N/A beer, and options grid.</div><button class="btn btn-primary btn-sm" onclick="genWineMenu()">Generate Wine Menu</button></div>
             <div class="gen-card"><div class="gen-card-title">Wine Half-Sheet</div><div class="gen-card-desc">Compact half-card wine &amp; N/A for table or bar use.</div><button class="btn btn-primary btn-sm" onclick="genWineHalf()">Generate Wine Half</button></div>

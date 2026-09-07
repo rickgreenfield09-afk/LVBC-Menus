@@ -29,17 +29,27 @@ function loadMenu() {
   const admin = isMenuAdmin();
   document.getElementById('beer-form-col').style.display = admin ? '' : 'none';
   document.getElementById('wine-form-col').style.display = admin ? '' : 'none';
+  document.getElementById('coffee-form-col').style.display = admin ? '' : 'none';
+  document.getElementById('coffee-recipe-form-col').style.display = admin ? '' : 'none';
   loadBeers();
 }
 
 function setMenuTab(tab, btn) {
-  document.querySelectorAll('#screen-menu .sub-tab').forEach((b) => b.classList.remove('active'));
-  document.querySelectorAll('#screen-menu .sub-sec').forEach((s) => s.classList.remove('active'));
+  document.querySelectorAll('#screen-menu > .sub-tabs .sub-tab').forEach((b) => b.classList.remove('active'));
+  document.querySelectorAll('#screen-menu > .sub-sec').forEach((s) => s.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('menutab-' + tab).classList.add('active');
-  if (tab === 'taplist') { cancelWineEdit(); loadBeers(); }
-  if (tab === 'wine') { cancelBeerEdit(); loadWines(); }
-  if (tab === 'gen') { cancelBeerEdit(); cancelWineEdit(); }
+  if (tab === 'taplist') { cancelWineEdit(); cancelCoffeeEdit(); cancelRecipeEdit(); loadBeers(); }
+  if (tab === 'wine') { cancelBeerEdit(); cancelCoffeeEdit(); cancelRecipeEdit(); loadWines(); }
+  if (tab === 'coffee') { cancelBeerEdit(); cancelWineEdit(); loadCoffeeMenu(); loadRecipes(); loadCoffeeGuide(); }
+  if (tab === 'gen') { cancelBeerEdit(); cancelWineEdit(); cancelCoffeeEdit(); cancelRecipeEdit(); }
+}
+
+function setCoffeeSubTab(tab, btn) {
+  document.querySelectorAll('#menutab-coffee > .sub-tabs .sub-tab').forEach((b) => b.classList.remove('active'));
+  document.querySelectorAll('#menutab-coffee > .sub-sec').forEach((s) => s.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('coffeetab-' + tab).classList.add('active');
 }
 
 // ── BEERS: TAP LIST ────────────────────────────────────────
@@ -473,6 +483,297 @@ async function restoreWine(id, name) {
   await loadWines();
 }
 
+// ── COFFEE MENU (customer-facing) ───────────────────────────
+let coffeeItems = [], selCoffeeItem = null, coffeeEditMode = false, coffeeFilter = 'active';
+
+async function loadCoffeeMenu() {
+  const el = document.getElementById('coffee-list');
+  el.innerHTML = '<div class="loading">Loading...</div>';
+  const { data, error } = await window.supabase.from('coffee_menu').select('*').order('sort_order', { ascending: true });
+  if (error) { el.innerHTML = '<div class="loading">Error: ' + escHtml(error.message) + '</div>'; return; }
+  coffeeItems = data || [];
+  renderCoffeeMenu();
+}
+
+function setCoffeeFilter(status) {
+  coffeeFilter = status;
+  document.getElementById('cff-current').classList.toggle('active', status === 'active');
+  document.getElementById('cff-retired').classList.toggle('active', status === 'archived');
+  selCoffeeItem = null;
+  renderCoffeeMenu();
+}
+
+function renderCoffeeMenu() {
+  const el = document.getElementById('coffee-list');
+  const admin = isMenuAdmin();
+  const list = coffeeItems.filter((c) => (coffeeFilter === 'archived' ? c.status === 'archived' : c.status === 'active'));
+  if (!list.length) {
+    el.innerHTML = '<div class="loading">' + (coffeeFilter === 'archived' ? 'No archived items' : 'No active items') + '</div>';
+    return;
+  }
+  const groups = {}, order = [];
+  list.forEach((c) => { if (!groups[c.drink_name]) { groups[c.drink_name] = []; order.push(c.drink_name); } groups[c.drink_name].push(c); });
+  let rows = '';
+  order.forEach((name) => {
+    rows += '<tr><td colspan="3" style="background:var(--raised);font-size:10px;font-family:\'DM Mono\',monospace;color:var(--muted);letter-spacing:2px;text-transform:uppercase;padding:6px 16px">' + escHtml(name) + '</td></tr>';
+    groups[name].forEach((c) => {
+      const sel = c.id === selCoffeeItem;
+      rows += '<tr style="cursor:' + (admin ? 'pointer' : 'default') + (sel ? ';background:rgba(42,184,166,0.06)' : '') + '"' + (admin ? ' onclick="pickCoffeeItem(\'' + c.id + '\')"' : '') + '>'
+        + '<td style="font-weight:500' + (sel ? ';color:var(--teal)' : '') + '">' + escHtml(c.drink_name) + '</td>'
+        + '<td style="font-size:12px;color:var(--sub)">' + escHtml(c.size_label) + '</td>'
+        + '<td style="font-family:\'DM Mono\',monospace;font-size:12px">$' + Number(c.price).toFixed(2) + '</td></tr>';
+    });
+  });
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Drink</th><th>Size</th><th>Price</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+function pickCoffeeItem(id) {
+  if (!isMenuAdmin()) return;
+  selCoffeeItem = id;
+  renderCoffeeMenu();
+  const c = coffeeItems.find((x) => x.id === id);
+  if (c) loadCoffeeItemIntoForm(c);
+}
+
+function loadCoffeeItemIntoForm(c) {
+  coffeeEditMode = true;
+  selCoffeeItem = c.id;
+  document.getElementById('cf-form-label').textContent = 'Edit Menu Item';
+  document.getElementById('btn-save-coffee').textContent = 'Save Changes';
+  document.getElementById('cf-cancel-edit').style.visibility = 'visible';
+  document.getElementById('cf-name').value = c.drink_name || '';
+  document.getElementById('cf-size').value = c.size_label || '';
+  document.getElementById('cf-price').value = c.price != null ? Number(c.price).toFixed(2) : '';
+
+  const old = document.getElementById('cf-archive-btn');
+  if (old) old.remove();
+  const abtn = document.createElement('button');
+  abtn.id = 'cf-archive-btn';
+  if (c.status !== 'archived') {
+    abtn.className = 'btn btn-sm btn-danger';
+    abtn.textContent = 'Retire Item';
+    abtn.addEventListener('click', () => retireCoffeeItem(c.id, c.drink_name));
+  } else {
+    abtn.className = 'btn btn-sm btn-success';
+    abtn.textContent = 'Restore Item';
+    abtn.addEventListener('click', () => restoreCoffeeItem(c.id, c.drink_name));
+  }
+  document.getElementById('btn-save-coffee').parentNode.insertBefore(abtn, document.getElementById('btn-save-coffee'));
+}
+
+function cancelCoffeeEdit() {
+  coffeeEditMode = false;
+  selCoffeeItem = null;
+  const label = document.getElementById('cf-form-label');
+  if (!label) return;
+  label.textContent = 'Add Menu Item';
+  document.getElementById('btn-save-coffee').textContent = 'Add to Menu';
+  document.getElementById('cf-cancel-edit').style.visibility = 'hidden';
+  ['cf-name', 'cf-size', 'cf-price'].forEach((id) => { document.getElementById(id).value = ''; });
+  const old = document.getElementById('cf-archive-btn');
+  if (old) old.remove();
+  if (coffeeItems.length) renderCoffeeMenu();
+}
+
+async function saveCoffeeItem() {
+  const name = document.getElementById('cf-name').value.trim();
+  const size = document.getElementById('cf-size').value.trim();
+  if (!name) { coffeeAlert('Drink name required', true); return; }
+  if (!size) { coffeeAlert('Size required', true); return; }
+  const payload = {
+    drink_name: name,
+    size_label: size,
+    price: parseCurrency('cf-price'),
+  };
+  try {
+    if (coffeeEditMode && selCoffeeItem) {
+      const { error } = await window.supabase.from('coffee_menu').update(payload).eq('id', selCoffeeItem);
+      if (error) throw error;
+      toast(name + ' updated');
+    } else {
+      payload.status = 'active';
+      const { error } = await window.supabase.from('coffee_menu').insert(payload);
+      if (error) throw error;
+      toast(name + ' added');
+    }
+    cancelCoffeeEdit();
+    await loadCoffeeMenu();
+  } catch (e) {
+    coffeeAlert('Error: ' + e.message, true);
+  }
+}
+
+function coffeeAlert(msg, isError) {
+  const el = document.getElementById('coffee-alert');
+  el.textContent = msg;
+  el.style.display = 'block';
+  el.style.background = isError ? 'rgba(224,82,82,0.15)' : 'rgba(42,184,166,0.15)';
+  el.style.border = '1px solid ' + (isError ? 'var(--red)' : 'var(--teal)');
+  el.style.color = isError ? 'var(--red)' : 'var(--teal)';
+  setTimeout(() => { el.style.display = 'none'; }, 4000);
+}
+
+async function retireCoffeeItem(id, name) {
+  if (!confirm('Retire ' + name + '?')) return;
+  const { error } = await window.supabase.from('coffee_menu').update({ status: 'archived' }).eq('id', id);
+  if (error) { toast('Error', true); return; }
+  toast(name + ' retired');
+  cancelCoffeeEdit();
+  setCoffeeFilter('active');
+  await loadCoffeeMenu();
+}
+async function restoreCoffeeItem(id, name) {
+  const { error } = await window.supabase.from('coffee_menu').update({ status: 'active' }).eq('id', id);
+  if (error) { toast('Error', true); return; }
+  toast(name + ' restored');
+  cancelCoffeeEdit();
+  setCoffeeFilter('active');
+  await loadCoffeeMenu();
+}
+
+// ── COFFEE RECIPES (staff reference — never printed) ────────
+let recipes = [], selRecipe = null, recipeEditMode = false;
+
+async function loadRecipes() {
+  const el = document.getElementById('recipe-list');
+  el.innerHTML = '<div class="loading">Loading...</div>';
+  const { data, error } = await window.supabase.from('coffee_recipes').select('*').order('sort_order', { ascending: true });
+  if (error) { el.innerHTML = '<div class="loading">Error: ' + escHtml(error.message) + '</div>'; return; }
+  recipes = data || [];
+  renderRecipes();
+}
+
+function renderRecipes() {
+  const el = document.getElementById('recipe-list');
+  const admin = isMenuAdmin();
+  if (!recipes.length) { el.innerHTML = '<div class="loading">No recipes yet</div>'; return; }
+  const rows = recipes.map((r) => {
+    const sel = r.id === selRecipe;
+    return '<tr style="cursor:' + (admin ? 'pointer' : 'default') + (sel ? ';background:rgba(42,184,166,0.06)' : '') + '"' + (admin ? ' onclick="pickRecipe(\'' + r.id + '\')"' : '') + '>'
+      + '<td style="font-weight:500' + (sel ? ';color:var(--teal)' : '') + '">' + escHtml(r.drink_name) + (r.size_label ? ' <span style="color:var(--sub);font-weight:400">(' + escHtml(r.size_label) + ')</span>' : '') + '</td>'
+      + '<td style="font-size:12px;color:var(--sub)">' + escHtml(r.recipe) + '</td></tr>';
+  }).join('');
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Drink</th><th>Recipe</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+function pickRecipe(id) {
+  if (!isMenuAdmin()) return;
+  selRecipe = id;
+  renderRecipes();
+  const r = recipes.find((x) => x.id === id);
+  if (r) loadRecipeIntoForm(r);
+}
+
+function loadRecipeIntoForm(r) {
+  recipeEditMode = true;
+  selRecipe = r.id;
+  document.getElementById('cr-form-label').textContent = 'Edit Recipe';
+  document.getElementById('btn-save-recipe').textContent = 'Save Changes';
+  document.getElementById('cr-cancel-edit').style.visibility = 'visible';
+  document.getElementById('cr-name').value = r.drink_name || '';
+  document.getElementById('cr-size').value = r.size_label || '';
+  document.getElementById('cr-recipe').value = r.recipe || '';
+
+  const old = document.getElementById('cr-delete-btn');
+  if (old) old.remove();
+  const dbtn = document.createElement('button');
+  dbtn.id = 'cr-delete-btn';
+  dbtn.className = 'btn btn-sm btn-danger';
+  dbtn.textContent = 'Delete Recipe';
+  dbtn.addEventListener('click', () => deleteRecipe(r.id, r.drink_name));
+  document.getElementById('btn-save-recipe').parentNode.insertBefore(dbtn, document.getElementById('btn-save-recipe'));
+}
+
+function cancelRecipeEdit() {
+  recipeEditMode = false;
+  selRecipe = null;
+  const label = document.getElementById('cr-form-label');
+  if (!label) return;
+  label.textContent = 'Add Recipe';
+  document.getElementById('btn-save-recipe').textContent = 'Add Recipe';
+  document.getElementById('cr-cancel-edit').style.visibility = 'hidden';
+  ['cr-name', 'cr-size', 'cr-recipe'].forEach((id) => { document.getElementById(id).value = ''; });
+  const old = document.getElementById('cr-delete-btn');
+  if (old) old.remove();
+  if (recipes.length) renderRecipes();
+}
+
+async function saveRecipe() {
+  const name = document.getElementById('cr-name').value.trim();
+  const recipeText = document.getElementById('cr-recipe').value.trim();
+  if (!name) { recipeAlert('Drink name required', true); return; }
+  if (!recipeText) { recipeAlert('Recipe required', true); return; }
+  const payload = {
+    drink_name: name,
+    size_label: document.getElementById('cr-size').value.trim() || null,
+    recipe: recipeText,
+  };
+  try {
+    if (recipeEditMode && selRecipe) {
+      const { error } = await window.supabase.from('coffee_recipes').update(payload).eq('id', selRecipe);
+      if (error) throw error;
+      toast(name + ' updated');
+    } else {
+      const { error } = await window.supabase.from('coffee_recipes').insert(payload);
+      if (error) throw error;
+      toast(name + ' added');
+    }
+    cancelRecipeEdit();
+    await loadRecipes();
+  } catch (e) {
+    recipeAlert('Error: ' + e.message, true);
+  }
+}
+
+function recipeAlert(msg, isError) {
+  const el = document.getElementById('recipe-alert');
+  el.textContent = msg;
+  el.style.display = 'block';
+  el.style.background = isError ? 'rgba(224,82,82,0.15)' : 'rgba(42,184,166,0.15)';
+  el.style.border = '1px solid ' + (isError ? 'var(--red)' : 'var(--teal)');
+  el.style.color = isError ? 'var(--red)' : 'var(--teal)';
+  setTimeout(() => { el.style.display = 'none'; }, 4000);
+}
+
+async function deleteRecipe(id, name) {
+  if (!confirm('Delete the recipe for ' + name + '? This cannot be undone.')) return;
+  const { error } = await window.supabase.from('coffee_recipes').delete().eq('id', id);
+  if (error) { toast('Error', true); return; }
+  toast('Recipe deleted');
+  cancelRecipeEdit();
+  await loadRecipes();
+}
+
+// ── COFFEE GUIDE (staff reference — single free-text document) ──
+let coffeeGuideId = null;
+
+async function loadCoffeeGuide() {
+  const { data } = await window.supabase.from('coffee_guide').select('*').limit(1).maybeSingle();
+  if (data) {
+    coffeeGuideId = data.id;
+    document.getElementById('cg-content').value = data.content || '';
+  }
+}
+
+async function saveCoffeeGuide() {
+  const content = document.getElementById('cg-content').value;
+  const status = document.getElementById('coffee-guide-status');
+  try {
+    if (coffeeGuideId) {
+      const { error } = await window.supabase.from('coffee_guide').update({ content, updated_at: new Date().toISOString() }).eq('id', coffeeGuideId);
+      if (error) throw error;
+    } else {
+      const { data, error } = await window.supabase.from('coffee_guide').insert({ content }).select().single();
+      if (error) throw error;
+      coffeeGuideId = data.id;
+    }
+    status.textContent = 'Saved';
+    setTimeout(() => { status.textContent = ''; }, 3000);
+  } catch (e) {
+    status.textContent = 'Error: ' + e.message;
+  }
+}
+
 // ── MENU GENERATOR (print-ready HTML, opened in a new tab) ──
 function fmtP(n) { return n ? '$' + Number(n).toFixed(2).replace(/\.00$/, '') : ''; }
 function genStatus(msg) { const el = document.getElementById('gen-status'); if (el) el.textContent = msg; }
@@ -537,6 +838,31 @@ async function genTapList() {
     catOrder.forEach((cat) => { body += '<div class="category-label">' + escHtml(cat) + '</div>'; cats[cat].forEach((b) => { body += tapFullRow(b); }); });
     openHtml(tapFullPage(body));
     genStatus('Tap list generated — use Ctrl+P / Cmd+P to print.');
+  } catch (e) { genStatus('Error: ' + e.message); }
+}
+
+const COFFEE_EXTRA_CSS = '.coffee-drink{margin-bottom:8px;}.coffee-drink-name{font-family:\'Oswald\',sans-serif;font-size:16px;font-weight:700;letter-spacing:0.03em;color:#1a1410;text-transform:uppercase;border-bottom:1.5px solid rgba(139,58,26,0.5);padding-bottom:2px;margin-bottom:3px;}.coffee-size-row{display:flex;justify-content:space-between;padding:2px 0;font-family:\'Inter\',sans-serif;font-size:13px;}.coffee-size-label{color:#3a3530;}.coffee-size-price{font-family:\'Oswald\',sans-serif;font-weight:700;color:#1a1410;}.coffee-footer{margin-top:auto;padding-top:12px;border-top:1px solid rgba(26,20,16,0.15);text-align:center;font-family:\'Inter\',sans-serif;}.coffee-footer-title{font-family:\'Oswald\',sans-serif;font-size:15px;font-weight:700;letter-spacing:0.1em;color:#8b3a1a;text-transform:uppercase;margin-bottom:4px;}.coffee-footer-line{font-size:12px;color:#3a3530;margin-bottom:2px;}';
+function coffeeDrinkBlock(name, items) {
+  const rows = items.map((c) => '<div class="coffee-size-row"><span class="coffee-size-label">' + escHtml(c.size_label) + '</span><span class="coffee-size-price">' + fmtP(c.price) + '</span></div>').join('');
+  return '<div class="coffee-drink"><div class="coffee-drink-name">' + escHtml(name) + '</div>' + rows + '</div>';
+}
+async function genCoffeeMenu() {
+  genStatus('Fetching coffee menu...');
+  try {
+    const { data, error } = await window.supabase.from('coffee_menu').select('*').eq('status', 'active').order('sort_order', { ascending: true });
+    if (error) throw error;
+    const rows = data || [];
+    const groups = {}, order = [];
+    rows.forEach((c) => { if (!groups[c.drink_name]) { groups[c.drink_name] = []; order.push(c.drink_name); } groups[c.drink_name].push(c); });
+    let body = order.map((name) => coffeeDrinkBlock(name, groups[name])).join('');
+    body += '<div class="coffee-footer"><div class="coffee-footer-title">Make It Yours</div>'
+      + '<div class="coffee-footer-line">Vanilla · Caramel · Lavender · Raspberry · Hazelnut — flavor +$0.75</div>'
+      + '<div class="coffee-footer-line">Extra Shot +$1 · Oat Milk +$0.75</div>'
+      + '<div class="coffee-footer-line" style="font-style:italic;margin-top:6px;">Brewed for Lago Vista</div></div>';
+    const html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' + FONT_LINK + '<style>' + TAP_CSS + COFFEE_EXTRA_CSS + '</style></head><body>'
+      + '<div class="page"><div class="header">' + '<img class="header-logo" src="' + LOGO_URL + '">' + '<div class="header-title">Coffee Menu</div>' + '<img class="header-logo" src="' + LOGO_URL + '">' + '</div><div class="menu-body">' + body + '</div></div></body></html>';
+    openHtml(html);
+    genStatus('Coffee menu generated — use Ctrl+P / Cmd+P to print.');
   } catch (e) { genStatus('Error: ' + e.message); }
 }
 
