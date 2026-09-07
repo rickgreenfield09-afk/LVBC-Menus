@@ -544,6 +544,7 @@ function loadCoffeeItemIntoForm(c) {
   document.getElementById('cf-name').value = c.drink_name || '';
   document.getElementById('cf-size').value = c.size_label || '';
   document.getElementById('cf-price').value = c.price != null ? Number(c.price).toFixed(2) : '';
+  document.getElementById('cf-desc').value = c.description || '';
 
   const old = document.getElementById('cf-archive-btn');
   if (old) old.remove();
@@ -569,7 +570,7 @@ function cancelCoffeeEdit() {
   label.textContent = 'Add Menu Item';
   document.getElementById('btn-save-coffee').textContent = 'Add to Menu';
   document.getElementById('cf-cancel-edit').style.visibility = 'hidden';
-  ['cf-name', 'cf-size', 'cf-price'].forEach((id) => { document.getElementById(id).value = ''; });
+  ['cf-name', 'cf-size', 'cf-price', 'cf-desc'].forEach((id) => { document.getElementById(id).value = ''; });
   const old = document.getElementById('cf-archive-btn');
   if (old) old.remove();
   if (coffeeItems.length) renderCoffeeMenu();
@@ -584,6 +585,7 @@ async function saveCoffeeItem() {
     drink_name: name,
     size_label: size,
     price: parseCurrency('cf-price'),
+    description: document.getElementById('cf-desc').value.trim() || null,
   };
   try {
     if (coffeeEditMode && selCoffeeItem) {
@@ -841,10 +843,12 @@ async function genTapList() {
   } catch (e) { genStatus('Error: ' + e.message); }
 }
 
-const COFFEE_EXTRA_CSS = '.coffee-drink{margin-bottom:8px;}.coffee-drink-name{font-family:\'Oswald\',sans-serif;font-size:16px;font-weight:700;letter-spacing:0.03em;color:#1a1410;text-transform:uppercase;border-bottom:1.5px solid rgba(139,58,26,0.5);padding-bottom:2px;margin-bottom:3px;}.coffee-size-row{display:flex;justify-content:space-between;padding:2px 0;font-family:\'Inter\',sans-serif;font-size:13px;}.coffee-size-label{color:#3a3530;}.coffee-size-price{font-family:\'Oswald\',sans-serif;font-weight:700;color:#1a1410;}.coffee-footer{margin-top:auto;padding-top:12px;border-top:1px solid rgba(26,20,16,0.15);text-align:center;font-family:\'Inter\',sans-serif;}.coffee-footer-title{font-family:\'Oswald\',sans-serif;font-size:15px;font-weight:700;letter-spacing:0.1em;color:#8b3a1a;text-transform:uppercase;margin-bottom:4px;}.coffee-footer-line{font-size:12px;color:#3a3530;margin-bottom:2px;}';
+const COFFEE_EXTRA_CSS = '.header-stack{flex:1;display:flex;flex-direction:column;align-items:center;}.header-stack .header-title{flex:none;}.header-subtitle{font-family:\'Inter\',sans-serif;font-size:12px;font-weight:600;letter-spacing:0.2em;color:#8b3a1a;text-transform:uppercase;margin-top:4px;}.coffee-cols{display:grid;grid-template-columns:1fr 1fr;gap:0 32px;flex:1;}.coffee-drink{margin-bottom:10px;}.coffee-drink-name{font-family:\'Oswald\',sans-serif;font-size:16px;font-weight:700;letter-spacing:0.03em;color:#1a1410;text-transform:uppercase;border-bottom:1.5px solid rgba(139,58,26,0.5);padding-bottom:2px;margin-bottom:3px;}.coffee-desc{font-family:\'Inter\',sans-serif;font-size:11px;font-style:italic;color:#5a544e;margin-bottom:4px;line-height:1.3;}.coffee-size-row{display:flex;justify-content:space-between;padding:2px 0;font-family:\'Inter\',sans-serif;font-size:13px;}.coffee-size-label{color:#3a3530;}.coffee-size-price{font-family:\'Oswald\',sans-serif;font-weight:700;color:#1a1410;}.coffee-footer{grid-column:1/-1;margin-top:14px;padding-top:12px;border-top:1px solid rgba(26,20,16,0.15);text-align:center;font-family:\'Inter\',sans-serif;}.coffee-footer-title{font-family:\'Oswald\',sans-serif;font-size:15px;font-weight:700;letter-spacing:0.1em;color:#8b3a1a;text-transform:uppercase;margin-bottom:4px;}.coffee-footer-line{font-size:12px;color:#3a3530;margin-bottom:2px;}';
+function fmtPFull(n) { return n != null ? '$' + Number(n).toFixed(2) : ''; }
 function coffeeDrinkBlock(name, items) {
-  const rows = items.map((c) => '<div class="coffee-size-row"><span class="coffee-size-label">' + escHtml(c.size_label) + '</span><span class="coffee-size-price">' + fmtP(c.price) + '</span></div>').join('');
-  return '<div class="coffee-drink"><div class="coffee-drink-name">' + escHtml(name) + '</div>' + rows + '</div>';
+  const desc = (items.find((c) => c.description) || {}).description;
+  const rows = items.map((c) => '<div class="coffee-size-row"><span class="coffee-size-label">' + escHtml(c.size_label) + '</span><span class="coffee-size-price">' + fmtPFull(c.price) + '</span></div>').join('');
+  return '<div class="coffee-drink"><div class="coffee-drink-name">' + escHtml(name) + '</div>' + (desc ? '<div class="coffee-desc">' + escHtml(desc) + '</div>' : '') + rows + '</div>';
 }
 async function genCoffeeMenu() {
   genStatus('Fetching coffee menu...');
@@ -854,13 +858,18 @@ async function genCoffeeMenu() {
     const rows = data || [];
     const groups = {}, order = [];
     rows.forEach((c) => { if (!groups[c.drink_name]) { groups[c.drink_name] = []; order.push(c.drink_name); } groups[c.drink_name].push(c); });
-    let body = order.map((name) => coffeeDrinkBlock(name, groups[name])).join('');
-    body += '<div class="coffee-footer"><div class="coffee-footer-title">Make It Yours</div>'
+    const mid = Math.ceil(order.length / 2);
+    const leftCol = order.slice(0, mid).map((name) => coffeeDrinkBlock(name, groups[name])).join('');
+    const rightCol = order.slice(mid).map((name) => coffeeDrinkBlock(name, groups[name])).join('');
+    const footer = '<div class="coffee-footer"><div class="coffee-footer-title">Make It Yours</div>'
       + '<div class="coffee-footer-line">Vanilla · Caramel · Lavender · Raspberry · Hazelnut — flavor +$0.75</div>'
-      + '<div class="coffee-footer-line">Extra Shot +$1 · Oat Milk +$0.75</div>'
+      + '<div class="coffee-footer-line">Extra Shot +$1.00 · Oat Milk +$0.75</div>'
       + '<div class="coffee-footer-line" style="font-style:italic;margin-top:6px;">Brewed for Lago Vista</div></div>';
+    const body = '<div class="coffee-cols"><div>' + leftCol + '</div><div>' + rightCol + '</div>' + footer + '</div>';
     const html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' + FONT_LINK + '<style>' + TAP_CSS + COFFEE_EXTRA_CSS + '</style></head><body>'
-      + '<div class="page"><div class="header">' + '<img class="header-logo" src="' + LOGO_URL + '">' + '<div class="header-title">Coffee Menu</div>' + '<img class="header-logo" src="' + LOGO_URL + '">' + '</div><div class="menu-body">' + body + '</div></div></body></html>';
+      + '<div class="page"><div class="header">' + '<img class="header-logo" src="' + LOGO_URL + '">'
+      + '<div class="header-stack"><div class="header-title">Coffee Menu</div><div class="header-subtitle">Coffee · Good Times · Caffeine</div></div>'
+      + '<img class="header-logo" src="' + LOGO_URL + '">' + '</div><div class="menu-body">' + body + '</div></div></body></html>';
     openHtml(html);
     genStatus('Coffee menu generated — use Ctrl+P / Cmd+P to print.');
   } catch (e) { genStatus('Error: ' + e.message); }

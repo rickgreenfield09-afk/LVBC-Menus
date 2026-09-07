@@ -93,6 +93,7 @@ create table coffee_menu (
   drink_name text not null,
   size_label text not null,
   price numeric(6,2) not null,
+  description text,          -- one short line per drink; repeated across its size rows
   sort_order int not null default 0,
   status text not null default 'active' check (status in ('active','archived')),
   created_at timestamptz not null default now()
@@ -380,30 +381,30 @@ insert into wine_menu (id, name, winery, region, type, category, display_group, 
   ('fb85d5e1-eb94-45ff-acee-f8870464ea00','Juice Box','Apple & Eve',null,null,'na','N/A Options','Apple, White Grape Raspberry, Fruit Punch',null,1,'{}','active',19);
 
 -- Coffee menu — transcribed from the printed menu sheet.
-insert into coffee_menu (drink_name, size_label, price, sort_order) values
-  ('Drip Coffee', '8 oz', 3.00, 1),
-  ('Drip Coffee', '12 oz', 3.50, 2),
-  ('Espresso', 'Single', 2.50, 3),
-  ('Espresso', 'Double', 3.50, 4),
-  ('Americano', '8 oz', 4.00, 5),
-  ('Americano', '12 oz', 4.50, 6),
-  ('Americano', 'Iced 16 oz', 5.00, 7),
-  ('Latte', '8 oz', 4.50, 8),
-  ('Latte', '12 oz', 5.00, 9),
-  ('Latte', 'Iced 16 oz', 5.50, 10),
-  ('Cappuccino', '8 oz', 4.50, 11),
-  ('Vanilla Latte', '8 oz', 5.50, 12),
-  ('Vanilla Latte', '12 oz', 6.00, 13),
-  ('Vanilla Latte', 'Iced 16 oz', 6.50, 14),
-  ('Caramel Latte', '8 oz', 5.50, 15),
-  ('Caramel Latte', '12 oz', 6.00, 16),
-  ('Caramel Latte', 'Iced 16 oz', 6.50, 17),
-  ('Mocha', '8 oz', 5.50, 18),
-  ('Mocha', '12 oz', 6.00, 19),
-  ('Mocha', 'Iced 16 oz', 6.50, 20),
-  ('White Mocha', '8 oz', 5.50, 21),
-  ('White Mocha', '12 oz', 6.00, 22),
-  ('White Mocha', 'Iced 16 oz', 6.50, 23);
+insert into coffee_menu (drink_name, size_label, price, sort_order, description) values
+  ('Drip Coffee', '8 oz', 3.00, 1, 'Classic brewed coffee, hot off the pot.'),
+  ('Drip Coffee', '12 oz', 3.50, 2, 'Classic brewed coffee, hot off the pot.'),
+  ('Espresso', 'Single', 2.50, 3, 'A concentrated shot of rich, bold coffee.'),
+  ('Espresso', 'Double', 3.50, 4, 'A concentrated shot of rich, bold coffee.'),
+  ('Americano', '8 oz', 4.00, 5, 'Espresso diluted with hot water for a smooth, lighter cup.'),
+  ('Americano', '12 oz', 4.50, 6, 'Espresso diluted with hot water for a smooth, lighter cup.'),
+  ('Americano', 'Iced 16 oz', 5.00, 7, 'Espresso diluted with hot water for a smooth, lighter cup.'),
+  ('Latte', '8 oz', 4.50, 8, 'Espresso with steamed milk and a light layer of foam.'),
+  ('Latte', '12 oz', 5.00, 9, 'Espresso with steamed milk and a light layer of foam.'),
+  ('Latte', 'Iced 16 oz', 5.50, 10, 'Espresso with steamed milk and a light layer of foam.'),
+  ('Cappuccino', '8 oz', 4.50, 11, 'Espresso with steamed milk and a thick, velvety foam.'),
+  ('Vanilla Latte', '8 oz', 5.50, 12, 'Our latte sweetened with real vanilla syrup.'),
+  ('Vanilla Latte', '12 oz', 6.00, 13, 'Our latte sweetened with real vanilla syrup.'),
+  ('Vanilla Latte', 'Iced 16 oz', 6.50, 14, 'Our latte sweetened with real vanilla syrup.'),
+  ('Caramel Latte', '8 oz', 5.50, 15, 'Our latte sweetened with rich caramel syrup.'),
+  ('Caramel Latte', '12 oz', 6.00, 16, 'Our latte sweetened with rich caramel syrup.'),
+  ('Caramel Latte', 'Iced 16 oz', 6.50, 17, 'Our latte sweetened with rich caramel syrup.'),
+  ('Mocha', '8 oz', 5.50, 18, 'Espresso, steamed milk, and chocolate — a coffeehouse classic.'),
+  ('Mocha', '12 oz', 6.00, 19, 'Espresso, steamed milk, and chocolate — a coffeehouse classic.'),
+  ('Mocha', 'Iced 16 oz', 6.50, 20, 'Espresso, steamed milk, and chocolate — a coffeehouse classic.'),
+  ('White Mocha', '8 oz', 5.50, 21, 'Espresso, steamed milk, and white chocolate for a sweeter twist.'),
+  ('White Mocha', '12 oz', 6.00, 22, 'Espresso, steamed milk, and white chocolate for a sweeter twist.'),
+  ('White Mocha', 'Iced 16 oz', 6.50, 23, 'Espresso, steamed milk, and white chocolate for a sweeter twist.');
 
 -- Coffee recipes — staff reference only, transcribed from the training
 -- card. Some handwritten corrections on the source card were hard to
