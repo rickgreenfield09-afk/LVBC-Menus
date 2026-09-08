@@ -997,6 +997,27 @@ async function genWineHalf() {
   } catch (e) { genStatus('Error: ' + e.message); }
 }
 
+const COFFEE_HALF_EXTRA = '.coffee-half-entry{display:flex;flex-direction:column;flex-shrink:0;border-bottom:1px solid rgba(160,130,90,0.25);padding:3px 0;}.coffee-half-row{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}.coffee-half-name{font-family:\'Oswald\',sans-serif;font-size:12.5px;font-weight:700;color:#1a1410;text-transform:uppercase;letter-spacing:0.03em;line-height:1.3;flex-shrink:0;}.coffee-half-sizes{display:flex;flex-direction:column;align-items:flex-end;flex-shrink:0;}.coffee-half-size-line{display:flex;gap:6px;font-family:\'Inter\',sans-serif;font-size:10.5px;color:#5a544e;line-height:1.4;white-space:nowrap;}.coffee-half-size-price{font-family:\'Oswald\',sans-serif;font-weight:700;color:#1a1410;min-width:34px;text-align:right;}.coffee-half-desc{font-family:\'Inter\',sans-serif;font-size:9.5px;font-style:italic;color:#7a6e66;line-height:1.3;margin-top:2px;}';
+function coffeeHalfEntry(name, items) {
+  const desc = (items.find((c) => c.description) || {}).description;
+  const sizes = items.map((c) => '<div class="coffee-half-size-line"><span>' + escHtml(c.size_label) + '</span><span class="coffee-half-size-price">' + fmtPFull(c.price) + '</span></div>').join('');
+  return '<div class="coffee-half-entry"><div class="coffee-half-row"><div class="coffee-half-name">' + escHtml(name) + '</div><div class="coffee-half-sizes">' + sizes + '</div></div>'
+    + (desc ? '<div class="coffee-half-desc">' + escHtml(desc) + '</div>' : '') + '</div>';
+}
+async function genCoffeeHalf() {
+  genStatus('Fetching coffee menu...');
+  try {
+    const { data, error } = await window.supabase.from('coffee_menu').select('*').eq('status', 'active').order('sort_order', { ascending: true });
+    if (error) throw error;
+    const rows = data || [];
+    const groups = {}, order = [];
+    rows.forEach((c) => { if (!groups[c.drink_name]) { groups[c.drink_name] = []; order.push(c.drink_name); } groups[c.drink_name].push(c); });
+    const inner = order.map((name) => coffeeHalfEntry(name, groups[name])).join('');
+    openHtml(halfPage('Coffee Menu', inner, COFFEE_HALF_EXTRA));
+    genStatus('Coffee half-sheet generated.');
+  } catch (e) { genStatus('Error: ' + e.message); }
+}
+
 const LABEL_CSS = '@import url(\'https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:ital,wght@0,300;0,400;0,700;1,300;1,400&display=swap\');@media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}@page{size:8.5in 11in portrait;margin:0.25in;}body{margin:0;background:white;}}*{box-sizing:border-box;margin:0;padding:0;}body{background:#eee;font-family:\'Inter\',sans-serif;padding:0.25in;}.grid{display:flex;flex-wrap:wrap;gap:0.12in;}.card{width:3.94in;height:1.57in;background:#ffffff;border:1px solid #c8b89a;border-radius:3px;padding:5px 8px;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;page-break-inside:avoid;}.card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:4px;}.card-name{font-family:\'Oswald\',sans-serif;font-size:20px;font-weight:700;color:#1a1410;text-transform:uppercase;letter-spacing:0.04em;line-height:1.1;}.card-badge-wrap{display:flex;flex-direction:column;gap:2px;align-items:flex-end;flex-shrink:0;padding-top:2px;}.lbl-badge{font-family:\'Oswald\',sans-serif;font-size:8px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;border-radius:2px;white-space:nowrap;display:inline-flex;align-items:center;height:14px;padding:0 5px;}.badge-new{background:#E8724A;color:#fff;}.badge-back{background:#4A8C52;color:#fff;}.badge-leaving{background:#94bde9;color:#1a3a5c;}.badge-lactose{background:#c0392b;color:#fff;}.card-style{font-family:\'Inter\',sans-serif;font-size:12px;font-style:italic;color:#5a544e;font-weight:300;margin-top:1px;line-height:1.2;}.card-desc{font-family:\'Inter\',sans-serif;font-size:11px;font-style:italic;color:#4a4440;line-height:1.35;flex:1;margin-top:3px;overflow:hidden;font-weight:400;}.card-bottom{display:flex;align-items:baseline;justify-content:space-between;border-top:1.5px solid rgba(139,58,26,0.35);padding-top:4px;margin-top:3px;}.card-abv{font-size:12px;color:#7a6e66;font-weight:600;white-space:nowrap;flex-shrink:0;}.card-price-main{font-family:\'Oswald\',sans-serif;font-size:18px;font-weight:700;color:#1a1410;white-space:nowrap;}.card-price-sub{font-size:13px;color:#5a544e;white-space:nowrap;}';
 const LABEL_BADGE_MAP = { new_release: { cls: 'badge-new', label: 'New!!' }, back_again: { cls: 'badge-back', label: 'Back Again' }, leaving_soon: { cls: 'badge-leaving', label: 'Leaving Soon' }, lactose: { cls: 'badge-lactose', label: 'Includes Lactose' } };
 function buildLabelHtml(beerList) {
