@@ -330,6 +330,11 @@
   .shift-row-meta{font-size:11px;color:var(--sub);font-family:'DM Mono',monospace;margin-top:1px;}
   .settings-time-input{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;width:100%;}
   .print-title{display:none;}
+  .cal-day.blacked-out{border-color:rgba(224,82,82,0.4);}
+  .weekday-picker{display:flex;flex-wrap:wrap;gap:8px;}
+  .bk-date-cell{background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:8px 4px;min-height:auto;text-align:center;font-family:'DM Mono',monospace;font-size:12px;cursor:default;color:var(--muted);}
+  .bk-date-cell.included{background:rgba(42,184,166,0.12);border-color:rgba(42,184,166,0.35);color:var(--teal);font-weight:600;cursor:pointer;}
+  .bk-date-cell.disabled{opacity:0.3;}
 
   @media print{
     body *{visibility:hidden;}

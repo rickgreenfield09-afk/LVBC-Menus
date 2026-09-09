@@ -297,6 +297,27 @@ create trigger schedule_settings_set_updated_at
   before update on schedule_settings
   for each row execute function set_updated_at();
 
+-- ---------- BLACKOUT DATES ("My Shifts") ----------
+-- Each staffer manages their own rows: either a standing weekday
+-- rule ('recurring', e.g. "never Thursdays") or a one-off date.
+-- Soft flag only — the scheduler's day view doesn't surface
+-- conflicts against these yet (fast-follow).
+create table blackout_dates (
+  id uuid primary key default gen_random_uuid(),
+  staff_id uuid not null references staff_profiles(id) on delete cascade,
+  kind text not null check (kind in ('recurring','date')),
+  day_of_week int check (day_of_week between 0 and 6),
+  blackout_date date,
+  notes text,
+  created_at timestamptz not null default now(),
+  constraint blackout_shape check (
+    (kind = 'recurring' and day_of_week is not null and blackout_date is null) or
+    (kind = 'date' and blackout_date is not null and day_of_week is null)
+  )
+);
+
+create index blackout_dates_staff_idx on blackout_dates (staff_id);
+
 -- ---------- LVBC U-THERE (outing polls) ----------
 create table lvbc_u_there (
   id uuid primary key default gen_random_uuid(),
@@ -338,6 +359,7 @@ alter table lvbc_u_there enable row level security;
 alter table shifts enable row level security;
 alter table shift_day_settings enable row level security;
 alter table schedule_settings enable row level security;
+alter table blackout_dates enable row level security;
 
 -- staff_profiles: staff can read the roster; only admins manage roles
 create policy "staff read roster" on staff_profiles for select using (is_staff());
@@ -387,6 +409,11 @@ create policy "schedulers write shift_day_settings" on shift_day_settings for al
 create policy "staff read schedule_settings" on schedule_settings for select using (is_staff());
 create policy "schedulers write schedule_settings" on schedule_settings for all
   using (can_schedule()) with check (can_schedule());
+
+create policy "own blackout dates" on blackout_dates for all
+  using (staff_id = auth.uid()) with check (staff_id = auth.uid());
+create policy "schedulers read all blackout dates" on blackout_dates for select
+  using (can_schedule());
 
 -- Staff-only, both read and write: PII / financial-equivalent (points) data
 create policy "staff only members" on members for all using (is_staff()) with check (is_staff());

@@ -37,7 +37,7 @@ function fmtTime(t) {
 }
 
 // ── ENTRY ────────────────────────────────────────────────
-async function loadSchedule() {
+async function loadStaffAndSettings() {
   const [{ data: staffData }, { data: daySettingsData }, { data: settingsData }] = await Promise.all([
     window.supabase.from('staff_profiles').select('id,name').order('name'),
     window.supabase.from('shift_day_settings').select('*').order('day_of_week'),
@@ -46,6 +46,10 @@ async function loadSchedule() {
   scheduleStaff = staffData || [];
   scheduleDaySettings = daySettingsData || [];
   scheduleSettings = (settingsData && settingsData[0]) || null;
+}
+
+async function loadSchedule() {
+  await loadStaffAndSettings();
 
   document.getElementById('bulk-form-col').style.display = canSchedule() ? '' : 'none';
   document.getElementById('btn-save-day-settings').style.display = canSchedule() ? '' : 'none';
@@ -303,24 +307,94 @@ async function deleteShift(id) {
 }
 
 // ── BULK SCHEDULING ───────────────────────────────────────
+let bulkSelectedWeekdays = new Set();
+let bulkExcludedDates = new Set();
+
 function populateBulkSelectors() {
   document.getElementById('bk-staff').innerHTML = scheduleStaff.map((s) => '<option value="' + s.id + '">' + escHtml(s.name) + '</option>').join('');
   const monthStart = new Date(scheduleCursor.getFullYear(), scheduleCursor.getMonth(), 1);
   const monthEnd = new Date(scheduleCursor.getFullYear(), scheduleCursor.getMonth() + 1, 0);
   document.getElementById('bk-from').value = toDateStr(monthStart);
   document.getElementById('bk-through').value = toDateStr(monthEnd);
-  document.getElementById('bk-position').value = 'morning';
+  const firstOpenDay = scheduleDaySettings.find((s) => !s.is_closed);
+  bulkSelectedWeekdays = new Set(firstOpenDay ? [firstOpenDay.day_of_week] : []);
+  bulkExcludedDates = new Set();
+  renderWeekdayPicker();
   onBulkPositionChange();
 }
 
+function renderWeekdayPicker() {
+  const el = document.getElementById('bk-weekday-picker');
+  el.innerHTML = scheduleDaySettings.map((s) => {
+    const sel = bulkSelectedWeekdays.has(s.day_of_week);
+    if (s.is_closed) return '<div class="badge-pill" style="opacity:.3;">' + escHtml(s.label.slice(0, 3)) + '</div>';
+    return '<div class="badge-pill' + (sel ? ' selected' : '') + '" style="cursor:pointer;" onclick="toggleBulkWeekday(' + s.day_of_week + ')">' + escHtml(s.label.slice(0, 3)) + '</div>';
+  }).join('');
+}
+
+function toggleBulkWeekday(n) {
+  if (bulkSelectedWeekdays.has(n)) bulkSelectedWeekdays.delete(n); else bulkSelectedWeekdays.add(n);
+  bulkExcludedDates.clear();
+  renderWeekdayPicker();
+  onBulkPositionChange();
+}
+
+function onBulkRangeChange() {
+  bulkExcludedDates.clear();
+  renderBulkDatePicker();
+}
+
+function validPositionsForSelectedWeekdays() {
+  const days = scheduleDaySettings.filter((s) => bulkSelectedWeekdays.has(s.day_of_week));
+  const morningOk = days.length && days.every((d) => d.morning_start);
+  const eveningOk = days.length && days.every((d) => d.evening_start);
+  const opts = [];
+  if (morningOk) opts.push('morning');
+  if (eveningOk) opts.push('evening');
+  opts.push('manager');
+  return opts;
+}
+
 function onBulkPositionChange() {
-  const pos = document.getElementById('bk-position').value;
-  const valid = scheduleDaySettings.filter((s) => !s.is_closed &&
-    (pos === 'manager' || (pos === 'morning' && s.morning_start) || (pos === 'evening' && s.evening_start)));
-  const wkSel = document.getElementById('bk-weekday');
-  const prev = wkSel.value;
-  wkSel.innerHTML = valid.map((s) => '<option value="' + s.day_of_week + '">' + escHtml(s.label) + '</option>').join('');
-  if (valid.some((s) => String(s.day_of_week) === prev)) wkSel.value = prev;
+  const labels = { morning: 'Bartender - Morning', evening: 'Bartender - Evening', manager: 'Manager on Duty' };
+  const valid = validPositionsForSelectedWeekdays();
+  const posSel = document.getElementById('bk-position');
+  const prev = posSel.value;
+  posSel.innerHTML = valid.map((v) => '<option value="' + v + '">' + labels[v] + '</option>').join('');
+  if (valid.includes(prev)) posSel.value = prev;
+  renderBulkDatePicker();
+}
+
+function renderBulkDatePicker() {
+  const el = document.getElementById('bk-date-picker');
+  const fromStr = document.getElementById('bk-from').value;
+  const throughStr = document.getElementById('bk-through').value;
+  if (!fromStr) { el.innerHTML = ''; return; }
+  const fromD = new Date(fromStr + 'T00:00:00');
+  const throughD = throughStr ? new Date(throughStr + 'T00:00:00') : fromD;
+  const monthStart = new Date(fromD.getFullYear(), fromD.getMonth(), 1);
+  const monthEnd = new Date(fromD.getFullYear(), fromD.getMonth() + 1, 0);
+
+  let html = dowHeaderHtml();
+  const firstDow = monthStart.getDay();
+  for (let i = 0; i < firstDow; i++) html += '<div class="bk-date-cell disabled"></div>';
+  for (let d = new Date(monthStart); d <= monthEnd; d.setDate(d.getDate() + 1)) {
+    const dateStr = toDateStr(d);
+    const inRange = d >= fromD && d <= throughD;
+    const matches = inRange && bulkSelectedWeekdays.has(d.getDay());
+    if (matches) {
+      const excluded = bulkExcludedDates.has(dateStr);
+      html += '<div class="bk-date-cell' + (excluded ? '' : ' included') + '" onclick="toggleBulkExcludedDate(\'' + dateStr + '\')">' + d.getDate() + '</div>';
+    } else {
+      html += '<div class="bk-date-cell disabled">' + d.getDate() + '</div>';
+    }
+  }
+  el.innerHTML = html;
+}
+
+function toggleBulkExcludedDate(dateStr) {
+  if (bulkExcludedDates.has(dateStr)) bulkExcludedDates.delete(dateStr); else bulkExcludedDates.add(dateStr);
+  renderBulkDatePicker();
 }
 
 async function applyBulkSchedule() {
@@ -328,38 +402,43 @@ async function applyBulkSchedule() {
   const alertEl = document.getElementById('bulk-alert');
   alertEl.style.display = 'none';
 
-  const dow = parseInt(document.getElementById('bk-weekday').value, 10);
   const pos = document.getElementById('bk-position').value;
   const staffId = document.getElementById('bk-staff').value;
   const fromStr = document.getElementById('bk-from').value;
   const throughStr = document.getElementById('bk-through').value;
-  if (!staffId || !fromStr || !throughStr || Number.isNaN(dow)) { toast('Fill in all fields', true); return; }
+  if (!staffId || !fromStr || !throughStr || !bulkSelectedWeekdays.size) { toast('Fill in all fields', true); return; }
 
-  const setting = scheduleDaySettings.find((s) => s.day_of_week === dow) || {};
   const role = pos === 'manager' ? 'manager' : 'bartender';
   const period = pos === 'manager' ? null : pos;
-  const start_time = pos === 'morning' ? setting.morning_start : (pos === 'evening' ? setting.evening_start : (setting.morning_start || setting.evening_start));
-  const end_time = pos === 'morning' ? setting.morning_end : (pos === 'evening' ? setting.evening_end : (setting.evening_end || setting.morning_end));
 
   const dates = [];
   for (let d = new Date(fromStr + 'T00:00:00'); d <= new Date(throughStr + 'T00:00:00'); d.setDate(d.getDate() + 1)) {
-    if (d.getDay() === dow) dates.push(toDateStr(d));
+    const dateStr = toDateStr(d);
+    if (bulkSelectedWeekdays.has(d.getDay()) && !bulkExcludedDates.has(dateStr)) dates.push(dateStr);
   }
-  if (!dates.length) { toast('No matching dates in that range', true); return; }
+  if (!dates.length) { toast('No matching dates selected', true); return; }
 
   const { data: existing, error: exErr } = await window.supabase.from('shifts').select('shift_date,role,period').in('shift_date', dates);
   if (exErr) { toast('Error: ' + exErr.message, true); return; }
   const taken = new Set((existing || []).filter((s) => s.role === role && (role === 'manager' || s.period === period)).map((s) => s.shift_date));
-  const toInsert = dates.filter((dt) => !taken.has(dt)).map((dt) => ({ shift_date: dt, staff_id: staffId, role, period, start_time, end_time }));
+
+  const toInsert = dates.filter((dt) => !taken.has(dt)).map((dt) => {
+    const setting = scheduleDaySettings.find((s) => s.day_of_week === new Date(dt + 'T00:00:00').getDay()) || {};
+    const start_time = pos === 'morning' ? setting.morning_start : (pos === 'evening' ? setting.evening_start : (setting.morning_start || setting.evening_start));
+    const end_time = pos === 'morning' ? setting.morning_end : (pos === 'evening' ? setting.evening_end : (setting.evening_end || setting.morning_end));
+    return { shift_date: dt, staff_id: staffId, role, period, start_time, end_time };
+  });
 
   const flash = (bg, color, text) => { alertEl.style.display = 'block'; alertEl.style.background = bg; alertEl.style.color = color; alertEl.textContent = text; };
 
-  if (!toInsert.length) { flash('rgba(224,82,82,0.12)', 'var(--red)', 'All matching dates already have someone in that slot.'); return; }
+  if (!toInsert.length) { flash('rgba(224,82,82,0.12)', 'var(--red)', 'All selected dates already have someone in that slot.'); return; }
 
   const { error: insErr } = await window.supabase.from('shifts').insert(toInsert);
   if (insErr) { toast('Error: ' + insErr.message, true); return; }
 
   flash('rgba(42,184,166,0.12)', 'var(--teal)', 'Added ' + toInsert.length + ' shift(s)' + (dates.length > toInsert.length ? ', skipped ' + (dates.length - toInsert.length) + ' already filled' : '') + '.');
+  bulkExcludedDates.clear();
+  renderBulkDatePicker();
   loadBulkShiftList();
   loadScheduleRange();
 }

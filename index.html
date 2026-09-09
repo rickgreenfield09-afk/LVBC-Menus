@@ -43,6 +43,7 @@
     <nav>
       <button class="nav-btn active" onclick="showScreen('menu', this); loadMenu()">Menu</button>
       <button class="nav-btn" onclick="showScreen('schedule', this); loadSchedule()">Schedule</button>
+      <button class="nav-btn" onclick="showScreen('myshifts', this); loadMyShifts()">My Shifts</button>
       <!-- Dashboard, Admin, Reports tabs added as their .js files land -->
     </nav>
 
@@ -81,30 +82,29 @@
             <div class="grid2-col" id="bulk-form-col">
               <div class="section-label" style="margin-top:0;">Assign a Weekday Pattern</div>
               <div class="card">
-                <div class="form-row">
-                  <div class="form-group">
-                    <label class="form-label">Weekday</label>
-                    <select class="form-select" style="width:100%;" id="bk-weekday"></select>
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label">Position</label>
-                    <select class="form-select" style="width:100%;" id="bk-position" onchange="onBulkPositionChange()">
-                      <option value="morning">Bartender - Morning</option>
-                      <option value="evening">Bartender - Evening</option>
-                      <option value="manager">Manager on Duty</option>
-                    </select>
-                  </div>
+                <div class="form-group" style="margin-bottom:16px;">
+                  <label class="form-label">Weekdays</label>
+                  <div class="weekday-picker" id="bk-weekday-picker"></div>
+                </div>
+                <div class="form-group" style="margin-bottom:16px;">
+                  <label class="form-label">Position</label>
+                  <select class="form-select" style="width:100%;" id="bk-position" onchange="onBulkPositionChange()"></select>
                 </div>
                 <div class="form-group" style="margin-bottom:16px;">
                   <label class="form-label">Staff</label>
                   <select class="form-select" style="width:100%;" id="bk-staff"></select>
                 </div>
                 <div class="form-row">
-                  <div class="form-group"><label class="form-label">From</label><input class="form-input" style="width:100%;" type="date" id="bk-from"></div>
-                  <div class="form-group"><label class="form-label">Through</label><input class="form-input" style="width:100%;" type="date" id="bk-through"></div>
+                  <div class="form-group"><label class="form-label">From</label><input class="form-input" style="width:100%;" type="date" id="bk-from" onchange="onBulkRangeChange()"></div>
+                  <div class="form-group"><label class="form-label">Through</label><input class="form-input" style="width:100%;" type="date" id="bk-through" onchange="onBulkRangeChange()"></div>
+                </div>
+                <div class="form-group" style="margin-bottom:16px;">
+                  <label class="form-label">Dates to Include</label>
+                  <div class="cal-grid" id="bk-date-picker" style="margin-bottom:4px;"></div>
+                  <div style="font-size:11px;color:var(--muted);">Highlighted dates match your weekday pick — click one to leave it out.</div>
                 </div>
                 <div id="bulk-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
-                <button class="btn btn-primary" style="width:100%;" onclick="applyBulkSchedule()">Apply to Matching Dates</button>
+                <button class="btn btn-primary" style="width:100%;" onclick="applyBulkSchedule()">Apply to Selected Dates</button>
                 <div style="font-size:11px;color:var(--muted);margin-top:8px;">Skips any date that already has someone in that exact slot.</div>
               </div>
             </div>
@@ -154,6 +154,43 @@
             <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Templates are saved here for later use — outbound email isn't wired up yet.</div>
             <button class="btn btn-primary btn-sm" id="btn-save-schedule-settings" onclick="saveScheduleSettings()">Save Settings</button>
             <span id="settings-status" style="font-size:12px;color:var(--muted);margin-left:10px;"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- MY SHIFTS SCREEN -->
+      <div class="screen" id="screen-myshifts">
+        <div class="menu-col-header">
+          <div style="display:flex;align-items:center;gap:14px;">
+            <button class="btn btn-secondary btn-sm" onclick="myShiftsMonth(-1)">&larr;</button>
+            <div class="section-label" style="margin:0;font-size:16px;letter-spacing:1px;" id="myshifts-month-label">Month</div>
+            <button class="btn btn-secondary btn-sm" onclick="myShiftsMonth(1)">&rarr;</button>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-secondary btn-sm" onclick="emailMySchedule()">Email Me This Schedule</button>
+            <button class="btn btn-secondary btn-sm" onclick="downloadMyScheduleIcs()">Add to Phone Calendar</button>
+          </div>
+        </div>
+        <div id="myshifts-email-status" style="font-size:12px;color:var(--muted);margin-bottom:12px;min-height:16px;"></div>
+        <div class="cal-grid" id="myshifts-cal-grid"><div class="loading">Loading...</div></div>
+
+        <div class="section-label">Blackout Dates</div>
+        <div class="grid-2">
+          <div class="grid2-col">
+            <div class="card">
+              <div class="form-label" style="margin-bottom:10px;">Never work these weekdays</div>
+              <div class="weekday-picker" id="blackout-recurring-picker"></div>
+            </div>
+          </div>
+          <div class="grid2-col">
+            <div class="card">
+              <div class="form-label" style="margin-bottom:10px;">Block a specific date</div>
+              <div style="display:flex;gap:8px;margin-bottom:12px;">
+                <input class="form-input" style="flex:1;" type="date" id="blackout-date-input">
+                <button class="btn btn-primary btn-sm" onclick="addOneOffBlackout()">Add</button>
+              </div>
+              <div id="blackout-oneoff-list"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -461,5 +498,6 @@
   <script src="js/app-core.js"></script>
   <script src="js/menu.js"></script>
   <script src="js/schedule.js"></script>
+  <script src="js/myshifts.js"></script>
 </body>
 </html>
