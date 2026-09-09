@@ -1,10 +1,9 @@
 // schedule.js
-// Screen: #screen-schedule (sub-tabs: Calendar, Scheduling, Settings)
-// Everyone signed in can view; adding/removing shifts and editing
-// settings is gated by window.currentStaff.can_schedule (also
-// enforced by RLS — see supabase/schema.sql). Scope: view + manual
-// assign + weekday bulk-assign + settings. No coverage requests,
-// trades, or email sending yet (HANDOFF.md has the full module).
+// Screen: #screen-schedule (sub-tabs: My Shifts, Calendar, Scheduling,
+// Events, Settings). My Shifts is visible to everyone; the other four
+// are admin/scheduler-only (canSchedule()) both in the UI and via RLS
+// — see supabase/schema.sql. No coverage requests or trades yet
+// (HANDOFF.md has the full module).
 // Depends on: window.supabase, toast(), escHtml() (from menu.js)
 
 let scheduleCursor = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
@@ -15,6 +14,7 @@ let scheduleStaff = [];
 let scheduleDaySettings = [];
 let scheduleSettings = null;
 let scheduleActiveDate = null;
+let bulkPopulated = false;
 
 function canSchedule() {
   return !!(window.currentStaff && (window.currentStaff.can_schedule || window.currentStaff.role === 'admin'));
@@ -36,6 +36,27 @@ function fmtTime(t) {
   return hr + (m === '00' ? '' : ':' + m) + (+h < 12 ? 'am' : 'pm');
 }
 
+// Position select values are "role:period", e.g. "bartender:morning"
+// or "manager:evening" — manager (MOD) shares the same period windows
+// as bartenders now, since MOD swaps at the same break as staff.
+function positionOptionsForSetting(setting) {
+  const opts = [];
+  if (setting.morning_start) { opts.push(['bartender:morning', 'Bartender - Morning']); opts.push(['manager:morning', 'Manager - Morning']); }
+  if (setting.evening_start) { opts.push(['bartender:evening', 'Bartender - Evening']); opts.push(['manager:evening', 'Manager - Evening']); }
+  return opts;
+}
+
+function parsePosition(val) {
+  const [role, period] = val.split(':');
+  return { role, period: period || null };
+}
+
+async function logAudit(action, entityType, entityId, detail) {
+  try {
+    await window.supabase.from('audit_log').insert({ actor_id: window.currentStaff.id, action, entity_type: entityType, entity_id: entityId, detail: detail || null });
+  } catch (e) { /* best-effort, never block the UI on logging */ }
+}
+
 // ── ENTRY ────────────────────────────────────────────────
 async function loadStaffAndSettings() {
   const [{ data: staffData }, { data: daySettingsData }, { data: settingsData }] = await Promise.all([
@@ -51,17 +72,17 @@ async function loadStaffAndSettings() {
 async function loadSchedule() {
   await loadStaffAndSettings();
 
-  document.getElementById('bulk-form-col').style.display = canSchedule() ? '' : 'none';
-  document.getElementById('btn-save-day-settings').style.display = canSchedule() ? '' : 'none';
-  document.getElementById('btn-save-schedule-settings').style.display = canSchedule() ? '' : 'none';
+  const admin = canSchedule();
+  ['calendar', 'bulk', 'events', 'settings'].forEach((t) => {
+    document.getElementById('scheduletab-btn-' + t).style.display = admin ? '' : 'none';
+  });
+  document.getElementById('btn-save-day-settings').style.display = admin ? '' : 'none';
+  document.getElementById('btn-save-schedule-settings').style.display = admin ? '' : 'none';
   ['set-timeout', 'set-tpl-coverage', 'set-tpl-trade', 'set-tpl-sent'].forEach((id) => {
-    document.getElementById(id).disabled = !canSchedule();
+    document.getElementById(id).disabled = !admin;
   });
 
-  populateBulkSelectors();
-  renderDaySettingsRows();
-  populateScheduleSettingsForm();
-  await loadScheduleRange();
+  setScheduleTab('myshifts', document.getElementById('scheduletab-btn-myshifts'));
 }
 
 function setScheduleTab(tab, btn) {
@@ -69,7 +90,10 @@ function setScheduleTab(tab, btn) {
   document.querySelectorAll('#screen-schedule > .sub-sec').forEach((s) => s.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('scheduletab-' + tab).classList.add('active');
-  if (tab === 'bulk') loadBulkShiftList();
+  if (tab === 'myshifts') loadMyShifts();
+  if (tab === 'calendar') loadScheduleRange();
+  if (tab === 'bulk') { if (!bulkPopulated) { populateBulkSelectors(); bulkPopulated = true; } loadBulkShiftList(); }
+  if (tab === 'events') loadEventsList();
   if (tab === 'settings') { renderDaySettingsRows(); populateScheduleSettingsForm(); }
 }
 
@@ -161,7 +185,7 @@ function dayCellHtml(dateObj, extraClass) {
   }
 
   const dayShifts = scheduleShifts.filter((s) => s.shift_date === dateStr);
-  const mod = dayShifts.find((s) => s.role === 'manager');
+  const dayLevelMods = dayShifts.filter((s) => s.role === 'manager' && !s.period);
   const dayEvents = scheduleEvents.filter((e) => toDateStr(new Date(e.event_date)) === dateStr);
   const halves = [];
   if (setting.morning_start) halves.push('morning');
@@ -169,10 +193,13 @@ function dayCellHtml(dateObj, extraClass) {
 
   let html = '<div class="' + cls + '" onclick="openShiftModal(\'' + dateStr + '\')">';
   html += '<div class="cal-day-num">' + dateObj.getDate() + '</div>';
-  if (mod) html += '<div class="cal-mod-pill">MOD: ' + escHtml(staffName(mod.staff_id)) + '</div>';
+  dayLevelMods.forEach((m) => { html += '<div class="cal-mod-pill">MOD: ' + escHtml(staffName(m.staff_id)) + '</div>'; });
   html += '<div class="cal-day-split">';
   halves.forEach((period) => {
     html += '<div class="cal-half">';
+    dayShifts.filter((s) => s.role === 'manager' && s.period === period).forEach((s) => {
+      html += '<div class="cal-mod-pill">MOD: ' + escHtml(staffName(s.staff_id)) + '</div>';
+    });
     dayShifts.filter((s) => s.role === 'bartender' && s.period === period).forEach((s) => {
       html += '<div class="cal-pill-emp">' + escHtml(staffName(s.staff_id)) + '</div>';
     });
@@ -211,28 +238,35 @@ function renderScheduleCalendar() {
 }
 
 // ── DAY MODAL ─────────────────────────────────────────────
-function openShiftModal(dateStr) {
+// Opens read-only by default; admins/schedulers get an Edit toggle
+// that reveals the add-shift / add-event forms and Remove buttons.
+let shiftModalEditMode = false;
+let modalEvents = [];
+
+async function openShiftModal(dateStr) {
   scheduleActiveDate = dateStr;
+  shiftModalEditMode = false;
   const dow = new Date(dateStr + 'T00:00:00').getDay();
   const setting = scheduleDaySettings.find((s) => s.day_of_week === dow) || {};
   const d = new Date(dateStr + 'T00:00:00');
   document.getElementById('shift-modal-date').textContent = d.toLocaleDateString('default', { weekday: 'long', month: 'long', day: 'numeric' });
 
+  const editBtn = document.getElementById('shift-modal-edit-btn');
+  editBtn.style.display = canSchedule() ? '' : 'none';
+  editBtn.textContent = 'Edit';
+
   const staffSel = document.getElementById('sm-staff');
   staffSel.innerHTML = scheduleStaff.map((s) => '<option value="' + s.id + '">' + escHtml(s.name) + '</option>').join('');
-
-  let opts = '';
-  if (setting.morning_start) opts += '<option value="morning">Bartender - Morning</option>';
-  if (setting.evening_start) opts += '<option value="evening">Bartender - Evening</option>';
-  opts += '<option value="manager">Manager on Duty</option>';
-  document.getElementById('sm-role').innerHTML = opts;
+  document.getElementById('sm-role').innerHTML = positionOptionsForSetting(setting).map(([v, l]) => '<option value="' + v + '">' + l + '</option>').join('');
   document.getElementById('sm-notes').value = '';
 
-  document.getElementById('shift-modal-form-wrap').style.display = (canSchedule() && !setting.is_closed) ? '' : 'none';
-
   onShiftModalRoleChange();
-  renderShiftModalList();
+  applyShiftModalEditVisibility();
   document.getElementById('shift-modal').style.display = 'flex';
+
+  document.getElementById('shift-modal-events-list').innerHTML = '<div class="loading">Loading...</div>';
+  modalEvents = await fetchEventsForDate(dateStr);
+  renderModalEventsList();
 }
 
 function closeShiftModal() {
@@ -240,14 +274,28 @@ function closeShiftModal() {
   scheduleActiveDate = null;
 }
 
+function toggleShiftModalEdit() {
+  shiftModalEditMode = !shiftModalEditMode;
+  document.getElementById('shift-modal-edit-btn').textContent = shiftModalEditMode ? 'Done Editing' : 'Edit';
+  applyShiftModalEditVisibility();
+}
+
+function applyShiftModalEditVisibility() {
+  const dow = new Date(scheduleActiveDate + 'T00:00:00').getDay();
+  const setting = scheduleDaySettings.find((s) => s.day_of_week === dow) || {};
+  const editing = canSchedule() && shiftModalEditMode;
+  document.getElementById('shift-modal-form-wrap').style.display = (editing && !setting.is_closed) ? '' : 'none';
+  document.getElementById('shift-modal-event-form-wrap').style.display = editing ? '' : 'none';
+  renderShiftModalList();
+  renderModalEventsList();
+}
+
 function onShiftModalRoleChange() {
   const dow = new Date(scheduleActiveDate + 'T00:00:00').getDay();
   const setting = scheduleDaySettings.find((s) => s.day_of_week === dow) || {};
-  const val = document.getElementById('sm-role').value;
-  let start = null, end = null;
-  if (val === 'morning') { start = setting.morning_start; end = setting.morning_end; }
-  else if (val === 'evening') { start = setting.evening_start; end = setting.evening_end; }
-  else { start = setting.morning_start || setting.evening_start; end = setting.evening_end || setting.morning_end; }
+  const { period } = parsePosition(document.getElementById('sm-role').value || 'bartender:morning');
+  const start = period === 'morning' ? setting.morning_start : setting.evening_start;
+  const end = period === 'morning' ? setting.morning_end : setting.evening_end;
   document.getElementById('sm-start').value = (start || '').slice(0, 5);
   document.getElementById('sm-end').value = (end || '').slice(0, 5);
 }
@@ -262,12 +310,14 @@ function renderShiftModalList() {
     .sort((a, b) => (a.role === 'manager' ? -1 : 1) - (b.role === 'manager' ? -1 : 1) || (a.period || '').localeCompare(b.period || ''));
   if (!shifts.length) { listEl.innerHTML = '<div class="loading">No shifts scheduled</div>'; return; }
 
+  const editing = canSchedule() && shiftModalEditMode;
   listEl.innerHTML = shifts.map((s) => {
-    const label = s.role === 'manager' ? 'Manager on Duty' : (s.period === 'morning' ? 'Morning' : 'Evening');
+    const periodTag = s.period ? (s.period === 'morning' ? ' (AM)' : ' (PM)') : '';
+    const label = s.role === 'manager' ? 'Manager on Duty' + periodTag : (s.period === 'morning' ? 'Morning' : 'Evening');
     return '<div class="shift-row">'
-      + '<div><div class="shift-row-name">' + escHtml(staffName(s.staff_id)) + (s.role === 'manager' ? ' <span class="badge badge-amber">MOD</span>' : '') + '</div>'
+      + '<div><div class="shift-row-name">' + escHtml(staffName(s.staff_id)) + (s.role === 'manager' ? ' <span class="badge badge-amber">MOD' + periodTag + '</span>' : '') + '</div>'
       + '<div class="shift-row-meta">' + label + (s.start_time ? ' · ' + fmtTime(s.start_time) + (s.end_time ? '–' + fmtTime(s.end_time) : '') : '') + (s.notes ? ' · ' + escHtml(s.notes) : '') + '</div></div>'
-      + (canSchedule() ? '<button class="btn btn-sm btn-danger" onclick="deleteShift(\'' + s.id + '\')">Remove</button>' : '')
+      + (editing ? '<button class="btn btn-sm btn-danger" onclick="deleteShift(\'' + s.id + '\')">Remove</button>' : '')
       + '</div>';
   }).join('');
 }
@@ -276,9 +326,7 @@ async function addShift() {
   if (!canSchedule()) return;
   const staffId = document.getElementById('sm-staff').value;
   if (!staffId) { toast('Select a staff member', true); return; }
-  const val = document.getElementById('sm-role').value;
-  const role = val === 'manager' ? 'manager' : 'bartender';
-  const period = val === 'manager' ? null : val;
+  const { role, period } = parsePosition(document.getElementById('sm-role').value);
   const payload = {
     shift_date: scheduleActiveDate,
     staff_id: staffId,
@@ -293,32 +341,89 @@ async function addShift() {
   document.getElementById('sm-notes').value = '';
   renderShiftModalList();
   renderScheduleCalendar();
+  logAudit('add_shift', 'shifts', data.id, { shift_date: data.shift_date, staff_id: data.staff_id, role, period });
   toast('Shift added');
 }
 
 async function deleteShift(id) {
   if (!canSchedule()) return;
+  const removed = scheduleShifts.find((s) => s.id === id);
   const { error } = await window.supabase.from('shifts').delete().eq('id', id);
   if (error) { toast('Error: ' + error.message, true); return; }
   scheduleShifts = scheduleShifts.filter((s) => s.id !== id);
   renderShiftModalList();
   renderScheduleCalendar();
+  if (removed) logAudit('remove_shift', 'shifts', id, { shift_date: removed.shift_date, staff_id: removed.staff_id, role: removed.role, period: removed.period });
   toast('Shift removed');
+}
+
+// ── DAY MODAL: EVENTS ─────────────────────────────────────
+async function fetchEventsForDate(dateStr) {
+  const next = new Date(dateStr + 'T00:00:00'); next.setDate(next.getDate() + 1);
+  const { data, error } = await window.supabase.from('events').select('*')
+    .gte('event_date', dateStr + 'T00:00:00').lt('event_date', toDateStr(next) + 'T00:00:00').order('event_date');
+  return error ? [] : (data || []);
+}
+
+function renderModalEventsList() {
+  const el = document.getElementById('shift-modal-events-list');
+  const editing = canSchedule() && shiftModalEditMode;
+  if (!modalEvents.length) { el.innerHTML = '<div class="loading">No events this day</div>'; return; }
+  el.innerHTML = modalEvents.map((e) => {
+    const t = new Date(e.event_date);
+    return '<div class="shift-row">'
+      + '<div><div class="shift-row-name">' + escHtml(e.event_name) + '</div>'
+      + '<div class="shift-row-meta">' + t.toLocaleTimeString('default', { hour: 'numeric', minute: '2-digit' }) + (e.event_type ? ' · ' + escHtml(e.event_type) : '') + '</div></div>'
+      + (editing ? '<button class="btn btn-sm btn-danger" onclick="deleteModalEvent(\'' + e.id + '\')">Remove</button>' : '')
+      + '</div>';
+  }).join('');
+}
+
+async function addModalEvent() {
+  if (!canSchedule()) return;
+  const name = document.getElementById('sme-name').value.trim();
+  if (!name) { toast('Enter an event name', true); return; }
+  const time = document.getElementById('sme-time').value || '18:00';
+  const payload = {
+    event_name: name,
+    event_type: document.getElementById('sme-type').value,
+    event_date: scheduleActiveDate + 'T' + time + ':00',
+  };
+  const { data, error } = await window.supabase.from('events').insert(payload).select().single();
+  if (error) { toast('Error: ' + error.message, true); return; }
+  modalEvents.push(data);
+  document.getElementById('sme-name').value = '';
+  renderModalEventsList();
+  loadScheduleRange();
+  logAudit('add_event', 'events', data.id, payload);
+  toast('Event added');
+}
+
+async function deleteModalEvent(id) {
+  if (!canSchedule()) return;
+  const { error } = await window.supabase.from('events').delete().eq('id', id);
+  if (error) { toast('Error: ' + error.message, true); return; }
+  modalEvents = modalEvents.filter((e) => e.id !== id);
+  renderModalEventsList();
+  loadScheduleRange();
+  logAudit('delete_event', 'events', id, null);
+  toast('Event removed');
 }
 
 // ── BULK SCHEDULING ───────────────────────────────────────
 let bulkSelectedWeekdays = new Set();
-let bulkExcludedDates = new Set();
+let bulkSelectedDates = new Set();
 
 function populateBulkSelectors() {
   document.getElementById('bk-staff').innerHTML = scheduleStaff.map((s) => '<option value="' + s.id + '">' + escHtml(s.name) + '</option>').join('');
+  document.getElementById('bulk-filter-staff').innerHTML = '<option value="">All Staff</option>' + scheduleStaff.map((s) => '<option value="' + s.id + '">' + escHtml(s.name) + '</option>').join('');
   const monthStart = new Date(scheduleCursor.getFullYear(), scheduleCursor.getMonth(), 1);
   const monthEnd = new Date(scheduleCursor.getFullYear(), scheduleCursor.getMonth() + 1, 0);
   document.getElementById('bk-from').value = toDateStr(monthStart);
   document.getElementById('bk-through').value = toDateStr(monthEnd);
   const firstOpenDay = scheduleDaySettings.find((s) => !s.is_closed);
   bulkSelectedWeekdays = new Set(firstOpenDay ? [firstOpenDay.day_of_week] : []);
-  bulkExcludedDates = new Set();
+  recomputeBulkDatesFromPattern();
   renderWeekdayPicker();
   onBulkPositionChange();
 }
@@ -332,15 +437,25 @@ function renderWeekdayPicker() {
   }).join('');
 }
 
+function recomputeBulkDatesFromPattern() {
+  const fromStr = document.getElementById('bk-from').value;
+  const throughStr = document.getElementById('bk-through').value;
+  bulkSelectedDates = new Set();
+  if (!fromStr || !throughStr) return;
+  for (let d = new Date(fromStr + 'T00:00:00'); d <= new Date(throughStr + 'T00:00:00'); d.setDate(d.getDate() + 1)) {
+    if (bulkSelectedWeekdays.has(d.getDay())) bulkSelectedDates.add(toDateStr(d));
+  }
+}
+
 function toggleBulkWeekday(n) {
   if (bulkSelectedWeekdays.has(n)) bulkSelectedWeekdays.delete(n); else bulkSelectedWeekdays.add(n);
-  bulkExcludedDates.clear();
+  recomputeBulkDatesFromPattern();
   renderWeekdayPicker();
   onBulkPositionChange();
 }
 
 function onBulkRangeChange() {
-  bulkExcludedDates.clear();
+  recomputeBulkDatesFromPattern();
   renderBulkDatePicker();
 }
 
@@ -349,29 +464,25 @@ function validPositionsForSelectedWeekdays() {
   const morningOk = days.length && days.every((d) => d.morning_start);
   const eveningOk = days.length && days.every((d) => d.evening_start);
   const opts = [];
-  if (morningOk) opts.push('morning');
-  if (eveningOk) opts.push('evening');
-  opts.push('manager');
+  if (morningOk) { opts.push(['bartender:morning', 'Bartender - Morning']); opts.push(['manager:morning', 'Manager - Morning']); }
+  if (eveningOk) { opts.push(['bartender:evening', 'Bartender - Evening']); opts.push(['manager:evening', 'Manager - Evening']); }
   return opts;
 }
 
 function onBulkPositionChange() {
-  const labels = { morning: 'Bartender - Morning', evening: 'Bartender - Evening', manager: 'Manager on Duty' };
   const valid = validPositionsForSelectedWeekdays();
   const posSel = document.getElementById('bk-position');
   const prev = posSel.value;
-  posSel.innerHTML = valid.map((v) => '<option value="' + v + '">' + labels[v] + '</option>').join('');
-  if (valid.includes(prev)) posSel.value = prev;
+  posSel.innerHTML = valid.map(([v, l]) => '<option value="' + v + '">' + l + '</option>').join('');
+  if (valid.some(([v]) => v === prev)) posSel.value = prev;
   renderBulkDatePicker();
 }
 
 function renderBulkDatePicker() {
   const el = document.getElementById('bk-date-picker');
   const fromStr = document.getElementById('bk-from').value;
-  const throughStr = document.getElementById('bk-through').value;
   if (!fromStr) { el.innerHTML = ''; return; }
   const fromD = new Date(fromStr + 'T00:00:00');
-  const throughD = throughStr ? new Date(throughStr + 'T00:00:00') : fromD;
   const monthStart = new Date(fromD.getFullYear(), fromD.getMonth(), 1);
   const monthEnd = new Date(fromD.getFullYear(), fromD.getMonth() + 1, 0);
 
@@ -380,20 +491,17 @@ function renderBulkDatePicker() {
   for (let i = 0; i < firstDow; i++) html += '<div class="bk-date-cell disabled"></div>';
   for (let d = new Date(monthStart); d <= monthEnd; d.setDate(d.getDate() + 1)) {
     const dateStr = toDateStr(d);
-    const inRange = d >= fromD && d <= throughD;
-    const matches = inRange && bulkSelectedWeekdays.has(d.getDay());
-    if (matches) {
-      const excluded = bulkExcludedDates.has(dateStr);
-      html += '<div class="bk-date-cell' + (excluded ? '' : ' included') + '" onclick="toggleBulkExcludedDate(\'' + dateStr + '\')">' + d.getDate() + '</div>';
-    } else {
-      html += '<div class="bk-date-cell disabled">' + d.getDate() + '</div>';
-    }
+    const dow = d.getDay();
+    const setting = scheduleDaySettings.find((s) => s.day_of_week === dow) || {};
+    if (setting.is_closed) { html += '<div class="bk-date-cell disabled">' + d.getDate() + '</div>'; continue; }
+    const included = bulkSelectedDates.has(dateStr);
+    html += '<div class="bk-date-cell' + (included ? ' included' : '') + '" onclick="toggleBulkDate(\'' + dateStr + '\')">' + d.getDate() + '</div>';
   }
   el.innerHTML = html;
 }
 
-function toggleBulkExcludedDate(dateStr) {
-  if (bulkExcludedDates.has(dateStr)) bulkExcludedDates.delete(dateStr); else bulkExcludedDates.add(dateStr);
+function toggleBulkDate(dateStr) {
+  if (bulkSelectedDates.has(dateStr)) bulkSelectedDates.delete(dateStr); else bulkSelectedDates.add(dateStr);
   renderBulkDatePicker();
 }
 
@@ -402,30 +510,19 @@ async function applyBulkSchedule() {
   const alertEl = document.getElementById('bulk-alert');
   alertEl.style.display = 'none';
 
-  const pos = document.getElementById('bk-position').value;
+  const { role, period } = parsePosition(document.getElementById('bk-position').value);
   const staffId = document.getElementById('bk-staff').value;
-  const fromStr = document.getElementById('bk-from').value;
-  const throughStr = document.getElementById('bk-through').value;
-  if (!staffId || !fromStr || !throughStr || !bulkSelectedWeekdays.size) { toast('Fill in all fields', true); return; }
-
-  const role = pos === 'manager' ? 'manager' : 'bartender';
-  const period = pos === 'manager' ? null : pos;
-
-  const dates = [];
-  for (let d = new Date(fromStr + 'T00:00:00'); d <= new Date(throughStr + 'T00:00:00'); d.setDate(d.getDate() + 1)) {
-    const dateStr = toDateStr(d);
-    if (bulkSelectedWeekdays.has(d.getDay()) && !bulkExcludedDates.has(dateStr)) dates.push(dateStr);
-  }
-  if (!dates.length) { toast('No matching dates selected', true); return; }
+  const dates = Array.from(bulkSelectedDates).sort();
+  if (!staffId || !dates.length) { toast('Pick at least one date', true); return; }
 
   const { data: existing, error: exErr } = await window.supabase.from('shifts').select('shift_date,role,period').in('shift_date', dates);
   if (exErr) { toast('Error: ' + exErr.message, true); return; }
-  const taken = new Set((existing || []).filter((s) => s.role === role && (role === 'manager' || s.period === period)).map((s) => s.shift_date));
+  const taken = new Set((existing || []).filter((s) => s.role === role && s.period === period).map((s) => s.shift_date));
 
   const toInsert = dates.filter((dt) => !taken.has(dt)).map((dt) => {
     const setting = scheduleDaySettings.find((s) => s.day_of_week === new Date(dt + 'T00:00:00').getDay()) || {};
-    const start_time = pos === 'morning' ? setting.morning_start : (pos === 'evening' ? setting.evening_start : (setting.morning_start || setting.evening_start));
-    const end_time = pos === 'morning' ? setting.morning_end : (pos === 'evening' ? setting.evening_end : (setting.evening_end || setting.morning_end));
+    const start_time = period === 'morning' ? setting.morning_start : setting.evening_start;
+    const end_time = period === 'morning' ? setting.morning_end : setting.evening_end;
     return { shift_date: dt, staff_id: staffId, role, period, start_time, end_time };
   });
 
@@ -433,12 +530,11 @@ async function applyBulkSchedule() {
 
   if (!toInsert.length) { flash('rgba(224,82,82,0.12)', 'var(--red)', 'All selected dates already have someone in that slot.'); return; }
 
-  const { error: insErr } = await window.supabase.from('shifts').insert(toInsert);
+  const { data: inserted, error: insErr } = await window.supabase.from('shifts').insert(toInsert).select();
   if (insErr) { toast('Error: ' + insErr.message, true); return; }
 
   flash('rgba(42,184,166,0.12)', 'var(--teal)', 'Added ' + toInsert.length + ' shift(s)' + (dates.length > toInsert.length ? ', skipped ' + (dates.length - toInsert.length) + ' already filled' : '') + '.');
-  bulkExcludedDates.clear();
-  renderBulkDatePicker();
+  logAudit('bulk_add_shifts', 'shifts', null, { staff_id: staffId, role, period, count: toInsert.length, dates: toInsert.map((s) => s.shift_date) });
   loadBulkShiftList();
   loadScheduleRange();
 }
@@ -448,13 +544,22 @@ async function loadBulkShiftList() {
   el.innerHTML = '<div class="loading">Loading...</div>';
   const monthStart = toDateStr(new Date(scheduleCursor.getFullYear(), scheduleCursor.getMonth(), 1));
   const monthEnd = toDateStr(new Date(scheduleCursor.getFullYear(), scheduleCursor.getMonth() + 1, 0));
-  const { data, error } = await window.supabase.from('shifts').select('*').gte('shift_date', monthStart).lte('shift_date', monthEnd).order('shift_date').order('period');
+  let query = window.supabase.from('shifts').select('*').gte('shift_date', monthStart).lte('shift_date', monthEnd).order('shift_date').order('period');
+  const staffFilter = document.getElementById('bulk-filter-staff').value;
+  if (staffFilter) query = query.eq('staff_id', staffFilter);
+  const posFilter = document.getElementById('bulk-filter-position').value;
+  if (posFilter) {
+    const { role, period } = parsePosition(posFilter);
+    query = query.eq('role', role).eq('period', period);
+  }
+  const { data, error } = await query;
   if (error) { el.innerHTML = '<div class="loading">Error: ' + escHtml(error.message) + '</div>'; return; }
-  if (!data.length) { el.innerHTML = '<div class="loading">No shifts this month</div>'; return; }
+  if (!data.length) { el.innerHTML = '<div class="loading">No shifts match</div>'; return; }
   el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Position</th><th>Staff</th><th>Time</th><th></th></tr></thead><tbody>' +
     data.map((s) => {
       const d = new Date(s.shift_date + 'T00:00:00');
-      const label = s.role === 'manager' ? 'MOD' : (s.period === 'morning' ? 'Morning' : 'Evening');
+      const periodTag = s.period ? (s.period === 'morning' ? 'AM' : 'PM') : '';
+      const label = (s.role === 'manager' ? 'MOD' : (s.period === 'morning' ? 'Morning' : 'Evening')) + (s.role === 'manager' && periodTag ? ' ' + periodTag : '');
       return '<tr><td>' + d.toLocaleDateString('default', { month: 'short', day: 'numeric' }) + '</td><td>' + label + '</td><td>' + escHtml(staffName(s.staff_id)) + '</td>'
         + '<td style="font-family:\'DM Mono\',monospace;font-size:12px">' + (s.start_time ? fmtTime(s.start_time) + (s.end_time ? '–' + fmtTime(s.end_time) : '') : '') + '</td>'
         + '<td>' + (canSchedule() ? '<button class="btn btn-sm btn-danger" onclick="deleteBulkShift(\'' + s.id + '\')">Remove</button>' : '') + '</td></tr>';
@@ -467,6 +572,7 @@ async function deleteBulkShift(id) {
   if (error) { toast('Error: ' + error.message, true); return; }
   loadBulkShiftList();
   loadScheduleRange();
+  logAudit('remove_shift', 'shifts', id, null);
   toast('Shift removed');
 }
 

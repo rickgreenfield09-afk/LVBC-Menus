@@ -318,6 +318,22 @@ create table blackout_dates (
 
 create index blackout_dates_staff_idx on blackout_dates (staff_id);
 
+-- ---------- AUDIT LOG ----------
+-- Append-only edit trail for scheduler actions (shift add/remove,
+-- event add/edit/delete). Not surfaced anywhere yet beyond a raw
+-- table — a proper "activity" view is a fast-follow.
+create table audit_log (
+  id uuid primary key default gen_random_uuid(),
+  actor_id uuid references staff_profiles(id) on delete set null,
+  action text not null,
+  entity_type text not null,
+  entity_id uuid,
+  detail jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index audit_log_entity_idx on audit_log (entity_type, entity_id);
+
 -- ---------- LVBC U-THERE (outing polls) ----------
 create table lvbc_u_there (
   id uuid primary key default gen_random_uuid(),
@@ -360,6 +376,7 @@ alter table shifts enable row level security;
 alter table shift_day_settings enable row level security;
 alter table schedule_settings enable row level security;
 alter table blackout_dates enable row level security;
+alter table audit_log enable row level security;
 
 -- staff_profiles: staff can read the roster; only admins manage roles
 create policy "staff read roster" on staff_profiles for select using (is_staff());
@@ -393,7 +410,7 @@ create policy "public read badges" on badges for select using (true);
 create policy "staff write badges" on badges for all using (is_staff()) with check (is_staff());
 
 create policy "public read events" on events for select using (true);
-create policy "staff write events" on events for all using (is_staff()) with check (is_staff());
+create policy "schedulers write events" on events for all using (can_schedule()) with check (can_schedule());
 
 create policy "public read uthere" on lvbc_u_there for select using (true);
 create policy "staff write uthere" on lvbc_u_there for all using (is_staff()) with check (is_staff());
@@ -414,6 +431,9 @@ create policy "own blackout dates" on blackout_dates for all
   using (staff_id = auth.uid()) with check (staff_id = auth.uid());
 create policy "schedulers read all blackout dates" on blackout_dates for select
   using (can_schedule());
+
+create policy "schedulers read audit log" on audit_log for select using (can_schedule());
+create policy "schedulers write audit log" on audit_log for insert with check (can_schedule());
 
 -- Staff-only, both read and write: PII / financial-equivalent (points) data
 create policy "staff only members" on members for all using (is_staff()) with check (is_staff());

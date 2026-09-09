@@ -64,15 +64,27 @@ function myShiftDayCellHtml(dateObj) {
   }
 
   const mine = myShiftsData.filter((s) => s.shift_date === dateStr);
-  const mod = myModData.find((s) => s.shift_date === dateStr);
+  const dayLevelMods = myModData.filter((s) => s.shift_date === dateStr && !s.period);
+  const halves = [];
+  if (setting.morning_start) halves.push('morning');
+  if (setting.evening_start) halves.push('evening');
+  const modName = (m) => escHtml(m.staff_id === window.currentStaff.id ? 'you' : staffName(m.staff_id));
 
   let html = '<div class="' + cls + '" onclick="toggleBlackoutForDate(\'' + dateStr + '\')" title="Click to toggle a blackout for this date">';
   html += '<div class="cal-day-num">' + dateObj.getDate() + '</div>';
-  if (mod) html += '<div class="cal-mod-pill">MOD: ' + escHtml(mod.staff_id === window.currentStaff.id ? 'you' : staffName(mod.staff_id)) + '</div>';
-  mine.forEach((s) => {
-    const label = s.role === 'manager' ? 'MOD (you)' : (s.period === 'morning' ? 'Morning' : 'Evening');
-    html += '<div class="cal-pill-emp">' + label + (s.start_time ? ' · ' + fmtTime(s.start_time) : '') + '</div>';
+  dayLevelMods.forEach((m) => { html += '<div class="cal-mod-pill">MOD: ' + modName(m) + '</div>'; });
+  html += '<div class="cal-day-split">';
+  halves.forEach((period) => {
+    html += '<div class="cal-half">';
+    myModData.filter((s) => s.shift_date === dateStr && s.period === period).forEach((m) => {
+      html += '<div class="cal-mod-pill">MOD: ' + modName(m) + '</div>';
+    });
+    mine.filter((s) => s.role === 'bartender' && s.period === period).forEach((s) => {
+      html += '<div class="cal-pill-emp">' + (period === 'morning' ? 'Morning' : 'Evening') + (s.start_time ? ' · ' + fmtTime(s.start_time) : '') + '</div>';
+    });
+    html += '</div>';
   });
+  html += '</div>';
   if (blacked) html += '<div class="cal-pill-event" style="background:rgba(224,82,82,0.12);border-color:rgba(224,82,82,0.3);color:var(--red);">Blacked out</div>';
   html += '</div>';
   return html;
