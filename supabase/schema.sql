@@ -6,6 +6,10 @@
 -- ---------- STAFF AUTH ----------
 -- Staff log in via Supabase Auth (email/password). This table maps
 -- an auth.users row to a role so RLS can gate writes.
+-- NOTE: as of migration_008, this FK is dropped on the live DB to
+-- allow placeholder demo rows (no auth.users match yet). Fresh
+-- installs should keep the FK below; see migration_008 for the
+-- plan to relink demo rows and re-add it once real logins exist.
 create table staff_profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   name text not null,
