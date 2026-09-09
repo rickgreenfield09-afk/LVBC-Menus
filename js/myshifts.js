@@ -80,7 +80,7 @@ function myShiftDayCellHtml(dateObj) {
       html += '<div class="cal-mod-pill">MOD: ' + modName(m) + '</div>';
     });
     mine.filter((s) => s.role === 'bartender' && s.period === period).forEach((s) => {
-      html += '<div class="cal-pill-emp">' + (period === 'morning' ? 'Morning' : 'Evening') + (s.start_time ? ' · ' + fmtTime(s.start_time) : '') + '</div>';
+      html += '<div class="cal-pill-emp">' + shiftSlotLabel(setting, period) + (s.start_time ? ' · ' + fmtTime(s.start_time) : '') + '</div>';
     });
     html += '</div>';
   });
@@ -214,7 +214,8 @@ function buildIcsForMyShifts() {
   };
   let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//LVBC//Schedule//EN\r\n';
   myShiftsData.forEach((s) => {
-    const label = s.role === 'manager' ? 'LVBC - Manager on Duty' : 'LVBC - Bartender Shift (' + (s.period === 'morning' ? 'Morning' : 'Evening') + ')';
+    const shiftSetting = scheduleDaySettings.find((x) => x.day_of_week === new Date(s.shift_date + 'T00:00:00').getDay()) || {};
+    const label = s.role === 'manager' ? 'LVBC - Manager on Duty' : 'LVBC - Bartender Shift (' + shiftSlotLabel(shiftSetting, s.period) + ')';
     ics += 'BEGIN:VEVENT\r\nUID:' + s.id + '@lvbc-menus\r\nDTSTART:' + fmtDt(s.shift_date, s.start_time || '09:00')
       + '\r\nDTEND:' + fmtDt(s.shift_date, s.end_time || '17:00') + '\r\nSUMMARY:' + label + '\r\nEND:VEVENT\r\n';
   });

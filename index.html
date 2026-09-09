@@ -175,19 +175,27 @@
               </div>
               <div class="card">
                 <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Name</label><input class="form-input" style="width:100%;" type="text" id="ev-name" placeholder="e.g. Trivia Night"></div>
+                <div class="form-group" style="margin-bottom:16px;">
+                  <label class="form-label">Type</label>
+                  <select class="form-select" style="width:100%;" id="ev-type" onchange="onEventTypeChange()">
+                    <option value="trivia">Trivia</option>
+                    <option value="bingo">Music Bingo</option>
+                    <option value="karaoke">Karaoke</option>
+                    <option value="special">Special / Performance</option>
+                    <option value="market">Farmers Market</option>
+                    <option value="foodtruck">Food Truck</option>
+                    <option value="__other__">Other...</option>
+                  </select>
+                </div>
+                <div class="form-group" id="ev-other-wrap" style="display:none;margin-bottom:16px;">
+                  <label class="form-label">Custom Type Name</label>
+                  <input class="form-input" style="width:100%;" type="text" id="ev-other-text" placeholder="e.g. Live Music">
+                  <label class="checkbox-row" style="margin-top:8px;margin-bottom:0;"><input type="checkbox" id="ev-other-save"> Save this type for future events</label>
+                </div>
+                <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Date</label><input class="form-input" style="width:100%;" type="date" id="ev-date"></div>
                 <div class="form-row">
-                  <div class="form-group">
-                    <label class="form-label">Type</label>
-                    <select class="form-select" style="width:100%;" id="ev-type">
-                      <option value="trivia">Trivia</option>
-                      <option value="bingo">Music Bingo</option>
-                      <option value="karaoke">Karaoke</option>
-                      <option value="special">Special / Performance</option>
-                      <option value="market">Farmers Market</option>
-                      <option value="default">Other</option>
-                    </select>
-                  </div>
-                  <div class="form-group"><label class="form-label">Date &amp; Time</label><input class="form-input" style="width:100%;" type="datetime-local" id="ev-date"></div>
+                  <div class="form-group"><label class="form-label">Start Time</label><input class="form-input" style="width:100%;" type="time" id="ev-start-time"></div>
+                  <div class="form-group"><label class="form-label">End Time</label><input class="form-input" style="width:100%;" type="time" id="ev-end-time"></div>
                 </div>
                 <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Notes</label><textarea class="form-ta" id="ev-notes" rows="2"></textarea></div>
                 <div id="event-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
@@ -197,6 +205,52 @@
             <div class="grid2-col">
               <div class="menu-col-header"><div class="section-label" style="margin:0;">Upcoming Events</div></div>
               <div id="events-list"><div class="loading">Loading...</div></div>
+            </div>
+          </div>
+
+          <div class="grid-2" style="margin-top:24px;">
+            <div class="grid2-col">
+              <div class="menu-col-header">
+                <div class="section-label" style="margin:0;" id="rec-form-label">Add Recurring Event</div>
+                <button class="btn btn-sm btn-secondary" id="rec-cancel-edit" style="visibility:hidden;" onclick="cancelRecurringEventEdit()">&#10005; Cancel Edit</button>
+              </div>
+              <div class="card">
+                <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Name</label><input class="form-input" style="width:100%;" type="text" id="rec-name" placeholder="e.g. VFW Night"></div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">Recurrence</label>
+                    <select class="form-select" style="width:100%;" id="rec-type" onchange="onRecurrenceTypeChange()">
+                      <option value="weekly">Every week</option>
+                      <option value="monthly_nth_weekday">A specific week each month</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Weekday</label>
+                    <select class="form-select" style="width:100%;" id="rec-weekday">
+                      <option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option>
+                      <option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-group" id="rec-week-of-month-wrap" style="display:none;margin-bottom:16px;">
+                  <label class="form-label">Which Week</label>
+                  <select class="form-select" style="width:100%;" id="rec-week-of-month">
+                    <option value="1">1st</option><option value="2">2nd</option><option value="3">3rd</option><option value="4">4th</option><option value="5">Last</option>
+                  </select>
+                </div>
+                <div class="form-row">
+                  <div class="form-group"><label class="form-label">Start Time</label><input class="form-input" style="width:100%;" type="time" id="rec-start-time"></div>
+                  <div class="form-group"><label class="form-label">End Time</label><input class="form-input" style="width:100%;" type="time" id="rec-end-time"></div>
+                </div>
+                <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Default Staffer (optional)</label><select class="form-select" style="width:100%;" id="rec-staff"></select></div>
+                <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Notes</label><textarea class="form-ta" id="rec-notes" rows="2"></textarea></div>
+                <div id="recurring-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
+                <button class="btn btn-primary" id="btn-save-recurring" style="width:100%;" onclick="saveRecurringEvent()">Add Recurring Event</button>
+              </div>
+            </div>
+            <div class="grid2-col">
+              <div class="menu-col-header"><div class="section-label" style="margin:0;">Recurring Events</div></div>
+              <div id="recurring-events-list"><div class="loading">Loading...</div></div>
             </div>
           </div>
         </div>
@@ -287,6 +341,7 @@
                     <option value="karaoke">Karaoke</option>
                     <option value="special">Special / Performance</option>
                     <option value="market">Farmers Market</option>
+                    <option value="foodtruck">Food Truck</option>
                     <option value="default">Other</option>
                   </select>
                 </div>
@@ -566,6 +621,7 @@
   <script src="js/app-core.js"></script>
   <script src="js/menu.js"></script>
   <script src="js/schedule.js"></script>
+  <script src="js/recurring.js"></script>
   <script src="js/myshifts.js"></script>
   <script src="js/events.js"></script>
 </body>

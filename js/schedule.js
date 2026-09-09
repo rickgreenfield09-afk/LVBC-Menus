@@ -14,7 +14,9 @@ let scheduleStaff = [];
 let scheduleDaySettings = [];
 let scheduleSettings = null;
 let scheduleActiveDate = null;
-let bulkPopulated = false;
+let recurringEvents = [];
+let recurringOverrides = [];
+let visibleRecurringOccurrences = [];
 
 function canSchedule() {
   return !!(window.currentStaff && (window.currentStaff.can_schedule || window.currentStaff.role === 'admin'));
@@ -41,7 +43,7 @@ function fmtTime(t) {
 // as bartenders now, since MOD swaps at the same break as staff.
 function positionOptionsForSetting(setting) {
   const opts = [];
-  if (setting.morning_start) { opts.push(['bartender:morning', 'Bartender - Morning']); opts.push(['manager:morning', 'Manager - Morning']); }
+  if (setting.morning_start) { const l = shiftSlotLabel(setting, 'morning'); opts.push(['bartender:morning', 'Bartender - ' + l]); opts.push(['manager:morning', 'Manager - ' + l]); }
   if (setting.evening_start) { opts.push(['bartender:evening', 'Bartender - Evening']); opts.push(['manager:evening', 'Manager - Evening']); }
   return opts;
 }
@@ -59,14 +61,35 @@ async function logAudit(action, entityType, entityId, detail) {
 
 // ── ENTRY ────────────────────────────────────────────────
 async function loadStaffAndSettings() {
-  const [{ data: staffData }, { data: daySettingsData }, { data: settingsData }] = await Promise.all([
-    window.supabase.from('staff_profiles').select('id,name').order('name'),
+  const [{ data: staffData }, { data: daySettingsData }, { data: settingsData }, { data: recEvents }, { data: recOverrides }] = await Promise.all([
+    window.supabase.from('staff_profiles').select('id,name,role').order('name'),
     window.supabase.from('shift_day_settings').select('*').order('day_of_week'),
     window.supabase.from('schedule_settings').select('*').limit(1),
+    window.supabase.from('recurring_events').select('*').eq('is_active', true),
+    window.supabase.from('recurring_event_overrides').select('*'),
   ]);
   scheduleStaff = staffData || [];
   scheduleDaySettings = daySettingsData || [];
   scheduleSettings = (settingsData && settingsData[0]) || null;
+  recurringEvents = recEvents || [];
+  recurringOverrides = recOverrides || [];
+}
+
+// "Morning" reads oddly for a shift that starts at 1pm (Sunday) — so
+// label off the day's actual start hour instead of a fixed name.
+function shiftSlotLabel(setting, period) {
+  if (period === 'evening') return 'Evening';
+  const h = setting && setting.morning_start ? parseInt(setting.morning_start.split(':')[0], 10) : 9;
+  return h >= 12 ? 'Afternoon' : 'Morning';
+}
+
+// Position dropdowns filter the staff list to admins for a manager
+// slot and non-admins for a bartender slot.
+function populateStaffSelect(selectEl, roleFilter) {
+  const list = scheduleStaff.filter((s) => (roleFilter === 'manager' ? s.role === 'admin' : s.role !== 'admin'));
+  const prev = selectEl.value;
+  selectEl.innerHTML = '<option value="" disabled selected>Select staff member</option>' + list.map((s) => '<option value="' + s.id + '">' + escHtml(s.name) + '</option>').join('');
+  if (list.some((s) => s.id === prev)) selectEl.value = prev;
 }
 
 async function loadSchedule() {
@@ -92,7 +115,7 @@ function setScheduleTab(tab, btn) {
   document.getElementById('scheduletab-' + tab).classList.add('active');
   if (tab === 'myshifts') loadMyShifts();
   if (tab === 'calendar') loadScheduleRange();
-  if (tab === 'bulk') { if (!bulkPopulated) { populateBulkSelectors(); bulkPopulated = true; } loadBulkShiftList(); }
+  if (tab === 'bulk') { populateBulkSelectors(); loadBulkShiftList(); }
   if (tab === 'events') loadEventsList();
   if (tab === 'settings') { renderDaySettingsRows(); populateScheduleSettingsForm(); }
 }
@@ -165,6 +188,7 @@ async function loadScheduleRange() {
   if (shiftErr) { grid.innerHTML = '<div class="loading">Error: ' + escHtml(shiftErr.message) + '</div>'; return; }
   scheduleShifts = shiftData || [];
   scheduleEvents = eventErr ? [] : (eventData || []);
+  recomputeVisibleRecurring();
   renderScheduleCalendar();
 }
 
@@ -179,14 +203,29 @@ function dayCellHtml(dateObj, extraClass) {
   const isToday = dateStr === toDateStr(new Date());
   const cls = 'cal-day' + (extraClass ? ' ' + extraClass : '') + (isToday ? ' today' : '');
 
+  // Closed days can still host a one-off/recurring event (e.g. VFW
+  // night on an otherwise-closed Tuesday) — only skip the bartender
+  // split, never the event pills.
   if (setting.is_closed) {
-    return '<div class="' + cls + ' closed" onclick="openShiftModal(\'' + dateStr + '\')">'
-      + '<div class="cal-day-num">' + dateObj.getDate() + '</div><div class="cal-closed-label">Closed</div></div>';
+    const closedDayEvents = scheduleEvents.filter((e) => toDateStr(new Date(e.event_date)) === dateStr);
+    const closedDayRecurring = visibleRecurringOccurrences.filter((o) => o.date === dateStr);
+    let closedHtml = '<div class="' + cls + (closedDayEvents.length || closedDayRecurring.length ? '' : ' closed') + '" onclick="openShiftModal(\'' + dateStr + '\')">'
+      + '<div class="cal-day-num">' + dateObj.getDate() + '</div>';
+    if (!closedDayEvents.length && !closedDayRecurring.length) {
+      closedHtml += '<div class="cal-closed-label">Closed</div></div>';
+      return closedHtml;
+    }
+    closedHtml += '<div class="cal-closed-label">Closed</div>';
+    closedDayEvents.forEach((e) => { closedHtml += '<div class="cal-pill-event">' + escHtml(e.event_name) + '</div>'; });
+    closedDayRecurring.forEach((o) => { closedHtml += '<div class="cal-pill-event recurring">' + escHtml(o.name) + (o.staff_id ? ' · ' + escHtml(staffName(o.staff_id)) : '') + '</div>'; });
+    closedHtml += '</div>';
+    return closedHtml;
   }
 
   const dayShifts = scheduleShifts.filter((s) => s.shift_date === dateStr);
   const dayLevelMods = dayShifts.filter((s) => s.role === 'manager' && !s.period);
   const dayEvents = scheduleEvents.filter((e) => toDateStr(new Date(e.event_date)) === dateStr);
+  const dayRecurring = visibleRecurringOccurrences.filter((o) => o.date === dateStr);
   const halves = [];
   if (setting.morning_start) halves.push('morning');
   if (setting.evening_start) halves.push('evening');
@@ -208,6 +247,13 @@ function dayCellHtml(dateObj, extraClass) {
       return period === 'morning' ? new Date(e.event_date).getHours() < 15 : new Date(e.event_date).getHours() >= 15;
     }).forEach((e) => {
       html += '<div class="cal-pill-event">' + escHtml(e.event_name) + '</div>';
+    });
+    dayRecurring.filter((o) => {
+      if (halves.length === 1) return true;
+      const hr = o.start_time ? parseInt(o.start_time.split(':')[0], 10) : 18;
+      return period === 'morning' ? hr < 15 : hr >= 15;
+    }).forEach((o) => {
+      html += '<div class="cal-pill-event recurring">' + escHtml(o.name) + (o.staff_id ? ' · ' + escHtml(staffName(o.staff_id)) : '') + '</div>';
     });
     html += '</div>';
   });
@@ -255,8 +301,6 @@ async function openShiftModal(dateStr) {
   editBtn.style.display = canSchedule() ? '' : 'none';
   editBtn.textContent = 'Edit';
 
-  const staffSel = document.getElementById('sm-staff');
-  staffSel.innerHTML = scheduleStaff.map((s) => '<option value="' + s.id + '">' + escHtml(s.name) + '</option>').join('');
   document.getElementById('sm-role').innerHTML = positionOptionsForSetting(setting).map(([v, l]) => '<option value="' + v + '">' + l + '</option>').join('');
   document.getElementById('sm-notes').value = '';
 
@@ -293,7 +337,8 @@ function applyShiftModalEditVisibility() {
 function onShiftModalRoleChange() {
   const dow = new Date(scheduleActiveDate + 'T00:00:00').getDay();
   const setting = scheduleDaySettings.find((s) => s.day_of_week === dow) || {};
-  const { period } = parsePosition(document.getElementById('sm-role').value || 'bartender:morning');
+  const { role, period } = parsePosition(document.getElementById('sm-role').value || 'bartender:morning');
+  populateStaffSelect(document.getElementById('sm-staff'), role);
   const start = period === 'morning' ? setting.morning_start : setting.evening_start;
   const end = period === 'morning' ? setting.morning_end : setting.evening_end;
   document.getElementById('sm-start').value = (start || '').slice(0, 5);
@@ -313,7 +358,7 @@ function renderShiftModalList() {
   const editing = canSchedule() && shiftModalEditMode;
   listEl.innerHTML = shifts.map((s) => {
     const periodTag = s.period ? (s.period === 'morning' ? ' (AM)' : ' (PM)') : '';
-    const label = s.role === 'manager' ? 'Manager on Duty' + periodTag : (s.period === 'morning' ? 'Morning' : 'Evening');
+    const label = s.role === 'manager' ? 'Manager on Duty' + periodTag : shiftSlotLabel(setting, s.period);
     return '<div class="shift-row">'
       + '<div><div class="shift-row-name">' + escHtml(staffName(s.staff_id)) + (s.role === 'manager' ? ' <span class="badge badge-amber">MOD' + periodTag + '</span>' : '') + '</div>'
       + '<div class="shift-row-meta">' + label + (s.start_time ? ' · ' + fmtTime(s.start_time) + (s.end_time ? '–' + fmtTime(s.end_time) : '') : '') + (s.notes ? ' · ' + escHtml(s.notes) : '') + '</div></div>'
@@ -368,8 +413,10 @@ async function fetchEventsForDate(dateStr) {
 function renderModalEventsList() {
   const el = document.getElementById('shift-modal-events-list');
   const editing = canSchedule() && shiftModalEditMode;
-  if (!modalEvents.length) { el.innerHTML = '<div class="loading">No events this day</div>'; return; }
-  el.innerHTML = modalEvents.map((e) => {
+  const recurringToday = computeRecurringOccurrences(new Date(scheduleActiveDate + 'T00:00:00'), new Date(scheduleActiveDate + 'T00:00:00'))
+    .filter((o) => o.date === scheduleActiveDate);
+
+  const oneOffHtml = modalEvents.map((e) => {
     const t = new Date(e.event_date);
     return '<div class="shift-row">'
       + '<div><div class="shift-row-name">' + escHtml(e.event_name) + '</div>'
@@ -377,6 +424,25 @@ function renderModalEventsList() {
       + (editing ? '<button class="btn btn-sm btn-danger" onclick="deleteModalEvent(\'' + e.id + '\')">Remove</button>' : '')
       + '</div>';
   }).join('');
+
+  const recurringHtml = recurringToday.map((o) => {
+    const idSafe = o.recurringEventId + '-' + o.baseDate;
+    const staffOptions = '<option value="">Unassigned</option>' + scheduleStaff.map((s) => '<option value="' + s.id + '"' + (s.id === o.staff_id ? ' selected' : '') + '>' + escHtml(s.name) + '</option>').join('');
+    return '<div class="shift-row" style="align-items:flex-start;">'
+      + '<div style="flex:1;"><div class="shift-row-name">' + escHtml(o.name) + ' <span class="badge badge-purple">Recurring</span>' + (o.moved ? ' <span class="badge badge-amber">Moved</span>' : '') + '</div>'
+      + '<div class="shift-row-meta">' + (o.start_time ? fmtTime(o.start_time) + (o.end_time ? '–' + fmtTime(o.end_time) : '') : '') + (o.staff_id ? ' · ' + escHtml(staffName(o.staff_id)) : ' · Unassigned') + '</div>'
+      + (editing ? '<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">'
+        + '<select class="form-select" style="width:100%;" onchange="assignRecurringStaff(\'' + o.recurringEventId + '\',\'' + o.baseDate + '\',this.value)">' + staffOptions + '</select>'
+        + '<div style="display:flex;gap:6px;">'
+        + '<input type="date" class="form-input" id="rec-move-' + idSafe + '" style="flex:1;">'
+        + '<button class="btn btn-sm btn-secondary" onclick="moveRecurringOccurrence(\'' + o.recurringEventId + '\',\'' + o.baseDate + '\')">Move</button>'
+        + '<button class="btn btn-sm btn-danger" onclick="skipRecurringOccurrence(\'' + o.recurringEventId + '\',\'' + o.baseDate + '\')">Skip</button>'
+        + '</div></div>' : '')
+      + '</div></div>';
+  }).join('');
+
+  const combined = oneOffHtml + recurringHtml;
+  el.innerHTML = combined || '<div class="loading">No events this day</div>';
 }
 
 async function addModalEvent() {
@@ -415,8 +481,9 @@ let bulkSelectedWeekdays = new Set();
 let bulkSelectedDates = new Set();
 
 function populateBulkSelectors() {
-  document.getElementById('bk-staff').innerHTML = scheduleStaff.map((s) => '<option value="' + s.id + '">' + escHtml(s.name) + '</option>').join('');
   document.getElementById('bulk-filter-staff').innerHTML = '<option value="">All Staff</option>' + scheduleStaff.map((s) => '<option value="' + s.id + '">' + escHtml(s.name) + '</option>').join('');
+  document.getElementById('bulk-filter-position').value = '';
+  document.getElementById('bk-staff').value = '';
   const monthStart = new Date(scheduleCursor.getFullYear(), scheduleCursor.getMonth(), 1);
   const monthEnd = new Date(scheduleCursor.getFullYear(), scheduleCursor.getMonth() + 1, 0);
   document.getElementById('bk-from').value = toDateStr(monthStart);
@@ -464,7 +531,7 @@ function validPositionsForSelectedWeekdays() {
   const morningOk = days.length && days.every((d) => d.morning_start);
   const eveningOk = days.length && days.every((d) => d.evening_start);
   const opts = [];
-  if (morningOk) { opts.push(['bartender:morning', 'Bartender - Morning']); opts.push(['manager:morning', 'Manager - Morning']); }
+  if (morningOk) { const l = shiftSlotLabel(days[0], 'morning'); opts.push(['bartender:morning', 'Bartender - ' + l]); opts.push(['manager:morning', 'Manager - ' + l]); }
   if (eveningOk) { opts.push(['bartender:evening', 'Bartender - Evening']); opts.push(['manager:evening', 'Manager - Evening']); }
   return opts;
 }
@@ -475,6 +542,8 @@ function onBulkPositionChange() {
   const prev = posSel.value;
   posSel.innerHTML = valid.map(([v, l]) => '<option value="' + v + '">' + l + '</option>').join('');
   if (valid.some(([v]) => v === prev)) posSel.value = prev;
+  const { role } = parsePosition(posSel.value || 'bartender:morning');
+  populateStaffSelect(document.getElementById('bk-staff'), role);
   renderBulkDatePicker();
 }
 
@@ -558,8 +627,9 @@ async function loadBulkShiftList() {
   el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Position</th><th>Staff</th><th>Time</th><th></th></tr></thead><tbody>' +
     data.map((s) => {
       const d = new Date(s.shift_date + 'T00:00:00');
+      const rowSetting = scheduleDaySettings.find((x) => x.day_of_week === d.getDay()) || {};
       const periodTag = s.period ? (s.period === 'morning' ? 'AM' : 'PM') : '';
-      const label = (s.role === 'manager' ? 'MOD' : (s.period === 'morning' ? 'Morning' : 'Evening')) + (s.role === 'manager' && periodTag ? ' ' + periodTag : '');
+      const label = (s.role === 'manager' ? 'MOD' : shiftSlotLabel(rowSetting, s.period)) + (s.role === 'manager' && periodTag ? ' ' + periodTag : '');
       return '<tr><td>' + d.toLocaleDateString('default', { month: 'short', day: 'numeric' }) + '</td><td>' + label + '</td><td>' + escHtml(staffName(s.staff_id)) + '</td>'
         + '<td style="font-family:\'DM Mono\',monospace;font-size:12px">' + (s.start_time ? fmtTime(s.start_time) + (s.end_time ? '–' + fmtTime(s.end_time) : '') : '') + '</td>'
         + '<td>' + (canSchedule() ? '<button class="btn btn-sm btn-danger" onclick="deleteBulkShift(\'' + s.id + '\')">Remove</button>' : '') + '</td></tr>';
