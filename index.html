@@ -202,6 +202,11 @@
                   <label class="checkbox-row" style="margin-top:8px;margin-bottom:0;"><input type="checkbox" id="ev-other-save"> Save this type for future events</label>
                 </div>
 
+                <div class="form-group" id="ev-staff-wrap" style="display:none;margin-bottom:16px;">
+                  <label class="form-label">Assigned Staffer</label>
+                  <select class="form-select" style="width:100%;" id="ev-staff"><option value="">Unassigned</option></select>
+                </div>
+
                 <div class="sub-tabs" style="margin-bottom:16px;">
                   <button class="sub-tab active" id="ev-mode-btn-once" onclick="setEventMode('once')">One-Time</button>
                   <button class="sub-tab" id="ev-mode-btn-recurring" onclick="setEventMode('recurring')">Recurring</button>

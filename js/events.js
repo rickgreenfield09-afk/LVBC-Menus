@@ -40,6 +40,7 @@ async function loadEventsList() {
   el.innerHTML = '<div class="loading">Loading...</div>';
   await loadEventTypes();
   await refreshRecurringData();
+  document.getElementById('ev-staff').innerHTML = '<option value="">Unassigned</option>' + scheduleStaff.map((s) => '<option value="' + s.id + '">' + escHtml(s.name) + '</option>').join('');
 
   const { data, error } = await window.supabase.from('events').select('*').gte('event_date', toDateStr(new Date()) + 'T00:00:00').order('event_date');
   if (error) { el.innerHTML = '<div class="loading">Error: ' + escHtml(error.message) + '</div>'; return; }
@@ -52,7 +53,7 @@ function renderEventsList() {
   const today = new Date();
   const lookAhead = new Date(today); lookAhead.setDate(lookAhead.getDate() + 60);
   const upcomingRecurring = computeRecurringOccurrences(today, lookAhead)
-    .map((o) => ({ kind: 'recurring', recurringEventId: o.recurringEventId, sortKey: o.date + 'T' + (o.start_time || '00:00'), date: o.date, start_time: o.start_time, end_time: o.end_time, name: o.name, event_type: o.event_type }));
+    .map((o) => ({ kind: 'recurring', recurringEventId: o.recurringEventId, sortKey: o.date + 'T' + (o.start_time || '00:00'), date: o.date, start_time: o.start_time, end_time: o.end_time, name: o.name, event_type: o.event_type, staff_id: o.staff_id }));
   const oneOff = eventsList.map((e) => ({ kind: 'event', id: e.id, sortKey: e.event_date, event: e }));
   const combined = oneOff.concat(upcomingRecurring).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
 
@@ -69,6 +70,7 @@ function renderEventsList() {
         + '<div class="event-date-time">' + d.toLocaleTimeString('default', { hour: 'numeric', minute: '2-digit' }) + (end ? '–' + end.toLocaleTimeString('default', { hour: 'numeric', minute: '2-digit' }) : '') + '</div></div>'
         + '<div class="event-info"><span class="event-type-badge etype-' + escHtml(BUILTIN_EVENT_TYPES[e.event_type] ? e.event_type : 'default') + '">' + escHtml(eventTypeLabel(e.event_type)) + '</span>'
         + '<div class="event-name">' + escHtml(e.event_name) + '</div>'
+        + (e.event_type === 'vfw' ? '<div class="event-meta">' + (e.staff_id ? escHtml(staffName(e.staff_id)) : 'Unassigned') + '</div>' : '')
         + (e.notes ? '<div class="event-meta">' + escHtml(e.notes) + '</div>' : '') + '</div>'
         + '<div style="display:flex;gap:6px;">'
         + '<button class="btn btn-sm btn-secondary" onclick="editEvent(\'' + e.id + '\')">Edit</button>'
@@ -81,7 +83,8 @@ function renderEventsList() {
       + '<div class="event-date-day">' + d.getDate() + '</div>'
       + '<div class="event-date-time">' + (item.start_time ? fmtTime(item.start_time) + (item.end_time ? '–' + fmtTime(item.end_time) : '') : '') + '</div></div>'
       + '<div class="event-info"><span class="event-type-badge etype-' + escHtml(BUILTIN_EVENT_TYPES[item.event_type] ? item.event_type : 'default') + '">' + escHtml(eventTypeLabel(item.event_type)) + '</span> <span class="badge badge-purple">Recurring</span>'
-      + '<div class="event-name">' + escHtml(item.name) + '</div></div>'
+      + '<div class="event-name">' + escHtml(item.name) + '</div>'
+      + (item.event_type === 'vfw' ? '<div class="event-meta">' + (item.staff_id ? escHtml(staffName(item.staff_id)) : 'Unassigned') + '</div>' : '') + '</div>'
       + '<div style="display:flex;gap:6px;">'
       + '<button class="btn btn-sm btn-secondary" onclick="editRecurringEvent(\'' + item.recurringEventId + '\')">Edit</button>'
       + '<button class="btn btn-sm btn-danger" onclick="deleteRecurringEvent(\'' + item.recurringEventId + '\')">Delete</button>'
@@ -107,6 +110,7 @@ function onRecurrenceTypeChange() {
 function onEventTypeChange() {
   const val = document.getElementById('ev-type').value;
   document.getElementById('ev-other-wrap').style.display = val === '__other__' ? '' : 'none';
+  document.getElementById('ev-staff-wrap').style.display = val === 'vfw' ? '' : 'none';
   const nameEl = document.getElementById('ev-name');
   const isAutoOrEmpty = !nameEl.value || Object.values(AUTO_EVENT_NAMES).includes(nameEl.value);
   if (AUTO_EVENT_NAMES[val] && isAutoOrEmpty) nameEl.value = AUTO_EVENT_NAMES[val];
@@ -136,6 +140,8 @@ function editEvent(id) {
   document.getElementById('ev-start-time').value = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
   document.getElementById('ev-end-time').value = e.event_end ? (() => { const t = new Date(e.event_end); return String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0'); })() : '';
   document.getElementById('ev-notes').value = e.notes || '';
+  document.getElementById('ev-staff-wrap').style.display = e.event_type === 'vfw' ? '' : 'none';
+  document.getElementById('ev-staff').value = e.staff_id || '';
   document.getElementById('btn-save-event').textContent = 'Save Changes';
 }
 
@@ -149,6 +155,8 @@ function cancelEventEdit() {
   document.getElementById('ev-other-wrap').style.display = 'none';
   document.getElementById('ev-other-text').value = '';
   document.getElementById('ev-other-save').checked = false;
+  document.getElementById('ev-staff-wrap').style.display = 'none';
+  document.getElementById('ev-staff').value = '';
   document.getElementById('ev-date').value = '';
   document.getElementById('ev-start-time').value = '';
   document.getElementById('ev-end-time').value = '';
@@ -202,6 +210,7 @@ async function saveOneOffEvent(name, eventType) {
     event_type: eventType,
     event_date: dateVal + 'T' + startVal + ':00',
     event_end: endVal ? dateVal + 'T' + endVal + ':00' : null,
+    staff_id: eventType === 'vfw' ? (document.getElementById('ev-staff').value || null) : null,
     notes: document.getElementById('ev-notes').value.trim() || null,
   };
 
@@ -251,6 +260,8 @@ function editRecurringEvent(id) {
   document.getElementById('rec-start-time').value = (re.start_time || '').slice(0, 5);
   document.getElementById('rec-end-time').value = (re.end_time || '').slice(0, 5);
   document.getElementById('ev-notes').value = re.notes || '';
+  document.getElementById('ev-staff-wrap').style.display = re.event_type === 'vfw' ? '' : 'none';
+  document.getElementById('ev-staff').value = re.default_staff_id || '';
   document.getElementById('btn-save-event').textContent = 'Save Changes';
 }
 
@@ -266,6 +277,7 @@ async function saveRecurringEvent(name, eventType) {
     week_of_month: recurrenceType === 'monthly_nth_weekday' ? parseInt(document.getElementById('rec-week-of-month').value, 10) : null,
     start_time: document.getElementById('rec-start-time').value || null,
     end_time: document.getElementById('rec-end-time').value || null,
+    default_staff_id: eventType === 'vfw' ? (document.getElementById('ev-staff').value || null) : null,
     notes: document.getElementById('ev-notes').value.trim() || null,
   };
 

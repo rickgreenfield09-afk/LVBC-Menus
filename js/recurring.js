@@ -97,6 +97,14 @@ async function upsertRecurringOverride(recurringEventId, baseDate, patch) {
   return true;
 }
 
+async function assignRecurringStaff(recurringEventId, baseDate, staffId) {
+  if (!canSchedule()) return;
+  if (await upsertRecurringOverride(recurringEventId, baseDate, { staff_id: staffId || null })) {
+    toast('Updated');
+    refreshRecurringOnActiveDate();
+  }
+}
+
 async function skipRecurringOccurrence(recurringEventId, baseDate) {
   if (!canSchedule()) return;
   if (await upsertRecurringOverride(recurringEventId, baseDate, { skipped: true })) {

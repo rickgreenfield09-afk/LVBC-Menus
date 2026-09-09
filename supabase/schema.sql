@@ -230,6 +230,9 @@ create table events (
   event_type text,
   event_date timestamptz not null,
   event_end timestamptz,
+  -- Events generally don't need a staffer; VFW night is the one
+  -- exception (see migration_012).
+  staff_id uuid references staff_profiles(id) on delete set null,
   points_available int default 30,
   max_capacity int,
   notes text,

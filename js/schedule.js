@@ -218,7 +218,7 @@ function dayCellHtml(dateObj, extraClass) {
     }
     closedHtml += '<div class="cal-closed-label">Closed</div>';
     closedDayEvents.forEach((e) => { closedHtml += '<div class="cal-pill-event">' + escHtml(e.event_name) + '</div>'; });
-    closedDayRecurring.forEach((o) => { closedHtml += '<div class="cal-pill-event recurring">' + escHtml(o.name) + '</div>'; });
+    closedDayRecurring.forEach((o) => { closedHtml += '<div class="cal-pill-event recurring">' + escHtml(o.name) + (o.event_type === 'vfw' && o.staff_id ? ' · ' + escHtml(staffName(o.staff_id)) : '') + '</div>'; });
     closedHtml += '</div>';
     return closedHtml;
   }
@@ -254,7 +254,7 @@ function dayCellHtml(dateObj, extraClass) {
       const hr = o.start_time ? parseInt(o.start_time.split(':')[0], 10) : 18;
       return period === 'morning' ? hr < 15 : hr >= 15;
     }).forEach((o) => {
-      html += '<div class="cal-pill-event recurring">' + escHtml(o.name) + '</div>';
+      html += '<div class="cal-pill-event recurring">' + escHtml(o.name) + (o.event_type === 'vfw' && o.staff_id ? ' · ' + escHtml(staffName(o.staff_id)) : '') + '</div>';
     });
     html += '</div>';
   });
@@ -419,23 +419,28 @@ function renderModalEventsList() {
 
   const oneOffHtml = modalEvents.map((e) => {
     const t = new Date(e.event_date);
+    const isVfw = e.event_type === 'vfw';
     return '<div class="shift-row">'
       + '<div><div class="shift-row-name">' + escHtml(e.event_name) + '</div>'
-      + '<div class="shift-row-meta">' + t.toLocaleTimeString('default', { hour: 'numeric', minute: '2-digit' }) + (e.event_type ? ' · ' + escHtml(e.event_type) : '') + '</div></div>'
+      + '<div class="shift-row-meta">' + t.toLocaleTimeString('default', { hour: 'numeric', minute: '2-digit' }) + (e.event_type ? ' · ' + escHtml(e.event_type) : '') + (isVfw ? ' · ' + (e.staff_id ? escHtml(staffName(e.staff_id)) : 'Unassigned') : '') + '</div></div>'
       + (editing ? '<button class="btn btn-sm btn-danger" onclick="deleteModalEvent(\'' + e.id + '\')">Remove</button>' : '')
       + '</div>';
   }).join('');
 
   const recurringHtml = recurringToday.map((o) => {
     const idSafe = o.recurringEventId + '-' + o.baseDate;
+    const isVfw = o.event_type === 'vfw';
+    const staffOptions = '<option value="">Unassigned</option>' + scheduleStaff.map((s) => '<option value="' + s.id + '"' + (s.id === o.staff_id ? ' selected' : '') + '>' + escHtml(s.name) + '</option>').join('');
     return '<div class="shift-row" style="align-items:flex-start;">'
       + '<div style="flex:1;"><div class="shift-row-name">' + escHtml(o.name) + ' <span class="badge badge-purple">Recurring</span>' + (o.moved ? ' <span class="badge badge-amber">Moved</span>' : '') + '</div>'
-      + '<div class="shift-row-meta">' + (o.start_time ? fmtTime(o.start_time) + (o.end_time ? '–' + fmtTime(o.end_time) : '') : '') + '</div>'
-      + (editing ? '<div style="margin-top:8px;display:flex;gap:6px;">'
+      + '<div class="shift-row-meta">' + (o.start_time ? fmtTime(o.start_time) + (o.end_time ? '–' + fmtTime(o.end_time) : '') : '') + (isVfw ? ' · ' + (o.staff_id ? escHtml(staffName(o.staff_id)) : 'Unassigned') : '') + '</div>'
+      + (editing ? '<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">'
+        + (isVfw ? '<select class="form-select" style="width:100%;" onchange="assignRecurringStaff(\'' + o.recurringEventId + '\',\'' + o.baseDate + '\',this.value)">' + staffOptions + '</select>' : '')
+        + '<div style="display:flex;gap:6px;">'
         + '<input type="date" class="form-input" id="rec-move-' + idSafe + '" style="flex:1;">'
         + '<button class="btn btn-sm btn-secondary" onclick="moveRecurringOccurrence(\'' + o.recurringEventId + '\',\'' + o.baseDate + '\')">Move</button>'
         + '<button class="btn btn-sm btn-danger" onclick="skipRecurringOccurrence(\'' + o.recurringEventId + '\',\'' + o.baseDate + '\')">Skip</button>'
-        + '</div>' : '')
+        + '</div></div>' : '')
       + '</div></div>';
   }).join('');
 
