@@ -71,7 +71,7 @@ function myShiftDayCellHtml(dateObj) {
   if (setting.evening_start) halves.push('evening');
   const modName = (m) => escHtml(m.staff_id === window.currentStaff.id ? 'you' : staffName(m.staff_id));
 
-  let html = '<div class="' + cls + '" onclick="toggleBlackoutForDate(\'' + dateStr + '\')" title="Click to toggle a blackout for this date">';
+  let html = '<div class="' + cls + '" onclick="openShiftModal(\'' + dateStr + '\')">';
   html += '<div class="cal-day-num">' + dateObj.getDate() + '</div>';
   dayLevelMods.forEach((m) => { html += '<div class="cal-mod-pill">MOD: ' + modName(m) + '</div>'; });
   html += '<div class="cal-day-split">';
@@ -198,10 +198,6 @@ async function removeOneOffBlackout(id) {
   myBlackouts = myBlackouts.filter((b) => b.id !== id);
   renderOneOffBlackoutList();
   renderMyShiftsCalendar();
-}
-
-function toggleBlackoutForDate(dateStr) {
-  return toggleOneOffBlackoutFromPicker(dateStr);
 }
 
 // ── EMAIL + CALENDAR EXPORT ────────────────────────────────

@@ -15,8 +15,20 @@ let recurringEditId = null;
 let eventMode = 'once';
 let customEventTypes = [];
 
-const BUILTIN_EVENT_TYPES = { trivia: 'Trivia', bingo: 'Music Bingo', karaoke: 'Karaoke', special: 'Special / Performance', market: 'Farmers Market', foodtruck: 'Food Truck', vfw: 'VFW Night' };
-const AUTO_EVENT_NAMES = { trivia: 'Trivia Night', bingo: 'Music Bingo', vfw: 'VFW Night' };
+const BUILTIN_EVENT_TYPES = { trivia: 'Trivia Night', bingo: 'Music Bingo', karaoke: 'Karaoke', special: 'Special / Performance', market: 'Farmers Market', foodtruck: 'Food Truck', vfw: 'VFW Night' };
+const AUTO_EVENT_NAMES = { trivia: 'Trivia Night', bingo: 'Music Bingo', karaoke: 'Karaoke Night', vfw: 'VFW Night' };
+
+// timestamptz columns are stored/interpreted in the DB's timezone
+// (UTC on Supabase) — sending a naive "date T time" string lets
+// Postgres treat it as UTC, shifting the displayed time by the
+// browser's UTC offset. Build the Date from local components and
+// serialize with toISOString() so the stored instant matches what
+// was actually typed.
+function localDateTimeToISOString(dateStr, timeStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const [hh, mm] = timeStr.split(':').map(Number);
+  return new Date(y, m - 1, d, hh, mm, 0).toISOString();
+}
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const WEEK_ORDINALS = { 1: '1st', 2: '2nd', 3: '3rd', 4: '4th', 5: 'last' };
 
@@ -208,8 +220,8 @@ async function saveOneOffEvent(name, eventType) {
   const payload = {
     event_name: name,
     event_type: eventType,
-    event_date: dateVal + 'T' + startVal + ':00',
-    event_end: endVal ? dateVal + 'T' + endVal + ':00' : null,
+    event_date: localDateTimeToISOString(dateVal, startVal),
+    event_end: endVal ? localDateTimeToISOString(dateVal, endVal) : null,
     staff_id: eventType === 'vfw' ? (document.getElementById('ev-staff').value || null) : null,
     notes: document.getElementById('ev-notes').value.trim() || null,
   };

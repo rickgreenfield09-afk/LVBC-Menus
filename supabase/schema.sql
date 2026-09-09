@@ -548,6 +548,12 @@ insert into schedule_settings (id) values (true);
 insert into recurring_events (name, event_type, recurrence_type, day_of_week, week_of_month, start_time, end_time, notes)
 values ('VFW Night', 'vfw', 'monthly_nth_weekday', 2, 3, '18:00', '21:00', 'Local VFW hosts — move via an override if it falls on a different Tuesday that month.');
 
+-- Farmers Market: every Saturday, 10am-2pm. Cancel a specific
+-- Saturday from the Calendar day view (Skip) rather than
+-- re-scheduling it each month.
+insert into recurring_events (name, event_type, recurrence_type, day_of_week, start_time, end_time, notes)
+values ('Farmers Market', 'market', 'weekly', 6, '10:00', '14:00', 'Skip a specific Saturday from the day view if it is not happening that week.');
+
 -- Real tap list + wine/N/A data, carried over from the retired MVP
 -- (tmbvkusticlunsmqjfty.supabase.co). IDs preserved verbatim.
 insert into beers (id, ref_id, name, style, description, category, abv, price, status, badges, collab_partner) values

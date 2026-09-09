@@ -182,11 +182,10 @@
                 <button class="btn btn-sm btn-secondary" id="ev-cancel-edit" style="visibility:hidden;" onclick="cancelEventEdit()">&#10005; Cancel Edit</button>
               </div>
               <div class="card">
-                <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Name</label><input class="form-input" style="width:100%;" type="text" id="ev-name" placeholder="e.g. Trivia Night"></div>
                 <div class="form-group" style="margin-bottom:16px;">
                   <label class="form-label">Type</label>
                   <select class="form-select" style="width:100%;" id="ev-type" onchange="onEventTypeChange()">
-                    <option value="trivia">Trivia</option>
+                    <option value="trivia">Trivia Night</option>
                     <option value="bingo">Music Bingo</option>
                     <option value="karaoke">Karaoke</option>
                     <option value="special">Special / Performance</option>
@@ -196,6 +195,7 @@
                     <option value="__other__">Other...</option>
                   </select>
                 </div>
+                <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Name</label><input class="form-input" style="width:100%;" type="text" id="ev-name" placeholder="e.g. Trivia Night"></div>
                 <div class="form-group" id="ev-other-wrap" style="display:none;margin-bottom:16px;">
                   <label class="form-label">Custom Type Name</label>
                   <input class="form-input" style="width:100%;" type="text" id="ev-other-text" placeholder="e.g. Live Music">

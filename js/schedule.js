@@ -305,13 +305,25 @@ async function openShiftModal(dateStr) {
   document.getElementById('sm-role').innerHTML = positionOptionsForSetting(setting).map(([v, l]) => '<option value="' + v + '">' + l + '</option>').join('');
   document.getElementById('sm-notes').value = '';
 
+  // Fetch fresh rather than trusting scheduleShifts — the caller may
+  // not be on a tab that's loaded this date's range (e.g. My Shifts,
+  // which never touches the admin-only Calendar tab's data).
+  document.getElementById('shift-modal-list').innerHTML = '<div class="loading">Loading...</div>';
+  document.getElementById('shift-modal').style.display = 'flex';
+  const freshShifts = await fetchShiftsForDate(dateStr);
+  scheduleShifts = scheduleShifts.filter((s) => s.shift_date !== dateStr).concat(freshShifts);
+
   onShiftModalRoleChange();
   applyShiftModalEditVisibility();
-  document.getElementById('shift-modal').style.display = 'flex';
 
   document.getElementById('shift-modal-events-list').innerHTML = '<div class="loading">Loading...</div>';
   modalEvents = await fetchEventsForDate(dateStr);
   renderModalEventsList();
+}
+
+async function fetchShiftsForDate(dateStr) {
+  const { data, error } = await window.supabase.from('shifts').select('*').eq('shift_date', dateStr);
+  return error ? [] : (data || []);
 }
 
 function closeShiftModal() {
@@ -456,7 +468,7 @@ async function addModalEvent() {
   const payload = {
     event_name: name,
     event_type: document.getElementById('sme-type').value,
-    event_date: scheduleActiveDate + 'T' + time + ':00',
+    event_date: localDateTimeToISOString(scheduleActiveDate, time),
   };
   const { data, error } = await window.supabase.from('events').insert(payload).select().single();
   if (error) { toast('Error: ' + error.message, true); return; }
@@ -491,8 +503,7 @@ function populateBulkSelectors() {
   const monthEnd = new Date(scheduleCursor.getFullYear(), scheduleCursor.getMonth() + 1, 0);
   document.getElementById('bk-from').value = toDateStr(monthStart);
   document.getElementById('bk-through').value = toDateStr(monthEnd);
-  const firstOpenDay = scheduleDaySettings.find((s) => !s.is_closed);
-  bulkSelectedWeekdays = new Set(firstOpenDay ? [firstOpenDay.day_of_week] : []);
+  bulkSelectedWeekdays = new Set();
   recomputeBulkDatesFromPattern();
   renderWeekdayPicker();
   onBulkPositionChange();
@@ -543,6 +554,12 @@ function onBulkPositionChange() {
   const valid = validPositionsForSelectedWeekdays();
   const posSel = document.getElementById('bk-position');
   const prev = posSel.value;
+  if (!valid.length) {
+    posSel.innerHTML = '<option value="" disabled selected>Pick a weekday first</option>';
+    document.getElementById('bk-staff').innerHTML = '<option value="" disabled selected>Select staff member</option>';
+    renderBulkDatePicker();
+    return;
+  }
   posSel.innerHTML = valid.map(([v, l]) => '<option value="' + v + '">' + l + '</option>').join('');
   if (valid.some(([v]) => v === prev)) posSel.value = prev;
   const { role } = parsePosition(posSel.value || 'bartender:morning');
