@@ -279,7 +279,7 @@
   .sub-sec{display:none;}
   .sub-sec.active{display:block;animation:fadeIn 0.2s ease;}
   .grid2-col{display:flex;flex-direction:column;}
-  .menu-col-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;min-height:32px;}
+  .menu-col-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;min-height:32px;flex-wrap:wrap;gap:10px;}
   .form-ta{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 14px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;transition:border-color 0.15s;width:100%;resize:vertical;min-height:80px;line-height:1.5;}
   .form-ta:focus{border-color:var(--teal);}
   .form-ta::placeholder{color:var(--muted);}
@@ -306,15 +306,36 @@
 
   /* ── SCHEDULE SCREEN ── */
   .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+  .cal-grid.view-week{grid-template-columns:repeat(7,1fr);}
+  .cal-grid.view-day{grid-template-columns:1fr;max-width:420px;}
   .cal-dow{font-size:10px;font-family:'DM Mono',monospace;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;text-align:center;padding-bottom:4px;}
-  .cal-day{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px;min-height:96px;cursor:pointer;transition:border-color 0.15s;display:flex;flex-direction:column;gap:4px;}
+  .cal-day{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px;min-height:96px;cursor:pointer;transition:border-color 0.15s;display:flex;flex-direction:column;gap:4px;overflow:hidden;}
+  .cal-grid.view-week .cal-day{min-height:220px;}
+  .cal-grid.view-day .cal-day{min-height:320px;cursor:default;}
   .cal-day:hover{border-color:var(--muted);}
   .cal-day.other-month{opacity:0.35;}
   .cal-day.today{border-color:var(--teal);}
+  .cal-day.closed{opacity:0.5;justify-content:center;align-items:center;}
   .cal-day-num{font-family:'DM Mono',monospace;font-size:11px;color:var(--sub);}
-  .cal-shift-chip{font-size:11px;padding:2px 6px;border-radius:5px;background:var(--raised);border:1px solid var(--border);color:var(--text);line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .cal-shift-chip.mgr{background:rgba(232,184,75,0.15);border-color:rgba(232,184,75,0.3);color:var(--amber);font-weight:600;}
+  .cal-closed-label{font-size:10px;font-family:'DM Mono',monospace;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;}
+  .cal-mod-pill{align-self:flex-start;font-size:10px;font-family:'DM Mono',monospace;font-weight:600;padding:2px 8px;border-radius:10px;background:rgba(232,184,75,0.15);border:1px solid rgba(232,184,75,0.3);color:var(--amber);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+  .cal-day-split{display:flex;flex-direction:column;flex:1;gap:4px;}
+  .cal-half{flex:1;display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding-top:3px;border-top:1px dashed var(--border);}
+  .cal-half:first-child{border-top:none;padding-top:0;}
+  .cal-pill-emp{font-size:11px;padding:2px 7px;border-radius:5px;background:var(--raised);border:1px solid var(--border);color:var(--text);line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+  .cal-pill-event{font-size:10px;padding:1px 7px;border-radius:5px;background:rgba(42,184,166,0.12);border:1px solid rgba(42,184,166,0.25);color:var(--teal);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
   .shift-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);gap:10px;}
   .shift-row:last-child{border-bottom:none;}
   .shift-row-name{font-weight:500;font-size:13px;}
   .shift-row-meta{font-size:11px;color:var(--sub);font-family:'DM Mono',monospace;margin-top:1px;}
+  .settings-time-input{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;width:100%;}
+  .print-title{display:none;}
+
+  @media print{
+    body *{visibility:hidden;}
+    #screen-schedule, #screen-schedule *{visibility:visible;}
+    #screen-schedule{position:absolute;left:0;top:0;width:100%;}
+    header, nav, .no-print{display:none !important;}
+    .print-title{display:block;font-family:'Bebas Neue',sans-serif;font-size:22px;margin-bottom:12px;}
+    .cal-day{border-color:#000;}
+  }

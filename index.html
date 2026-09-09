@@ -49,15 +49,113 @@
     <main>
       <!-- SCHEDULE SCREEN -->
       <div class="screen" id="screen-schedule">
-        <div class="menu-col-header">
-          <div style="display:flex;align-items:center;gap:14px;">
-            <button class="btn btn-secondary btn-sm" onclick="scheduleShiftMonth(-1)">&larr;</button>
-            <div class="section-label" style="margin:0;font-size:16px;letter-spacing:1px;" id="schedule-month-label">Month</div>
-            <button class="btn btn-secondary btn-sm" onclick="scheduleShiftMonth(1)">&rarr;</button>
-          </div>
-          <button class="btn btn-secondary btn-sm" onclick="scheduleGoToday()">Today</button>
+        <div class="sub-tabs no-print">
+          <button class="sub-tab active" onclick="setScheduleTab('calendar', this)">Calendar</button>
+          <button class="sub-tab" onclick="setScheduleTab('bulk', this)">Scheduling</button>
+          <button class="sub-tab" onclick="setScheduleTab('settings', this)">Settings</button>
         </div>
-        <div class="cal-grid" id="schedule-cal-grid"><div class="loading">Loading...</div></div>
+
+        <!-- CALENDAR -->
+        <div class="sub-sec active" id="scheduletab-calendar">
+          <div class="menu-col-header no-print">
+            <div style="display:flex;align-items:center;gap:14px;">
+              <button class="btn btn-secondary btn-sm" onclick="scheduleShiftPeriod(-1)">&larr;</button>
+              <div class="section-label" style="margin:0;font-size:16px;letter-spacing:1px;" id="schedule-period-label">Month</div>
+              <button class="btn btn-secondary btn-sm" onclick="scheduleShiftPeriod(1)">&rarr;</button>
+              <button class="btn btn-secondary btn-sm" onclick="scheduleGoToday()">Today</button>
+            </div>
+            <div style="display:flex;gap:6px;">
+              <button class="tap-toggle-btn active" id="cal-view-month" onclick="setScheduleView('month')">Month</button>
+              <button class="tap-toggle-btn" id="cal-view-week" onclick="setScheduleView('week')">Week</button>
+              <button class="tap-toggle-btn" id="cal-view-day" onclick="setScheduleView('day')">Day</button>
+              <button class="btn btn-secondary btn-sm" onclick="window.print()" style="margin-left:8px;">Print</button>
+            </div>
+          </div>
+          <div class="print-title" id="schedule-print-title"></div>
+          <div class="cal-grid" id="schedule-cal-grid"><div class="loading">Loading...</div></div>
+        </div>
+
+        <!-- BULK SCHEDULING -->
+        <div class="sub-sec" id="scheduletab-bulk">
+          <div class="grid-2">
+            <div class="grid2-col" id="bulk-form-col">
+              <div class="section-label" style="margin-top:0;">Assign a Weekday Pattern</div>
+              <div class="card">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">Weekday</label>
+                    <select class="form-select" style="width:100%;" id="bk-weekday"></select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Position</label>
+                    <select class="form-select" style="width:100%;" id="bk-position" onchange="onBulkPositionChange()">
+                      <option value="morning">Bartender - Morning</option>
+                      <option value="evening">Bartender - Evening</option>
+                      <option value="manager">Manager on Duty</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-group" style="margin-bottom:16px;">
+                  <label class="form-label">Staff</label>
+                  <select class="form-select" style="width:100%;" id="bk-staff"></select>
+                </div>
+                <div class="form-row">
+                  <div class="form-group"><label class="form-label">From</label><input class="form-input" style="width:100%;" type="date" id="bk-from"></div>
+                  <div class="form-group"><label class="form-label">Through</label><input class="form-input" style="width:100%;" type="date" id="bk-through"></div>
+                </div>
+                <div id="bulk-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
+                <button class="btn btn-primary" style="width:100%;" onclick="applyBulkSchedule()">Apply to Matching Dates</button>
+                <div style="font-size:11px;color:var(--muted);margin-top:8px;">Skips any date that already has someone in that exact slot.</div>
+              </div>
+            </div>
+            <div class="grid2-col">
+              <div class="menu-col-header">
+                <div class="section-label" style="margin:0;">This Month's Assignments</div>
+              </div>
+              <div id="bulk-shift-list"><div class="loading">Loading...</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SETTINGS -->
+        <div class="sub-sec" id="scheduletab-settings">
+          <div class="section-label" style="margin-top:0;">Weekly Shift Windows</div>
+          <div class="table-wrap" style="margin-bottom:24px;">
+            <table>
+              <thead><tr><th>Day</th><th>Closed</th><th>Morning Start</th><th>Morning End</th><th>Evening Start</th><th>Evening End</th></tr></thead>
+              <tbody id="settings-day-rows"></tbody>
+            </table>
+          </div>
+          <button class="btn btn-primary btn-sm" id="btn-save-day-settings" onclick="saveDaySettings()">Save Weekly Windows</button>
+          <span id="day-settings-status" style="font-size:12px;color:var(--muted);margin-left:10px;"></span>
+
+          <div class="section-label">Coverage Requests</div>
+          <div class="card" style="margin-bottom:24px;">
+            <div class="form-group" style="max-width:220px;">
+              <label class="form-label">Escalate After (hours)</label>
+              <input class="form-input" type="number" id="set-timeout" min="1" max="168">
+            </div>
+          </div>
+
+          <div class="section-label">Email Templates</div>
+          <div class="card">
+            <div class="form-group" style="margin-bottom:16px;">
+              <label class="form-label">Coverage Request</label>
+              <textarea class="form-ta" id="set-tpl-coverage" rows="2"></textarea>
+            </div>
+            <div class="form-group" style="margin-bottom:16px;">
+              <label class="form-label">Trade Confirmed</label>
+              <textarea class="form-ta" id="set-tpl-trade" rows="2"></textarea>
+            </div>
+            <div class="form-group" style="margin-bottom:16px;">
+              <label class="form-label">Schedule Sent</label>
+              <textarea class="form-ta" id="set-tpl-sent" rows="2"></textarea>
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Templates are saved here for later use — outbound email isn't wired up yet.</div>
+            <button class="btn btn-primary btn-sm" id="btn-save-schedule-settings" onclick="saveScheduleSettings()">Save Settings</button>
+            <span id="settings-status" style="font-size:12px;color:var(--muted);margin-left:10px;"></span>
+          </div>
+        </div>
       </div>
 
       <!-- DAY EDIT MODAL -->
@@ -76,9 +174,10 @@
                   <select class="form-select" style="width:100%;" id="sm-staff"></select>
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Role</label>
-                  <select class="form-select" style="width:100%;" id="sm-role">
-                    <option value="bartender">Bartender</option>
+                  <label class="form-label">Position</label>
+                  <select class="form-select" style="width:100%;" id="sm-role" onchange="onShiftModalRoleChange()">
+                    <option value="morning">Bartender - Morning</option>
+                    <option value="evening">Bartender - Evening</option>
                     <option value="manager">Manager on Duty</option>
                   </select>
                 </div>
