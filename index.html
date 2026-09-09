@@ -42,10 +42,58 @@
 
     <nav>
       <button class="nav-btn active" onclick="showScreen('menu', this); loadMenu()">Menu</button>
+      <button class="nav-btn" onclick="showScreen('schedule', this); loadSchedule()">Schedule</button>
       <!-- Dashboard, Admin, Reports tabs added as their .js files land -->
     </nav>
 
     <main>
+      <!-- SCHEDULE SCREEN -->
+      <div class="screen" id="screen-schedule">
+        <div class="menu-col-header">
+          <div style="display:flex;align-items:center;gap:14px;">
+            <button class="btn btn-secondary btn-sm" onclick="scheduleShiftMonth(-1)">&larr;</button>
+            <div class="section-label" style="margin:0;font-size:16px;letter-spacing:1px;" id="schedule-month-label">Month</div>
+            <button class="btn btn-secondary btn-sm" onclick="scheduleShiftMonth(1)">&rarr;</button>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="scheduleGoToday()">Today</button>
+        </div>
+        <div class="cal-grid" id="schedule-cal-grid"><div class="loading">Loading...</div></div>
+      </div>
+
+      <!-- DAY EDIT MODAL -->
+      <div id="shift-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:500;align-items:center;justify-content:center;">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;width:460px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;">
+          <div style="padding:20px 24px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+            <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px;" id="shift-modal-date">Date</div>
+            <button onclick="closeShiftModal()" style="background:none;border:none;color:var(--sub);font-size:20px;cursor:pointer;line-height:1;">&#10005;</button>
+          </div>
+          <div style="flex:1;overflow-y:auto;padding:16px 24px;">
+            <div id="shift-modal-list"></div>
+            <div id="shift-modal-form-wrap" style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px;">
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Staff</label>
+                  <select class="form-select" style="width:100%;" id="sm-staff"></select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Role</label>
+                  <select class="form-select" style="width:100%;" id="sm-role">
+                    <option value="bartender">Bartender</option>
+                    <option value="manager">Manager on Duty</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label class="form-label">Start Time</label><input class="form-input" style="width:100%;" type="time" id="sm-start"></div>
+                <div class="form-group"><label class="form-label">End Time</label><input class="form-input" style="width:100%;" type="time" id="sm-end"></div>
+              </div>
+              <div class="form-group" style="margin-bottom:14px;"><label class="form-label">Note (optional)</label><input class="form-input" style="width:100%;" type="text" id="sm-notes" placeholder="e.g. covering close"></div>
+              <button class="btn btn-primary" style="width:100%;" onclick="addShift()">Add Shift</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- MENU SCREEN -->
       <div class="screen active" id="screen-menu">
         <div class="sub-tabs">
@@ -313,5 +361,6 @@
   <script src="config.js"></script>
   <script src="js/app-core.js"></script>
   <script src="js/menu.js"></script>
+  <script src="js/schedule.js"></script>
 </body>
 </html>

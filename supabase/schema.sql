@@ -10,6 +10,7 @@ create table staff_profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   name text not null,
   role text not null check (role in ('admin','staff')) default 'staff',
+  can_schedule boolean not null default false,
   created_at timestamptz not null default now()
 );
 
@@ -231,6 +232,37 @@ create table events (
   created_at timestamptz not null default now()
 );
 
+-- ---------- SHIFTS (staff scheduling — monthly grid, v1) ----------
+-- One row per person per shift per day. Scope: view + manual assign
+-- only — no copy-forward, coverage requests, trades, or blackout
+-- dates yet (see HANDOFF.md for the full planned module).
+create table shifts (
+  id uuid primary key default gen_random_uuid(),
+  shift_date date not null,
+  shift_label text not null default 'Shift',
+  start_time time,
+  end_time time,
+  staff_id uuid references staff_profiles(id) on delete set null,
+  role text not null check (role in ('bartender','manager')) default 'bartender',
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index shifts_date_idx on shifts (shift_date);
+
+create trigger shifts_set_updated_at
+  before update on shifts
+  for each row execute function set_updated_at();
+
+create or replace function can_schedule()
+returns boolean as $$
+  select exists (
+    select 1 from staff_profiles
+    where id = auth.uid() and (can_schedule = true or role = 'admin')
+  );
+$$ language sql security definer stable;
+
 -- ---------- LVBC U-THERE (outing polls) ----------
 create table lvbc_u_there (
   id uuid primary key default gen_random_uuid(),
@@ -269,6 +301,7 @@ alter table free_pours enable row level security;
 alter table badges enable row level security;
 alter table events enable row level security;
 alter table lvbc_u_there enable row level security;
+alter table shifts enable row level security;
 
 -- staff_profiles: staff can read the roster; only admins manage roles
 create policy "staff read roster" on staff_profiles for select using (is_staff());
@@ -306,6 +339,10 @@ create policy "staff write events" on events for all using (is_staff()) with che
 
 create policy "public read uthere" on lvbc_u_there for select using (true);
 create policy "staff write uthere" on lvbc_u_there for all using (is_staff()) with check (is_staff());
+
+create policy "staff read shifts" on shifts for select using (is_staff());
+create policy "schedulers write shifts" on shifts for all
+  using (can_schedule()) with check (can_schedule());
 
 -- Staff-only, both read and write: PII / financial-equivalent (points) data
 create policy "staff only members" on members for all using (is_staff()) with check (is_staff());
