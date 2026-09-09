@@ -101,6 +101,7 @@ async function loadSchedule() {
   });
   document.getElementById('btn-save-day-settings').style.display = admin ? '' : 'none';
   document.getElementById('btn-save-schedule-settings').style.display = admin ? '' : 'none';
+  document.getElementById('btn-clear-schedule').style.display = admin ? '' : 'none';
   ['set-timeout', 'set-tpl-coverage', 'set-tpl-trade', 'set-tpl-sent'].forEach((id) => {
     document.getElementById(id).disabled = !admin;
   });
@@ -217,7 +218,7 @@ function dayCellHtml(dateObj, extraClass) {
     }
     closedHtml += '<div class="cal-closed-label">Closed</div>';
     closedDayEvents.forEach((e) => { closedHtml += '<div class="cal-pill-event">' + escHtml(e.event_name) + '</div>'; });
-    closedDayRecurring.forEach((o) => { closedHtml += '<div class="cal-pill-event recurring">' + escHtml(o.name) + (o.staff_id ? ' · ' + escHtml(staffName(o.staff_id)) : '') + '</div>'; });
+    closedDayRecurring.forEach((o) => { closedHtml += '<div class="cal-pill-event recurring">' + escHtml(o.name) + '</div>'; });
     closedHtml += '</div>';
     return closedHtml;
   }
@@ -253,7 +254,7 @@ function dayCellHtml(dateObj, extraClass) {
       const hr = o.start_time ? parseInt(o.start_time.split(':')[0], 10) : 18;
       return period === 'morning' ? hr < 15 : hr >= 15;
     }).forEach((o) => {
-      html += '<div class="cal-pill-event recurring">' + escHtml(o.name) + (o.staff_id ? ' · ' + escHtml(staffName(o.staff_id)) : '') + '</div>';
+      html += '<div class="cal-pill-event recurring">' + escHtml(o.name) + '</div>';
     });
     html += '</div>';
   });
@@ -427,17 +428,14 @@ function renderModalEventsList() {
 
   const recurringHtml = recurringToday.map((o) => {
     const idSafe = o.recurringEventId + '-' + o.baseDate;
-    const staffOptions = '<option value="">Unassigned</option>' + scheduleStaff.map((s) => '<option value="' + s.id + '"' + (s.id === o.staff_id ? ' selected' : '') + '>' + escHtml(s.name) + '</option>').join('');
     return '<div class="shift-row" style="align-items:flex-start;">'
       + '<div style="flex:1;"><div class="shift-row-name">' + escHtml(o.name) + ' <span class="badge badge-purple">Recurring</span>' + (o.moved ? ' <span class="badge badge-amber">Moved</span>' : '') + '</div>'
-      + '<div class="shift-row-meta">' + (o.start_time ? fmtTime(o.start_time) + (o.end_time ? '–' + fmtTime(o.end_time) : '') : '') + (o.staff_id ? ' · ' + escHtml(staffName(o.staff_id)) : ' · Unassigned') + '</div>'
-      + (editing ? '<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">'
-        + '<select class="form-select" style="width:100%;" onchange="assignRecurringStaff(\'' + o.recurringEventId + '\',\'' + o.baseDate + '\',this.value)">' + staffOptions + '</select>'
-        + '<div style="display:flex;gap:6px;">'
+      + '<div class="shift-row-meta">' + (o.start_time ? fmtTime(o.start_time) + (o.end_time ? '–' + fmtTime(o.end_time) : '') : '') + '</div>'
+      + (editing ? '<div style="margin-top:8px;display:flex;gap:6px;">'
         + '<input type="date" class="form-input" id="rec-move-' + idSafe + '" style="flex:1;">'
         + '<button class="btn btn-sm btn-secondary" onclick="moveRecurringOccurrence(\'' + o.recurringEventId + '\',\'' + o.baseDate + '\')">Move</button>'
         + '<button class="btn btn-sm btn-danger" onclick="skipRecurringOccurrence(\'' + o.recurringEventId + '\',\'' + o.baseDate + '\')">Skip</button>'
-        + '</div></div>' : '')
+        + '</div>' : '')
       + '</div></div>';
   }).join('');
 
@@ -721,4 +719,41 @@ async function saveScheduleSettings() {
   scheduleSettings = payload;
   statusEl.textContent = 'Saved';
   setTimeout(() => { statusEl.textContent = ''; }, 2000);
+}
+
+// ── CLEAR SCHEDULE ────────────────────────────────────────
+// Deletes every shift in the month currently open on the Calendar
+// tab (not events/recurring events — this only touches assignments).
+const CLEAR_SCHEDULE_PHRASE = 'Clear schedule';
+
+function openClearScheduleModal() {
+  if (!canSchedule()) return;
+  const monthLabel = scheduleCursor.toLocaleString('default', { month: 'long', year: 'numeric' });
+  document.getElementById('clear-schedule-warning').textContent =
+    'This permanently deletes every shift assignment for ' + monthLabel + '. Events and recurring events are not affected. This cannot be undone.';
+  document.getElementById('clear-schedule-confirm-input').value = '';
+  document.getElementById('btn-confirm-clear-schedule').disabled = true;
+  document.getElementById('clear-schedule-modal').style.display = 'flex';
+}
+
+function closeClearScheduleModal() {
+  document.getElementById('clear-schedule-modal').style.display = 'none';
+}
+
+function onClearScheduleInput() {
+  const val = document.getElementById('clear-schedule-confirm-input').value;
+  document.getElementById('btn-confirm-clear-schedule').disabled = val !== CLEAR_SCHEDULE_PHRASE;
+}
+
+async function confirmClearSchedule() {
+  if (!canSchedule()) return;
+  if (document.getElementById('clear-schedule-confirm-input').value !== CLEAR_SCHEDULE_PHRASE) return;
+  const monthStart = toDateStr(new Date(scheduleCursor.getFullYear(), scheduleCursor.getMonth(), 1));
+  const monthEnd = toDateStr(new Date(scheduleCursor.getFullYear(), scheduleCursor.getMonth() + 1, 0));
+  const { data, error } = await window.supabase.from('shifts').delete().gte('shift_date', monthStart).lte('shift_date', monthEnd).select('id');
+  if (error) { toast('Error: ' + error.message, true); return; }
+  closeClearScheduleModal();
+  logAudit('clear_schedule', 'shifts', null, { month_start: monthStart, month_end: monthEnd, count: (data || []).length });
+  toast('Cleared ' + (data || []).length + ' shift(s) for ' + scheduleCursor.toLocaleString('default', { month: 'long', year: 'numeric' }));
+  loadScheduleRange();
 }

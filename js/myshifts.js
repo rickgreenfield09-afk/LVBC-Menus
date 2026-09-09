@@ -19,6 +19,7 @@ async function loadMyShifts() {
   await loadMyBlackouts();
   renderBlackoutRecurringPicker();
   renderOneOffBlackoutList();
+  renderBlackoutDatePicker();
   await loadMyShiftsMonth();
 }
 
@@ -131,14 +132,51 @@ async function toggleRecurringBlackout(dow) {
   renderMyShiftsCalendar();
 }
 
-async function addOneOffBlackout() {
-  const val = document.getElementById('blackout-date-input').value;
-  if (!val) { toast('Pick a date', true); return; }
-  if (myBlackouts.some((b) => b.kind === 'date' && b.blackout_date === val)) { toast('Already blacked out', true); return; }
-  const { data, error } = await window.supabase.from('blackout_dates').insert({ staff_id: window.currentStaff.id, kind: 'date', blackout_date: val }).select().single();
-  if (error) { toast('Error: ' + error.message, true); return; }
-  myBlackouts.push(data);
-  document.getElementById('blackout-date-input').value = '';
+let blackoutPickerCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+
+function blackoutPickerMonth(delta) {
+  blackoutPickerCursor = new Date(blackoutPickerCursor.getFullYear(), blackoutPickerCursor.getMonth() + delta, 1);
+  renderBlackoutDatePicker();
+}
+
+function renderBlackoutDatePicker() {
+  const el = document.getElementById('blackout-date-picker');
+  document.getElementById('blackout-picker-label').textContent = blackoutPickerCursor.toLocaleString('default', { month: 'long', year: 'numeric' });
+  const monthStart = new Date(blackoutPickerCursor.getFullYear(), blackoutPickerCursor.getMonth(), 1);
+  const monthEnd = new Date(blackoutPickerCursor.getFullYear(), blackoutPickerCursor.getMonth() + 1, 0);
+  const todayStr = toDateStr(new Date());
+
+  let html = dowHeaderHtml();
+  const firstDow = monthStart.getDay();
+  for (let i = 0; i < firstDow; i++) html += '<div class="bk-date-cell disabled"></div>';
+  for (let d = new Date(monthStart); d <= monthEnd; d.setDate(d.getDate() + 1)) {
+    const dateStr = toDateStr(d);
+    const blocked = myBlackouts.some((b) => b.kind === 'date' && b.blackout_date === dateStr);
+    const isToday = dateStr === todayStr;
+    html += '<div class="bk-date-cell blockable' + (blocked ? ' blocked' : '') + (isToday ? ' today-outline' : '') + '" onclick="toggleOneOffBlackoutFromPicker(\'' + dateStr + '\')">' + d.getDate() + '</div>';
+  }
+  el.innerHTML = html;
+}
+
+async function toggleOneOffBlackoutFromPicker(dateStr) {
+  const dow = new Date(dateStr + 'T00:00:00').getDay();
+  if (myBlackouts.some((b) => b.kind === 'recurring' && b.day_of_week === dow)) {
+    toast('This weekday is already blacked out every week', true);
+    return;
+  }
+  const existing = myBlackouts.find((b) => b.kind === 'date' && b.blackout_date === dateStr);
+  if (existing) {
+    const { error } = await window.supabase.from('blackout_dates').delete().eq('id', existing.id);
+    if (error) { toast('Error: ' + error.message, true); return; }
+    myBlackouts = myBlackouts.filter((b) => b.id !== existing.id);
+    toast('Blackout removed');
+  } else {
+    const { data, error } = await window.supabase.from('blackout_dates').insert({ staff_id: window.currentStaff.id, kind: 'date', blackout_date: dateStr }).select().single();
+    if (error) { toast('Error: ' + error.message, true); return; }
+    myBlackouts.push(data);
+    toast('Date blacked out');
+  }
+  renderBlackoutDatePicker();
   renderOneOffBlackoutList();
   renderMyShiftsCalendar();
 }
@@ -162,26 +200,8 @@ async function removeOneOffBlackout(id) {
   renderMyShiftsCalendar();
 }
 
-async function toggleBlackoutForDate(dateStr) {
-  const dow = new Date(dateStr + 'T00:00:00').getDay();
-  if (myBlackouts.some((b) => b.kind === 'recurring' && b.day_of_week === dow)) {
-    toast('This weekday is already blacked out every week — see Blackout Dates below', true);
-    return;
-  }
-  const existing = myBlackouts.find((b) => b.kind === 'date' && b.blackout_date === dateStr);
-  if (existing) {
-    const { error } = await window.supabase.from('blackout_dates').delete().eq('id', existing.id);
-    if (error) { toast('Error: ' + error.message, true); return; }
-    myBlackouts = myBlackouts.filter((b) => b.id !== existing.id);
-    toast('Blackout removed');
-  } else {
-    const { data, error } = await window.supabase.from('blackout_dates').insert({ staff_id: window.currentStaff.id, kind: 'date', blackout_date: dateStr }).select().single();
-    if (error) { toast('Error: ' + error.message, true); return; }
-    myBlackouts.push(data);
-    toast('Date blacked out');
-  }
-  renderMyShiftsCalendar();
-  renderOneOffBlackoutList();
+function toggleBlackoutForDate(dateStr) {
+  return toggleOneOffBlackoutFromPicker(dateStr);
 }
 
 // ── EMAIL + CALENDAR EXPORT ────────────────────────────────

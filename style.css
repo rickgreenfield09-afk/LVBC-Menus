@@ -203,6 +203,7 @@
   .etype-special{background:rgba(224,82,82,0.12);color:var(--red);border:1px solid rgba(224,82,82,0.25);}
   .etype-market{background:rgba(42,184,166,0.08);color:var(--sub);border:1px solid var(--border);}
   .etype-foodtruck{background:rgba(232,184,75,0.1);color:var(--amber);border:1px solid rgba(232,184,75,0.2);}
+  .etype-vfw{background:rgba(191,95,255,0.1);color:var(--purple);border:1px solid rgba(191,95,255,0.2);}
   .etype-uthere{background:rgba(191,95,255,0.2);color:var(--purple);border:1px solid rgba(191,95,255,0.4);}
   .etype-default{background:rgba(142,155,176,0.1);color:var(--sub);border:1px solid var(--border);}
   .event-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:10px;display:flex;align-items:flex-start;gap:16px;}
@@ -337,6 +338,9 @@
   .bk-date-cell{background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:8px 4px;min-height:auto;text-align:center;font-family:'DM Mono',monospace;font-size:12px;cursor:default;color:var(--muted);}
   .bk-date-cell.included{background:rgba(42,184,166,0.12);border-color:rgba(42,184,166,0.35);color:var(--teal);font-weight:600;cursor:pointer;}
   .bk-date-cell.disabled{opacity:0.3;}
+  .bk-date-cell.blockable{cursor:pointer;}
+  .bk-date-cell.blockable.today-outline{border-color:var(--teal);}
+  .bk-date-cell.blocked{background:rgba(224,82,82,0.12);border-color:rgba(224,82,82,0.35);color:var(--red);font-weight:600;}
 
   @media print{
     body *{visibility:hidden;}
