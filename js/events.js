@@ -60,6 +60,21 @@ async function loadEventsList() {
   renderEventsList();
 }
 
+// Consistent H:MM AM/PM across every card — the one-off path used
+// to go through toLocaleTimeString while recurring cards used the
+// terse fmtTime() (which drops ":00"), so they never matched.
+function fmtClock(hour, minute) {
+  const ap = hour < 12 ? 'AM' : 'PM';
+  const h = ((hour + 11) % 12) + 1;
+  return h + ':' + String(minute).padStart(2, '0') + ' ' + ap;
+}
+function fmtClockFromDate(d) { return fmtClock(d.getHours(), d.getMinutes()); }
+function fmtClockFromTimeStr(t) {
+  if (!t) return '';
+  const [hh, mm] = t.split(':').map(Number);
+  return fmtClock(hh, mm);
+}
+
 function renderEventsList() {
   const el = document.getElementById('events-list');
   const today = new Date();
@@ -79,7 +94,7 @@ function renderEventsList() {
       return '<div class="event-card">'
         + '<div class="event-date-block"><div class="event-date-month">' + d.toLocaleDateString('default', { month: 'short' }) + '</div>'
         + '<div class="event-date-day">' + d.getDate() + '</div>'
-        + '<div class="event-date-time">' + d.toLocaleTimeString('default', { hour: 'numeric', minute: '2-digit' }) + (end ? '–' + end.toLocaleTimeString('default', { hour: 'numeric', minute: '2-digit' }) : '') + '</div></div>'
+        + '<div class="event-date-time">' + fmtClockFromDate(d) + (end ? '–' + fmtClockFromDate(end) : '') + '</div></div>'
         + '<div class="event-info"><span class="event-type-badge etype-' + escHtml(BUILTIN_EVENT_TYPES[e.event_type] ? e.event_type : 'default') + '">' + escHtml(eventTypeLabel(e.event_type)) + '</span>'
         + '<div class="event-name">' + escHtml(e.event_name) + '</div>'
         + (e.event_type === 'vfw' ? '<div class="event-meta">' + (e.staff_id ? escHtml(staffName(e.staff_id)) : 'Unassigned') + '</div>' : '')
@@ -93,7 +108,7 @@ function renderEventsList() {
     return '<div class="event-card">'
       + '<div class="event-date-block"><div class="event-date-month">' + d.toLocaleDateString('default', { month: 'short' }) + '</div>'
       + '<div class="event-date-day">' + d.getDate() + '</div>'
-      + '<div class="event-date-time">' + (item.start_time ? fmtTime(item.start_time) + (item.end_time ? '–' + fmtTime(item.end_time) : '') : '') + '</div></div>'
+      + '<div class="event-date-time">' + (item.start_time ? fmtClockFromTimeStr(item.start_time) + (item.end_time ? '–' + fmtClockFromTimeStr(item.end_time) : '') : '') + '</div></div>'
       + '<div class="event-info"><span class="event-type-badge etype-' + escHtml(BUILTIN_EVENT_TYPES[item.event_type] ? item.event_type : 'default') + '">' + escHtml(eventTypeLabel(item.event_type)) + '</span> <span class="badge badge-purple">Recurring</span>'
       + '<div class="event-name">' + escHtml(item.name) + '</div>'
       + (item.event_type === 'vfw' ? '<div class="event-meta">' + (item.staff_id ? escHtml(staffName(item.staff_id)) : 'Unassigned') + '</div>' : '') + '</div>'

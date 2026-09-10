@@ -13,9 +13,26 @@ let myShiftsCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1
 let myShiftsData = [];
 let myModData = [];
 let myBlackouts = [];
+let myStaffIds = [];
+
+// A shift assigned to a duplicate/placeholder profile (same name,
+// different id — see migration_008/014) won't match the logged-in
+// session's own id. Resolve every staff_profiles row sharing this
+// session's email so those still show up here.
+async function resolveMyStaffIds() {
+  const selfId = window.currentStaff.id;
+  const email = window.currentStaff.email;
+  if (!email) return [selfId];
+  const { data, error } = await window.supabase.from('staff_profiles').select('id').eq('email', email);
+  if (error || !data || !data.length) return [selfId];
+  const ids = data.map((r) => r.id);
+  if (!ids.includes(selfId)) ids.push(selfId);
+  return ids;
+}
 
 async function loadMyShifts() {
   if (!scheduleDaySettings.length) await loadStaffAndSettings();
+  myStaffIds = await resolveMyStaffIds();
   await loadMyBlackouts();
   renderBlackoutRecurringPicker();
   renderOneOffBlackoutList();
@@ -38,7 +55,7 @@ async function loadMyShiftsMonth() {
   const monthEnd = toDateStr(new Date(myShiftsCursor.getFullYear(), myShiftsCursor.getMonth() + 1, 0));
 
   const [{ data: mine, error: mineErr }, { data: mods }] = await Promise.all([
-    window.supabase.from('shifts').select('*').eq('staff_id', window.currentStaff.id).gte('shift_date', monthStart).lte('shift_date', monthEnd),
+    window.supabase.from('shifts').select('*').in('staff_id', myStaffIds).gte('shift_date', monthStart).lte('shift_date', monthEnd),
     window.supabase.from('shifts').select('*').eq('role', 'manager').gte('shift_date', monthStart).lte('shift_date', monthEnd),
   ]);
   if (mineErr) { grid.innerHTML = '<div class="loading">Error: ' + escHtml(mineErr.message) + '</div>'; return; }
@@ -69,7 +86,7 @@ function myShiftDayCellHtml(dateObj) {
   const halves = [];
   if (setting.morning_start) halves.push('morning');
   if (setting.evening_start) halves.push('evening');
-  const modName = (m) => escHtml(m.staff_id === window.currentStaff.id ? 'you' : staffName(m.staff_id));
+  const modName = (m) => escHtml(myStaffIds.includes(m.staff_id) ? 'you' : staffName(m.staff_id));
 
   let html = '<div class="' + cls + '" onclick="openShiftModal(\'' + dateStr + '\')">';
   html += '<div class="cal-day-num">' + dateObj.getDate() + '</div>';

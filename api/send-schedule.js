@@ -29,10 +29,13 @@ export default async function handler(req, res) {
 
   const authHeaders = { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + token };
 
-  const meRes = await fetch(SUPABASE_URL + '/rest/v1/staff_profiles?select=id,name', { headers: authHeaders });
+  // A duplicate/placeholder profile (see migration_008/014) can hold
+  // shift assignments meant for this person under a different id —
+  // pull every staff_profiles row sharing this session's email.
+  const meRes = await fetch(SUPABASE_URL + '/rest/v1/staff_profiles?select=id,name&email=eq.' + encodeURIComponent(email), { headers: authHeaders });
   const me = await meRes.json();
-  if (!meRes.ok || !me || !me[0]) return res.status(401).json({ error: 'Could not verify session' });
-  const staffId = me[0].id;
+  if (!meRes.ok || !me || !me.length) return res.status(401).json({ error: 'Could not verify session' });
+  const staffIds = me.map((r) => r.id);
   const staffName = me[0].name;
 
   const y = year || new Date().getFullYear();
@@ -41,8 +44,9 @@ export default async function handler(req, res) {
   const nextMonth = new Date(y, m, 1);
   const monthEndExclusive = nextMonth.getFullYear() + '-' + String(nextMonth.getMonth() + 1).padStart(2, '0') + '-01';
 
+  const staffIdList = staffIds.map((id) => '"' + id + '"').join(',');
   const shiftsRes = await fetch(
-    SUPABASE_URL + '/rest/v1/shifts?select=*&staff_id=eq.' + staffId + '&shift_date=gte.' + monthStart + '&shift_date=lt.' + monthEndExclusive + '&order=shift_date.asc',
+    SUPABASE_URL + '/rest/v1/shifts?select=*&staff_id=in.(' + staffIdList + ')&shift_date=gte.' + monthStart + '&shift_date=lt.' + monthEndExclusive + '&order=shift_date.asc',
     { headers: authHeaders }
   );
   const shifts = await shiftsRes.json();

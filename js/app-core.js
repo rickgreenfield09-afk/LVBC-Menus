@@ -40,7 +40,10 @@ async function checkSession() {
     return;
   }
 
-  window.currentStaff = profile;
+  // Always trust the session's own email over whatever is cached on
+  // the profile row — used to resolve "my shifts" against any
+  // duplicate/placeholder profile sharing that email (migration_014).
+  window.currentStaff = Object.assign({}, profile, { email: session.user.email });
   renderLoggedIn();
 }
 

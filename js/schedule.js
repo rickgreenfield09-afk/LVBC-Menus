@@ -218,7 +218,12 @@ function dayCellHtml(dateObj, extraClass) {
     }
     closedHtml += '<div class="cal-closed-label">Closed</div>';
     closedDayEvents.forEach((e) => { closedHtml += '<div class="cal-pill-event">' + escHtml(e.event_name) + '</div>'; });
-    closedDayRecurring.forEach((o) => { closedHtml += '<div class="cal-pill-event recurring">' + escHtml(o.name) + (o.event_type === 'vfw' && o.staff_id ? ' · ' + escHtml(staffName(o.staff_id)) : '') + '</div>'; });
+    closedDayRecurring.forEach((o) => {
+      const hr = o.start_time ? parseInt(o.start_time.split(':')[0], 10) : 18;
+      const prefix = hr < 15 ? 'AM' : 'PM';
+      closedHtml += '<div class="cal-pill-event recurring">' + escHtml(o.name) + '</div>';
+      if (o.event_type === 'vfw' && o.staff_id) closedHtml += '<div class="cal-pill-emp">' + prefix + '-' + escHtml(staffName(o.staff_id)) + '</div>';
+    });
     closedHtml += '</div>';
     return closedHtml;
   }
@@ -236,13 +241,10 @@ function dayCellHtml(dateObj, extraClass) {
   dayLevelMods.forEach((m) => { html += '<div class="cal-mod-pill">MOD: ' + escHtml(staffName(m.staff_id)) + '</div>'; });
   html += '<div class="cal-day-split">';
   halves.forEach((period) => {
+    const prefix = period === 'morning' ? 'AM' : 'PM';
     html += '<div class="cal-half">';
-    dayShifts.filter((s) => s.role === 'manager' && s.period === period).forEach((s) => {
-      html += '<div class="cal-mod-pill">MOD: ' + escHtml(staffName(s.staff_id)) + '</div>';
-    });
-    dayShifts.filter((s) => s.role === 'bartender' && s.period === period).forEach((s) => {
-      html += '<div class="cal-pill-emp">' + escHtml(staffName(s.staff_id)) + '</div>';
-    });
+    // Layering: event pills, then MOD, then staffer — each name pill
+    // prefixed with which half it belongs to (AM-/PM-).
     dayEvents.filter((e) => {
       if (halves.length === 1) return true;
       return period === 'morning' ? new Date(e.event_date).getHours() < 15 : new Date(e.event_date).getHours() >= 15;
@@ -254,7 +256,14 @@ function dayCellHtml(dateObj, extraClass) {
       const hr = o.start_time ? parseInt(o.start_time.split(':')[0], 10) : 18;
       return period === 'morning' ? hr < 15 : hr >= 15;
     }).forEach((o) => {
-      html += '<div class="cal-pill-event recurring">' + escHtml(o.name) + (o.event_type === 'vfw' && o.staff_id ? ' · ' + escHtml(staffName(o.staff_id)) : '') + '</div>';
+      html += '<div class="cal-pill-event recurring">' + escHtml(o.name) + '</div>';
+      if (o.event_type === 'vfw' && o.staff_id) html += '<div class="cal-pill-emp">' + prefix + '-' + escHtml(staffName(o.staff_id)) + '</div>';
+    });
+    dayShifts.filter((s) => s.role === 'manager' && s.period === period).forEach((s) => {
+      html += '<div class="cal-mod-pill">' + prefix + '-MOD: ' + escHtml(staffName(s.staff_id)) + '</div>';
+    });
+    dayShifts.filter((s) => s.role === 'bartender' && s.period === period).forEach((s) => {
+      html += '<div class="cal-pill-emp">' + prefix + '-' + escHtml(staffName(s.staff_id)) + '</div>';
     });
     html += '</div>';
   });

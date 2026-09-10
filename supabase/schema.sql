@@ -15,6 +15,10 @@ create table staff_profiles (
   name text not null,
   role text not null check (role in ('admin','staff')) default 'staff',
   can_schedule boolean not null default false,
+  -- matches the logged-in session's email so "my shifts" can find
+  -- rows assigned to a duplicate/placeholder profile too — see
+  -- migration_014.
+  email text,
   created_at timestamptz not null default now()
 );
 
