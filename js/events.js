@@ -14,6 +14,7 @@ let eventEditId = null;
 let recurringEditId = null;
 let eventMode = 'once';
 let customEventTypes = [];
+let eventsListCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 
 const BUILTIN_EVENT_TYPES = { trivia: 'Trivia Night', bingo: 'Music Bingo', karaoke: 'Karaoke', special: 'Special / Performance', market: 'Farmers Market', foodtruck: 'Food Truck', vfw: 'VFW Night' };
 const AUTO_EVENT_NAMES = { trivia: 'Trivia Night', bingo: 'Music Bingo', karaoke: 'Karaoke Night', vfw: 'VFW Night' };
@@ -47,14 +48,25 @@ async function loadEventTypes() {
   customEventTypes = data || [];
 }
 
+function eventsListMonth(delta) {
+  eventsListCursor = new Date(eventsListCursor.getFullYear(), eventsListCursor.getMonth() + delta, 1);
+  loadEventsList();
+}
+
 async function loadEventsList() {
   const el = document.getElementById('events-list');
   el.innerHTML = '<div class="loading">Loading...</div>';
+  document.getElementById('events-list-month-label').textContent = eventsListCursor.toLocaleString('default', { month: 'long', year: 'numeric' });
   await loadEventTypes();
   await refreshRecurringData();
   document.getElementById('ev-staff').innerHTML = '<option value="">Unassigned</option>' + scheduleStaff.map((s) => '<option value="' + s.id + '">' + escHtml(s.name) + '</option>').join('');
 
-  const { data, error } = await window.supabase.from('events').select('*').gte('event_date', toDateStr(new Date()) + 'T00:00:00').order('event_date');
+  const monthStart = toDateStr(eventsListCursor);
+  const nextMonth = new Date(eventsListCursor.getFullYear(), eventsListCursor.getMonth() + 1, 1);
+  const monthEndExclusive = toDateStr(nextMonth);
+
+  const { data, error } = await window.supabase.from('events').select('*')
+    .gte('event_date', monthStart + 'T00:00:00').lt('event_date', monthEndExclusive + 'T00:00:00').order('event_date');
   if (error) { el.innerHTML = '<div class="loading">Error: ' + escHtml(error.message) + '</div>'; return; }
   eventsList = data || [];
   renderEventsList();
@@ -77,14 +89,14 @@ function fmtClockFromTimeStr(t) {
 
 function renderEventsList() {
   const el = document.getElementById('events-list');
-  const today = new Date();
-  const lookAhead = new Date(today); lookAhead.setDate(lookAhead.getDate() + 60);
-  const upcomingRecurring = computeRecurringOccurrences(today, lookAhead)
+  const monthStart = new Date(eventsListCursor.getFullYear(), eventsListCursor.getMonth(), 1);
+  const monthEnd = new Date(eventsListCursor.getFullYear(), eventsListCursor.getMonth() + 1, 0);
+  const monthRecurring = computeRecurringOccurrences(monthStart, monthEnd)
     .map((o) => ({ kind: 'recurring', recurringEventId: o.recurringEventId, sortKey: o.date + 'T' + (o.start_time || '00:00'), date: o.date, start_time: o.start_time, end_time: o.end_time, name: o.name, event_type: o.event_type, staff_id: o.staff_id }));
   const oneOff = eventsList.map((e) => ({ kind: 'event', id: e.id, sortKey: e.event_date, event: e }));
-  const combined = oneOff.concat(upcomingRecurring).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  const combined = oneOff.concat(monthRecurring).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
 
-  if (!combined.length) { el.innerHTML = '<div class="loading">No upcoming events</div>'; return; }
+  if (!combined.length) { el.innerHTML = '<div class="loading">No events this month</div>'; return; }
 
   el.innerHTML = combined.map((item) => {
     if (item.kind === 'event') {
