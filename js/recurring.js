@@ -98,7 +98,7 @@ async function upsertRecurringOverride(recurringEventId, baseDate, patch) {
 }
 
 async function assignRecurringStaff(recurringEventId, baseDate, staffId) {
-  if (!canSchedule()) return;
+  if (!canEditInModal()) return;
   if (await upsertRecurringOverride(recurringEventId, baseDate, { staff_id: staffId || null })) {
     toast('Updated');
     refreshRecurringOnActiveDate();
@@ -106,7 +106,7 @@ async function assignRecurringStaff(recurringEventId, baseDate, staffId) {
 }
 
 async function skipRecurringOccurrence(recurringEventId, baseDate) {
-  if (!canSchedule()) return;
+  if (!canEditInModal()) return;
   if (await upsertRecurringOverride(recurringEventId, baseDate, { skipped: true })) {
     toast('Occurrence skipped');
     refreshRecurringOnActiveDate();
@@ -114,7 +114,7 @@ async function skipRecurringOccurrence(recurringEventId, baseDate) {
 }
 
 async function moveRecurringOccurrence(recurringEventId, baseDate) {
-  if (!canSchedule()) return;
+  if (!canEditInModal()) return;
   const newDate = document.getElementById('rec-move-' + recurringEventId + '-' + baseDate).value;
   if (!newDate) { toast('Pick a new date', true); return; }
   if (await upsertRecurringOverride(recurringEventId, baseDate, { moved_to_date: newDate })) {

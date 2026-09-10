@@ -133,7 +133,7 @@ function myShiftDayCellHtml(dateObj) {
   const isMe = (m) => myStaffIds.includes(m.staff_id);
   const modName = (m) => escHtml(isMe(m) ? 'you' : staffName(m.staff_id));
 
-  let html = '<div class="' + cls + '" onclick="openShiftModal(\'' + dateStr + '\')">';
+  let html = '<div class="' + cls + '" onclick="openShiftModal(\'' + dateStr + '\', \'myshifts\')">';
   html += '<div class="cal-day-num">' + dateObj.getDate() + '</div>';
   dayLevelMods.forEach((m) => { html += '<div class="cal-mod-pill' + (isMe(m) ? ' mine' : '') + '">MOD: ' + modName(m) + '</div>'; });
   html += '<div class="cal-day-split">';

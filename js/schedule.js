@@ -294,20 +294,28 @@ function renderScheduleCalendar() {
 }
 
 // ── DAY MODAL ─────────────────────────────────────────────
-// Opens read-only by default. Admins/schedulers get an Edit toggle
-// that reveals the add-shift / add-event forms and Remove buttons.
-// Everyone else gets a "Request Coverage" toggle instead, scoped to
-// their own shift(s) that day — no edit access either way.
+// Opens read-only by default. Full edit (add/remove shifts and
+// events) is only available from the Calendar tab, and only to
+// admins/schedulers there. Everywhere else — including My Shifts,
+// even for an admin viewing their own schedule — the only action is
+// "Request Coverage", scoped to the viewer's own shift(s) that day.
+// Events are managed on their own Events page, never inline here.
 let shiftModalEditMode = false;
+let shiftModalContext = 'calendar';
 let modalEvents = [];
 let modalCoverageRequests = [];
+
+function canEditInModal() {
+  return canSchedule() && shiftModalContext === 'calendar';
+}
 
 function myIdsForCoverage() {
   return (typeof myStaffIds !== 'undefined' && myStaffIds.length) ? myStaffIds : [window.currentStaff.id];
 }
 
-async function openShiftModal(dateStr) {
+async function openShiftModal(dateStr, context) {
   scheduleActiveDate = dateStr;
+  shiftModalContext = context || 'calendar';
   shiftModalEditMode = false;
   const dow = new Date(dateStr + 'T00:00:00').getDay();
   const setting = scheduleDaySettings.find((s) => s.day_of_week === dow) || {};
@@ -316,7 +324,7 @@ async function openShiftModal(dateStr) {
 
   const editBtn = document.getElementById('shift-modal-edit-btn');
   editBtn.style.display = '';
-  editBtn.textContent = canSchedule() ? 'Edit' : 'Request Coverage';
+  editBtn.textContent = canEditInModal() ? 'Edit' : 'Request Coverage';
 
   document.getElementById('sm-role').innerHTML = positionOptionsForSetting(setting).map(([v, l]) => '<option value="' + v + '">' + l + '</option>').join('');
   document.getElementById('sm-notes').value = '';
@@ -329,7 +337,7 @@ async function openShiftModal(dateStr) {
   const freshShifts = await fetchShiftsForDate(dateStr);
   scheduleShifts = scheduleShifts.filter((s) => s.shift_date !== dateStr).concat(freshShifts);
 
-  if (!canSchedule()) {
+  if (!canEditInModal()) {
     const myShiftIds = scheduleShifts.filter((s) => s.shift_date === dateStr && myIdsForCoverage().includes(s.staff_id)).map((s) => s.id);
     modalCoverageRequests = myShiftIds.length ? await fetchCoverageRequestsForShifts(myShiftIds) : [];
   }
@@ -359,17 +367,17 @@ function closeShiftModal() {
 
 function toggleShiftModalEdit() {
   shiftModalEditMode = !shiftModalEditMode;
-  document.getElementById('shift-modal-edit-btn').textContent = shiftModalEditMode ? 'Close' : (canSchedule() ? 'Edit' : 'Request Coverage');
+  document.getElementById('shift-modal-edit-btn').textContent = shiftModalEditMode ? 'Close' : (canEditInModal() ? 'Edit' : 'Request Coverage');
   applyShiftModalEditVisibility();
 }
 
 function applyShiftModalEditVisibility() {
   const dow = new Date(scheduleActiveDate + 'T00:00:00').getDay();
   const setting = scheduleDaySettings.find((s) => s.day_of_week === dow) || {};
-  const editing = canSchedule() && shiftModalEditMode;
+  const editing = canEditInModal() && shiftModalEditMode;
   document.getElementById('shift-modal-form-wrap').style.display = (editing && !setting.is_closed) ? '' : 'none';
   document.getElementById('shift-modal-event-form-wrap').style.display = editing ? '' : 'none';
-  const coverageMode = !canSchedule() && shiftModalEditMode;
+  const coverageMode = !canEditInModal() && shiftModalEditMode;
   document.getElementById('shift-modal-coverage-wrap').style.display = coverageMode ? '' : 'none';
   if (coverageMode) renderCoverageRequestForm();
   renderShiftModalList();
@@ -439,7 +447,7 @@ function renderShiftModalList() {
     });
   if (!shifts.length) { listEl.innerHTML = '<div class="loading">No shifts scheduled</div>'; return; }
 
-  const editing = canSchedule() && shiftModalEditMode;
+  const editing = canEditInModal() && shiftModalEditMode;
   listEl.innerHTML = shifts.map((s) => {
     const periodTag = s.period ? (s.period === 'morning' ? ' (AM)' : ' (PM)') : '';
     const label = s.role === 'manager' ? 'Manager on Duty' + periodTag : shiftSlotLabel(setting, s.period);
@@ -452,7 +460,7 @@ function renderShiftModalList() {
 }
 
 async function addShift() {
-  if (!canSchedule()) return;
+  if (!canEditInModal()) return;
   const staffId = document.getElementById('sm-staff').value;
   if (!staffId) { toast('Select a staff member', true); return; }
   const { role, period } = parsePosition(document.getElementById('sm-role').value);
@@ -475,7 +483,7 @@ async function addShift() {
 }
 
 async function deleteShift(id) {
-  if (!canSchedule()) return;
+  if (!canEditInModal()) return;
   const removed = scheduleShifts.find((s) => s.id === id);
   const { error } = await window.supabase.from('shifts').delete().eq('id', id);
   if (error) { toast('Error: ' + error.message, true); return; }
@@ -496,7 +504,7 @@ async function fetchEventsForDate(dateStr) {
 
 function renderModalEventsList() {
   const el = document.getElementById('shift-modal-events-list');
-  const editing = canSchedule() && shiftModalEditMode;
+  const editing = canEditInModal() && shiftModalEditMode;
   const recurringToday = computeRecurringOccurrences(new Date(scheduleActiveDate + 'T00:00:00'), new Date(scheduleActiveDate + 'T00:00:00'))
     .filter((o) => o.date === scheduleActiveDate);
 
@@ -532,7 +540,7 @@ function renderModalEventsList() {
 }
 
 async function addModalEvent() {
-  if (!canSchedule()) return;
+  if (!canEditInModal()) return;
   const name = document.getElementById('sme-name').value.trim();
   if (!name) { toast('Enter an event name', true); return; }
   const time = document.getElementById('sme-time').value || '18:00';
@@ -552,7 +560,7 @@ async function addModalEvent() {
 }
 
 async function deleteModalEvent(id) {
-  if (!canSchedule()) return;
+  if (!canEditInModal()) return;
   const { error } = await window.supabase.from('events').delete().eq('id', id);
   if (error) { toast('Error: ' + error.message, true); return; }
   modalEvents = modalEvents.filter((e) => e.id !== id);
