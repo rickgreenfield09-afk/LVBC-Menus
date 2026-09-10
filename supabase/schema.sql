@@ -388,6 +388,24 @@ create table audit_log (
 
 create index audit_log_entity_idx on audit_log (entity_type, entity_id);
 
+-- ---------- COVERAGE REQUESTS (lightweight, v1) ----------
+-- A staffer flags one of their own shifts as needing coverage, with
+-- an optional note. Any staff can see open requests and claim one.
+-- No email notification yet — in-app visibility only, on My Shifts.
+create table coverage_requests (
+  id uuid primary key default gen_random_uuid(),
+  shift_id uuid not null references shifts(id) on delete cascade,
+  requested_by uuid not null references staff_profiles(id) on delete cascade,
+  note text,
+  status text not null check (status in ('open','claimed','cancelled')) default 'open',
+  claimed_by uuid references staff_profiles(id) on delete set null,
+  claimed_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index coverage_requests_shift_idx on coverage_requests (shift_id);
+create index coverage_requests_status_idx on coverage_requests (status);
+
 -- ---------- LVBC U-THERE (outing polls) ----------
 create table lvbc_u_there (
   id uuid primary key default gen_random_uuid(),
@@ -431,6 +449,7 @@ alter table shift_day_settings enable row level security;
 alter table schedule_settings enable row level security;
 alter table blackout_dates enable row level security;
 alter table audit_log enable row level security;
+alter table coverage_requests enable row level security;
 alter table event_types enable row level security;
 alter table recurring_events enable row level security;
 alter table recurring_event_overrides enable row level security;
@@ -491,6 +510,14 @@ create policy "schedulers read all blackout dates" on blackout_dates for select
 
 create policy "schedulers read audit log" on audit_log for select using (can_schedule());
 create policy "schedulers write audit log" on audit_log for insert with check (can_schedule());
+
+create policy "staff read coverage requests" on coverage_requests for select using (is_staff());
+create policy "staff create own coverage requests" on coverage_requests for insert
+  with check (requested_by = auth.uid());
+create policy "staff update coverage requests" on coverage_requests for update
+  using (is_staff()) with check (is_staff());
+create policy "staff delete own coverage requests" on coverage_requests for delete
+  using (requested_by = auth.uid() or can_schedule());
 
 create policy "staff read event_types" on event_types for select using (is_staff());
 create policy "schedulers write event_types" on event_types for all

@@ -73,6 +73,9 @@
           <div id="myshifts-email-status" style="font-size:12px;color:var(--muted);margin-bottom:12px;min-height:16px;"></div>
           <div class="cal-grid" id="myshifts-cal-grid"><div class="loading">Loading...</div></div>
 
+          <div class="section-label">Open Coverage Requests</div>
+          <div id="coverage-requests-list" style="margin-bottom:8px;"><div class="loading">Loading...</div></div>
+
           <div class="section-label">Blackout Dates</div>
           <div class="grid-2">
             <div class="grid2-col">
@@ -350,6 +353,7 @@
               <div class="form-group" style="margin-bottom:14px;"><label class="form-label">Note (optional)</label><input class="form-input" style="width:100%;" type="text" id="sm-notes" placeholder="e.g. covering close"></div>
               <button class="btn btn-primary" style="width:100%;" onclick="addShift()">Add Shift</button>
             </div>
+            <div id="shift-modal-coverage-wrap" style="display:none;margin-top:16px;border-top:1px solid var(--border);padding-top:16px;"></div>
 
             <div class="section-label">Events</div>
             <div id="shift-modal-events-list"><div class="loading">Loading...</div></div>

@@ -294,10 +294,17 @@ function renderScheduleCalendar() {
 }
 
 // ── DAY MODAL ─────────────────────────────────────────────
-// Opens read-only by default; admins/schedulers get an Edit toggle
+// Opens read-only by default. Admins/schedulers get an Edit toggle
 // that reveals the add-shift / add-event forms and Remove buttons.
+// Everyone else gets a "Request Coverage" toggle instead, scoped to
+// their own shift(s) that day — no edit access either way.
 let shiftModalEditMode = false;
 let modalEvents = [];
+let modalCoverageRequests = [];
+
+function myIdsForCoverage() {
+  return (typeof myStaffIds !== 'undefined' && myStaffIds.length) ? myStaffIds : [window.currentStaff.id];
+}
 
 async function openShiftModal(dateStr) {
   scheduleActiveDate = dateStr;
@@ -308,8 +315,8 @@ async function openShiftModal(dateStr) {
   document.getElementById('shift-modal-date').textContent = d.toLocaleDateString('default', { weekday: 'long', month: 'long', day: 'numeric' });
 
   const editBtn = document.getElementById('shift-modal-edit-btn');
-  editBtn.style.display = canSchedule() ? '' : 'none';
-  editBtn.textContent = 'Edit';
+  editBtn.style.display = '';
+  editBtn.textContent = canSchedule() ? 'Edit' : 'Request Coverage';
 
   document.getElementById('sm-role').innerHTML = positionOptionsForSetting(setting).map(([v, l]) => '<option value="' + v + '">' + l + '</option>').join('');
   document.getElementById('sm-notes').value = '';
@@ -321,6 +328,11 @@ async function openShiftModal(dateStr) {
   document.getElementById('shift-modal').style.display = 'flex';
   const freshShifts = await fetchShiftsForDate(dateStr);
   scheduleShifts = scheduleShifts.filter((s) => s.shift_date !== dateStr).concat(freshShifts);
+
+  if (!canSchedule()) {
+    const myShiftIds = scheduleShifts.filter((s) => s.shift_date === dateStr && myIdsForCoverage().includes(s.staff_id)).map((s) => s.id);
+    modalCoverageRequests = myShiftIds.length ? await fetchCoverageRequestsForShifts(myShiftIds) : [];
+  }
 
   onShiftModalRoleChange();
   applyShiftModalEditVisibility();
@@ -335,6 +347,11 @@ async function fetchShiftsForDate(dateStr) {
   return error ? [] : (data || []);
 }
 
+async function fetchCoverageRequestsForShifts(shiftIds) {
+  const { data, error } = await window.supabase.from('coverage_requests').select('*').in('shift_id', shiftIds).eq('status', 'open');
+  return error ? [] : (data || []);
+}
+
 function closeShiftModal() {
   document.getElementById('shift-modal').style.display = 'none';
   scheduleActiveDate = null;
@@ -342,7 +359,7 @@ function closeShiftModal() {
 
 function toggleShiftModalEdit() {
   shiftModalEditMode = !shiftModalEditMode;
-  document.getElementById('shift-modal-edit-btn').textContent = shiftModalEditMode ? 'Done Editing' : 'Edit';
+  document.getElementById('shift-modal-edit-btn').textContent = shiftModalEditMode ? 'Close' : (canSchedule() ? 'Edit' : 'Request Coverage');
   applyShiftModalEditVisibility();
 }
 
@@ -352,8 +369,50 @@ function applyShiftModalEditVisibility() {
   const editing = canSchedule() && shiftModalEditMode;
   document.getElementById('shift-modal-form-wrap').style.display = (editing && !setting.is_closed) ? '' : 'none';
   document.getElementById('shift-modal-event-form-wrap').style.display = editing ? '' : 'none';
+  const coverageMode = !canSchedule() && shiftModalEditMode;
+  document.getElementById('shift-modal-coverage-wrap').style.display = coverageMode ? '' : 'none';
+  if (coverageMode) renderCoverageRequestForm();
   renderShiftModalList();
   renderModalEventsList();
+}
+
+function renderCoverageRequestForm() {
+  const el = document.getElementById('shift-modal-coverage-wrap');
+  const myShifts = scheduleShifts.filter((s) => s.shift_date === scheduleActiveDate && myIdsForCoverage().includes(s.staff_id));
+  if (!myShifts.length) { el.innerHTML = '<div class="loading">You aren\'t scheduled this day.</div>'; return; }
+
+  el.innerHTML = myShifts.map((s) => {
+    const existing = modalCoverageRequests.find((r) => r.shift_id === s.id);
+    const label = (s.role === 'manager' ? 'Manager on Duty' : (s.period === 'morning' ? 'Morning' : 'Evening')) + (s.start_time ? ' · ' + fmtTime(s.start_time) + (s.end_time ? '–' + fmtTime(s.end_time) : '') : '');
+    if (existing) {
+      return '<div class="shift-row"><div><div class="shift-row-name">' + escHtml(label) + '</div>'
+        + '<div class="shift-row-meta">Coverage requested' + (existing.note ? ' · ' + escHtml(existing.note) : '') + '</div></div>'
+        + '<button class="btn btn-sm btn-danger" onclick="cancelCoverageRequest(\'' + existing.id + '\')">Cancel Request</button></div>';
+    }
+    return '<div class="shift-row" style="align-items:flex-start;flex-direction:column;gap:8px;">'
+      + '<div class="shift-row-name">' + escHtml(label) + '</div>'
+      + '<textarea class="form-ta" id="cov-note-' + s.id + '" rows="2" placeholder="Optional note for whoever picks this up" style="width:100%;"></textarea>'
+      + '<button class="btn btn-primary btn-sm" style="width:100%;" onclick="requestShiftCoverage(\'' + s.id + '\')">Request Coverage</button>'
+      + '</div>';
+  }).join('');
+}
+
+async function requestShiftCoverage(shiftId) {
+  const noteEl = document.getElementById('cov-note-' + shiftId);
+  const note = noteEl ? noteEl.value.trim() : '';
+  const { data, error } = await window.supabase.from('coverage_requests').insert({ shift_id: shiftId, requested_by: window.currentStaff.id, note: note || null }).select().single();
+  if (error) { toast('Error: ' + error.message, true); return; }
+  modalCoverageRequests.push(data);
+  renderCoverageRequestForm();
+  toast('Coverage requested');
+}
+
+async function cancelCoverageRequest(requestId) {
+  const { error } = await window.supabase.from('coverage_requests').delete().eq('id', requestId);
+  if (error) { toast('Error: ' + error.message, true); return; }
+  modalCoverageRequests = modalCoverageRequests.filter((r) => r.id !== requestId);
+  renderCoverageRequestForm();
+  toast('Request cancelled');
 }
 
 function onShiftModalRoleChange() {
@@ -374,7 +433,10 @@ function renderShiftModalList() {
   if (setting.is_closed) { listEl.innerHTML = '<div class="loading">Bar is closed this day.</div>'; return; }
 
   const shifts = scheduleShifts.filter((s) => s.shift_date === scheduleActiveDate)
-    .sort((a, b) => (a.role === 'manager' ? -1 : 1) - (b.role === 'manager' ? -1 : 1) || (a.period || '').localeCompare(b.period || ''));
+    .sort((a, b) => {
+      const periodRank = (p) => (p === 'morning' ? 0 : p === 'evening' ? 1 : -1);
+      return (a.role === 'manager' ? -1 : 1) - (b.role === 'manager' ? -1 : 1) || periodRank(a.period) - periodRank(b.period);
+    });
   if (!shifts.length) { listEl.innerHTML = '<div class="loading">No shifts scheduled</div>'; return; }
 
   const editing = canSchedule() && shiftModalEditMode;
@@ -549,8 +611,18 @@ function onBulkRangeChange() {
   renderBulkDatePicker();
 }
 
+// If no weekday chip is picked, fall back to the weekday(s) actually
+// represented by dates clicked directly on the mini calendar — so
+// clicking a date works without ever touching the chips up top.
+function effectiveWeekdaysForPositions() {
+  if (bulkSelectedWeekdays.size) return bulkSelectedWeekdays;
+  const derived = new Set();
+  bulkSelectedDates.forEach((dateStr) => derived.add(new Date(dateStr + 'T00:00:00').getDay()));
+  return derived;
+}
+
 function validPositionsForSelectedWeekdays() {
-  const days = scheduleDaySettings.filter((s) => bulkSelectedWeekdays.has(s.day_of_week));
+  const days = scheduleDaySettings.filter((s) => effectiveWeekdaysForPositions().has(s.day_of_week));
   const morningOk = days.length && days.every((d) => d.morning_start);
   const eveningOk = days.length && days.every((d) => d.evening_start);
   const opts = [];
@@ -564,7 +636,7 @@ function onBulkPositionChange() {
   const posSel = document.getElementById('bk-position');
   const prev = posSel.value;
   if (!valid.length) {
-    posSel.innerHTML = '<option value="" disabled selected>Pick a weekday first</option>';
+    posSel.innerHTML = '<option value="" disabled selected>Pick a weekday or date first</option>';
     document.getElementById('bk-staff').innerHTML = '<option value="" disabled selected>Select staff member</option>';
     renderBulkDatePicker();
     return;
@@ -600,7 +672,8 @@ function renderBulkDatePicker() {
 
 function toggleBulkDate(dateStr) {
   if (bulkSelectedDates.has(dateStr)) bulkSelectedDates.delete(dateStr); else bulkSelectedDates.add(dateStr);
-  renderBulkDatePicker();
+  if (!bulkSelectedWeekdays.size) onBulkPositionChange();
+  else renderBulkDatePicker();
 }
 
 async function applyBulkSchedule() {

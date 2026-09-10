@@ -109,7 +109,7 @@ function renderEventsList() {
       + '<div class="event-date-block"><div class="event-date-month">' + d.toLocaleDateString('default', { month: 'short' }) + '</div>'
       + '<div class="event-date-day">' + d.getDate() + '</div>'
       + '<div class="event-date-time">' + (item.start_time ? fmtClockFromTimeStr(item.start_time) + (item.end_time ? '–' + fmtClockFromTimeStr(item.end_time) : '') : '') + '</div></div>'
-      + '<div class="event-info"><span class="event-type-badge etype-' + escHtml(BUILTIN_EVENT_TYPES[item.event_type] ? item.event_type : 'default') + '">' + escHtml(eventTypeLabel(item.event_type)) + '</span> <span class="badge badge-purple">Recurring</span>'
+      + '<div class="event-info"><span class="badge badge-purple">Recurring</span>'
       + '<div class="event-name">' + escHtml(item.name) + '</div>'
       + (item.event_type === 'vfw' ? '<div class="event-meta">' + (item.staff_id ? escHtml(staffName(item.staff_id)) : 'Unassigned') + '</div>' : '') + '</div>'
       + '<div style="display:flex;gap:6px;">'

@@ -38,6 +38,50 @@ async function loadMyShifts() {
   renderOneOffBlackoutList();
   renderBlackoutDatePicker();
   await loadMyShiftsMonth();
+  await loadCoverageRequestsList();
+}
+
+// ── COVERAGE REQUESTS (open, from any staffer) ────────────
+async function loadCoverageRequestsList() {
+  const el = document.getElementById('coverage-requests-list');
+  el.innerHTML = '<div class="loading">Loading...</div>';
+  const { data, error } = await window.supabase.from('coverage_requests')
+    .select('*, shifts(shift_date, role, period, start_time, end_time)').eq('status', 'open').order('created_at', { ascending: false });
+  if (error) { el.innerHTML = '<div class="loading">Error: ' + escHtml(error.message) + '</div>'; return; }
+  renderCoverageRequestsList(data || []);
+}
+
+function renderCoverageRequestsList(requests) {
+  const el = document.getElementById('coverage-requests-list');
+  if (!requests.length) { el.innerHTML = '<div class="loading">No open requests</div>'; return; }
+  el.innerHTML = requests.map((r) => {
+    const s = r.shifts || {};
+    const d = s.shift_date ? new Date(s.shift_date + 'T00:00:00') : null;
+    const label = (s.role === 'manager' ? 'Manager on Duty' : (s.period === 'morning' ? 'Morning' : 'Evening'));
+    const isMine = myStaffIds.includes(r.requested_by);
+    return '<div class="shift-row">'
+      + '<div><div class="shift-row-name">' + (d ? d.toLocaleDateString('default', { weekday: 'short', month: 'short', day: 'numeric' }) : '') + ' · ' + escHtml(label) + '</div>'
+      + '<div class="shift-row-meta">' + escHtml(staffName(r.requested_by)) + (s.start_time ? ' · ' + fmtTime(s.start_time) + (s.end_time ? '–' + fmtTime(s.end_time) : '') : '') + (r.note ? ' · ' + escHtml(r.note) : '') + '</div></div>'
+      + (isMine
+        ? '<button class="btn btn-sm btn-danger" onclick="cancelMyCoverageRequest(\'' + r.id + '\')">Cancel</button>'
+        : '<button class="btn btn-sm btn-primary" onclick="claimCoverageRequest(\'' + r.id + '\')">I\'ll Cover This</button>')
+      + '</div>';
+  }).join('');
+}
+
+async function claimCoverageRequest(requestId) {
+  const { error } = await window.supabase.from('coverage_requests')
+    .update({ status: 'claimed', claimed_by: window.currentStaff.id, claimed_at: new Date().toISOString() }).eq('id', requestId);
+  if (error) { toast('Error: ' + error.message, true); return; }
+  toast('Marked as covered — remember to update the shift assignment');
+  loadCoverageRequestsList();
+}
+
+async function cancelMyCoverageRequest(requestId) {
+  const { error } = await window.supabase.from('coverage_requests').delete().eq('id', requestId);
+  if (error) { toast('Error: ' + error.message, true); return; }
+  toast('Request cancelled');
+  loadCoverageRequestsList();
 }
 
 function myShiftsMonth(delta) {
@@ -86,19 +130,20 @@ function myShiftDayCellHtml(dateObj) {
   const halves = [];
   if (setting.morning_start) halves.push('morning');
   if (setting.evening_start) halves.push('evening');
-  const modName = (m) => escHtml(myStaffIds.includes(m.staff_id) ? 'you' : staffName(m.staff_id));
+  const isMe = (m) => myStaffIds.includes(m.staff_id);
+  const modName = (m) => escHtml(isMe(m) ? 'you' : staffName(m.staff_id));
 
   let html = '<div class="' + cls + '" onclick="openShiftModal(\'' + dateStr + '\')">';
   html += '<div class="cal-day-num">' + dateObj.getDate() + '</div>';
-  dayLevelMods.forEach((m) => { html += '<div class="cal-mod-pill">MOD: ' + modName(m) + '</div>'; });
+  dayLevelMods.forEach((m) => { html += '<div class="cal-mod-pill' + (isMe(m) ? ' mine' : '') + '">MOD: ' + modName(m) + '</div>'; });
   html += '<div class="cal-day-split">';
   halves.forEach((period) => {
     html += '<div class="cal-half">';
     myModData.filter((s) => s.shift_date === dateStr && s.period === period).forEach((m) => {
-      html += '<div class="cal-mod-pill">MOD: ' + modName(m) + '</div>';
+      html += '<div class="cal-mod-pill' + (isMe(m) ? ' mine' : '') + '">MOD: ' + modName(m) + '</div>';
     });
     mine.filter((s) => s.role === 'bartender' && s.period === period).forEach((s) => {
-      html += '<div class="cal-pill-emp">' + shiftSlotLabel(setting, period) + (s.start_time ? ' · ' + fmtTime(s.start_time) : '') + '</div>';
+      html += '<div class="cal-pill-emp mine">' + shiftSlotLabel(setting, period) + (s.start_time ? ' · ' + fmtTime(s.start_time) : '') + '</div>';
     });
     html += '</div>';
   });

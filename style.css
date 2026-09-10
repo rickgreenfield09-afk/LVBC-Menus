@@ -335,6 +335,7 @@
   .cal-pill-emp{font-size:11px;padding:2px 7px;border-radius:5px;background:var(--raised);border:1px solid var(--border);color:var(--text);line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
   .cal-pill-event{font-size:10px;padding:1px 7px;border-radius:5px;background:rgba(42,184,166,0.12);border:1px solid rgba(42,184,166,0.25);color:var(--teal);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
   .cal-pill-event.recurring{border-style:dashed;}
+  .cal-pill-emp.mine, .cal-mod-pill.mine{border-color:var(--teal);border-width:1.5px;box-shadow:0 0 0 1px rgba(42,184,166,0.25);}
   .shift-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);gap:10px;}
   .shift-row:last-child{border-bottom:none;}
   .shift-row-name{font-weight:500;font-size:13px;}
