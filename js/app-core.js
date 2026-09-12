@@ -14,12 +14,24 @@
 
   const logo = document.getElementById('header-logo');
   if (logo) logo.src = SUPABASE_URL + '/storage/v1/object/public/assets/lvbc-logo.png';
+
+  // Fires when someone lands here via an invite / password-recovery email
+  // link; Supabase parses the token from the URL and hands us a temporary
+  // session before checkSession() would otherwise run.
+  client.auth.onAuthStateChange((event) => {
+    if (event === 'PASSWORD_RECOVERY') {
+      awaitingPasswordSet = true;
+      renderSetPassword();
+    }
+  });
 })();
 
 window.currentStaff = null;
+let awaitingPasswordSet = false;
 
 // ── AUTH ─────────────────────────────────────────────────
 async function checkSession() {
+  if (awaitingPasswordSet) return;
   const { data: { session } } = await window.supabase.auth.getSession();
   if (!session) {
     renderLoggedOut();
@@ -68,7 +80,30 @@ async function handleLogout() {
   renderLoggedOut();
 }
 
+async function handleSetPassword(e) {
+  e.preventDefault();
+  const pw1 = document.getElementById('set-password-1').value;
+  const pw2 = document.getElementById('set-password-2').value;
+  const errEl = document.getElementById('set-password-error');
+  errEl.textContent = '';
+
+  if (pw1 !== pw2) {
+    errEl.textContent = 'Passwords do not match.';
+    return;
+  }
+
+  const { error } = await window.supabase.auth.updateUser({ password: pw1 });
+  if (error) {
+    errEl.textContent = error.message;
+    return;
+  }
+
+  awaitingPasswordSet = false;
+  await checkSession();
+}
+
 function renderLoggedIn() {
+  document.getElementById('set-password-screen').style.display = 'none';
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app-shell').style.display = 'flex';
   document.getElementById('staff-name-badge').textContent = window.currentStaff.name;
@@ -77,8 +112,15 @@ function renderLoggedIn() {
 }
 
 function renderLoggedOut() {
+  document.getElementById('set-password-screen').style.display = 'none';
   document.getElementById('app-shell').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
+}
+
+function renderSetPassword() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-shell').style.display = 'none';
+  document.getElementById('set-password-screen').style.display = 'flex';
 }
 
 // ── NAV ROUTER ───────────────────────────────────────────

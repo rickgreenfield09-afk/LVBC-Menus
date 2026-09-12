@@ -27,6 +27,24 @@
     </form>
   </div>
 
+  <!-- SET PASSWORD SCREEN (invite / recovery link lands here) -->
+  <div id="set-password-screen" style="display:none;min-height:100vh;align-items:center;justify-content:center;">
+    <form onsubmit="handleSetPassword(event)" style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:32px;width:320px;">
+      <div class="logo" style="margin-bottom:8px;">LVBC <span>Set Your Password</span></div>
+      <p style="font-size:12px;color:var(--muted);margin:0 0 20px;">Choose a password to finish setting up your account.</p>
+      <div class="admin-field" style="margin-bottom:12px;">
+        <label class="admin-label">New Password</label>
+        <input class="admin-input" type="password" id="set-password-1" minlength="8" required>
+      </div>
+      <div class="admin-field" style="margin-bottom:16px;">
+        <label class="admin-label">Confirm Password</label>
+        <input class="admin-input" type="password" id="set-password-2" minlength="8" required>
+      </div>
+      <div id="set-password-error" style="color:var(--red);font-size:12px;margin-bottom:12px;"></div>
+      <button type="submit" class="btn btn-primary" style="width:100%;">Save Password</button>
+    </form>
+  </div>
+
   <!-- APP SHELL -->
   <div id="app-shell" style="display:none;flex-direction:column;min-height:100vh;">
     <header>
