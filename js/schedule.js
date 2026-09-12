@@ -694,9 +694,11 @@ async function applyBulkSchedule() {
   const dates = Array.from(bulkSelectedDates).sort();
   if (!staffId || !dates.length) { toast('Pick at least one date', true); return; }
 
-  const { data: existing, error: exErr } = await window.supabase.from('shifts').select('shift_date,role,period').in('shift_date', dates);
+  // Multiple bartenders/managers can share the same date+role+period —
+  // only skip a date where THIS staffer is already in that exact slot.
+  const { data: existing, error: exErr } = await window.supabase.from('shifts').select('shift_date,role,period,staff_id').in('shift_date', dates);
   if (exErr) { toast('Error: ' + exErr.message, true); return; }
-  const taken = new Set((existing || []).filter((s) => s.role === role && s.period === period).map((s) => s.shift_date));
+  const taken = new Set((existing || []).filter((s) => s.role === role && s.period === period && s.staff_id === staffId).map((s) => s.shift_date));
 
   const toInsert = dates.filter((dt) => !taken.has(dt)).map((dt) => {
     const setting = scheduleDaySettings.find((s) => s.day_of_week === new Date(dt + 'T00:00:00').getDay()) || {};
@@ -707,12 +709,12 @@ async function applyBulkSchedule() {
 
   const flash = (bg, color, text) => { alertEl.style.display = 'block'; alertEl.style.background = bg; alertEl.style.color = color; alertEl.textContent = text; };
 
-  if (!toInsert.length) { flash('rgba(224,82,82,0.12)', 'var(--red)', 'All selected dates already have someone in that slot.'); return; }
+  if (!toInsert.length) { flash('rgba(224,82,82,0.12)', 'var(--red)', 'This staffer is already scheduled in that slot on every selected date.'); return; }
 
   const { data: inserted, error: insErr } = await window.supabase.from('shifts').insert(toInsert).select();
   if (insErr) { toast('Error: ' + insErr.message, true); return; }
 
-  flash('rgba(42,184,166,0.12)', 'var(--teal)', 'Added ' + toInsert.length + ' shift(s)' + (dates.length > toInsert.length ? ', skipped ' + (dates.length - toInsert.length) + ' already filled' : '') + '.');
+  flash('rgba(42,184,166,0.12)', 'var(--teal)', 'Added ' + toInsert.length + ' shift(s)' + (dates.length > toInsert.length ? ', skipped ' + (dates.length - toInsert.length) + ' already scheduled' : '') + '.');
   logAudit('bulk_add_shifts', 'shifts', null, { staff_id: staffId, role, period, count: toInsert.length, dates: toInsert.map((s) => s.shift_date) });
   loadBulkShiftList();
   loadScheduleRange();

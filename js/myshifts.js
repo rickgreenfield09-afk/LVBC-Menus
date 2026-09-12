@@ -75,6 +75,21 @@ async function claimCoverageRequest(requestId) {
   if (error) { toast('Error: ' + error.message, true); return; }
   toast('Marked as covered — remember to update the shift assignment');
   loadCoverageRequestsList();
+  notifyCoverageClaimed(requestId);
+}
+
+// Best-effort — email is optional (needs RESEND_API_KEY in Vercel) and
+// should never block the claim itself if it fails.
+async function notifyCoverageClaimed(requestId) {
+  try {
+    const { data: { session } } = await window.supabase.auth.getSession();
+    if (!session) return;
+    await fetch('/api/notify-coverage-claimed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token },
+      body: JSON.stringify({ requestId }),
+    });
+  } catch (e) { /* best-effort, never block the UI on this */ }
 }
 
 async function cancelMyCoverageRequest(requestId) {
