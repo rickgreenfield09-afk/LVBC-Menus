@@ -62,7 +62,7 @@ export default async function handler(req, res) {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + RESEND_API_KEY, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      from: 'LVBC Schedule <onboarding@resend.dev>',
+      from: 'LVBC Schedule <ricky.greenfield@axiomfwd.com>',
       to: emails,
       subject: 'Shift covered — ' + dateLabel,
       html,
