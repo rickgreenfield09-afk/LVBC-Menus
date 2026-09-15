@@ -74,6 +74,38 @@ async function handleLogin(e) {
   await checkSession();
 }
 
+function showForgotPassword(e) {
+  e.preventDefault();
+  document.getElementById('login-form').style.display = 'none';
+  document.getElementById('forgot-password-error').textContent = '';
+  document.getElementById('forgot-password-success').textContent = '';
+  document.getElementById('forgot-password-form').style.display = 'block';
+}
+
+function showLogin(e) {
+  e.preventDefault();
+  document.getElementById('forgot-password-form').style.display = 'none';
+  document.getElementById('login-form').style.display = 'block';
+}
+
+async function handleForgotPassword(e) {
+  e.preventDefault();
+  const email = document.getElementById('forgot-password-email').value.trim();
+  const errEl = document.getElementById('forgot-password-error');
+  const successEl = document.getElementById('forgot-password-success');
+  errEl.textContent = '';
+  successEl.textContent = '';
+
+  const { error } = await window.supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin,
+  });
+  if (error) {
+    errEl.textContent = error.message;
+    return;
+  }
+  successEl.textContent = 'Check your email for a reset link.';
+}
+
 async function handleLogout() {
   await window.supabase.auth.signOut();
   window.currentStaff = null;
