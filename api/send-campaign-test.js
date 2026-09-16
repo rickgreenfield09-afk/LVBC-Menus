@@ -21,6 +21,13 @@ export default async function handler(req, res) {
   const { subject, html } = req.body || {};
   if (!subject || !html) return res.status(400).json({ error: 'Missing subject or message body.' });
 
+  // Mirrors the footer api/send-campaign.js appends on a real send, so
+  // a test email previews the full layout — the link itself is inert
+  // (no real subscriber id exists for a test send).
+  const previewFooter = '<hr style="margin-top:24px;border:none;border-top:1px solid #ddd;">'
+    + '<p style="font-size:11px;color:#999;margin-top:8px;">You\'re receiving this because you subscribed to LVBC emails. '
+    + '<a href="#" style="color:#999;">Unsubscribe</a> (preview only — real sends include a working link per recipient)</p>';
+
   const callerRes = await fetch(SUPABASE_URL + '/auth/v1/user', {
     headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + token },
   });
@@ -43,7 +50,7 @@ export default async function handler(req, res) {
       from: 'LVBC Marketing <ricky.greenfield@axiomfwd.com>',
       to: [caller.email],
       subject: '[TEST] ' + subject,
-      html,
+      html: html + previewFooter,
     }),
   });
 
