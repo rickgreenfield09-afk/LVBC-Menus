@@ -214,4 +214,62 @@ function getInitials(name) {
     .toUpperCase();
 }
 
+// ── PROFILE (self-service name + photo) ──────────────────
+// Writes are protected server-side by migration_019 — RLS lets a
+// staffer update only their OWN row, and a trigger silently reverts
+// any column here besides name/photo_url even if this code tried to
+// send one, so this stays safe regardless of what the UI sends.
+let pendingProfilePhotoFile = null;
+
+function openProfileModal() {
+  pendingProfilePhotoFile = null;
+  document.getElementById('profile-name-input').value = window.currentStaff.name || '';
+  document.getElementById('profile-photo-preview').src = window.currentStaff.photo_url || 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"%3E%3Crect width="96" height="96" fill="%23ccc"/%3E%3C/svg%3E';
+  document.getElementById('profile-alert').style.display = 'none';
+  document.getElementById('profile-modal').style.display = 'flex';
+}
+
+function closeProfileModal() {
+  document.getElementById('profile-modal').style.display = 'none';
+}
+
+function handleProfilePhotoChosen(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  pendingProfilePhotoFile = file;
+  document.getElementById('profile-photo-preview').src = URL.createObjectURL(file);
+}
+
+function profileAlert(msg, isError) {
+  const el = document.getElementById('profile-alert');
+  el.style.display = 'block';
+  el.style.background = isError ? 'rgba(220,53,69,0.1)' : 'rgba(42,184,166,0.1)';
+  el.style.color = isError ? 'var(--red)' : 'var(--teal)';
+  el.textContent = msg;
+}
+
+async function saveProfile() {
+  const name = document.getElementById('profile-name-input').value.trim();
+  if (!name) { profileAlert('Name is required.', true); return; }
+
+  const uid = window.currentStaff.id;
+  const updates = { name };
+
+  if (pendingProfilePhotoFile) {
+    const ext = (pendingProfilePhotoFile.name.split('.').pop() || 'jpg').toLowerCase();
+    const path = 'staff/' + uid + '/photo.' + ext;
+    const { error: upErr } = await window.supabase.storage.from('assets').upload(path, pendingProfilePhotoFile, { upsert: true });
+    if (upErr) { profileAlert('Photo upload failed: ' + upErr.message, true); return; }
+    updates.photo_url = window.supabase.storage.from('assets').getPublicUrl(path).data.publicUrl;
+  }
+
+  const { error } = await window.supabase.from('staff_profiles').update(updates).eq('id', uid);
+  if (error) { profileAlert(error.message, true); return; }
+
+  window.currentStaff = Object.assign({}, window.currentStaff, updates);
+  document.getElementById('staff-name-badge').textContent = window.currentStaff.name;
+  toast('Profile updated');
+  closeProfileModal();
+}
+
 document.addEventListener('DOMContentLoaded', checkSession);

@@ -25,6 +25,8 @@ create table staff_profiles (
   -- rows assigned to a duplicate/placeholder profile too — see
   -- migration_014.
   email text,
+  -- self-service profile photo — see migration_019.
+  photo_url text,
   created_at timestamptz not null default now()
 );
 
@@ -37,6 +39,27 @@ create or replace function is_admin()
 returns boolean as $$
   select exists (select 1 from staff_profiles where id = auth.uid() and role = 'admin');
 $$ language sql security definer stable;
+
+-- A self-update (see the "own profile self-update" RLS policy below)
+-- may only ever touch name/photo_url — this trigger silently reverts
+-- any other column back to its prior value unless the actor is an
+-- admin, so a raw API call can't use self-update to self-promote.
+create or replace function protect_staff_profile_fields()
+returns trigger as $$
+begin
+  if not is_admin() then
+    new.role := old.role;
+    new.position := old.position;
+    new.can_schedule := old.can_schedule;
+    new.email := old.email;
+  end if;
+  return new;
+end;
+$$ language plpgsql security definer;
+
+create trigger staff_profiles_protect_fields
+  before update on staff_profiles
+  for each row execute function protect_staff_profile_fields();
 
 -- ---------- TIERS ----------
 -- Replaces the old free-text tier column on members.
@@ -530,10 +553,14 @@ alter table subscriber_topic_preferences enable row level security;
 alter table email_campaigns enable row level security;
 alter table email_events enable row level security;
 
--- staff_profiles: staff can read the roster; only admins manage roles
+-- staff_profiles: staff can read the roster; only admins manage roles;
+-- anyone can update their OWN row (name/photo only — see the trigger
+-- above) without needing admin rights.
 create policy "staff read roster" on staff_profiles for select using (is_staff());
 create policy "admin manage roster" on staff_profiles for all
   using (is_admin()) with check (is_admin());
+create policy "own profile self-update" on staff_profiles for update
+  using (id = auth.uid()) with check (id = auth.uid());
 
 -- Public read, staff write: catalog/marketing surfaces
 create policy "public read tiers" on tiers for select using (true);
@@ -633,8 +660,8 @@ create policy "staff only redemptions" on redemptions for all using (is_staff())
 create policy "staff only free_pours" on free_pours for all using (is_staff()) with check (is_staff());
 
 -- ============================================================
--- STORAGE — beer / wine photo uploads
--- Public bucket "assets", admin-only write.
+-- STORAGE — beer/wine photos (admin-only) + staff profile photos
+-- (self-service, own path only). Public bucket "assets".
 -- ============================================================
 
 insert into storage.buckets (id, name, public) values ('assets', 'assets', true)
@@ -648,6 +675,25 @@ create policy "admin update assets" on storage.objects for update
   using (bucket_id = 'assets' and is_admin()) with check (bucket_id = 'assets' and is_admin());
 create policy "admin delete assets" on storage.objects for delete
   using (bucket_id = 'assets' and is_admin());
+
+-- A staffer may upload/replace their own photo under
+-- assets/staff/<their-uid>/... — see migration_019.
+create policy "staff upload own photo" on storage.objects for insert
+  with check (
+    bucket_id = 'assets'
+    and (storage.foldername(name))[1] = 'staff'
+    and (storage.foldername(name))[2] = auth.uid()::text
+  );
+create policy "staff update own photo" on storage.objects for update
+  using (
+    bucket_id = 'assets'
+    and (storage.foldername(name))[1] = 'staff'
+    and (storage.foldername(name))[2] = auth.uid()::text
+  ) with check (
+    bucket_id = 'assets'
+    and (storage.foldername(name))[1] = 'staff'
+    and (storage.foldername(name))[2] = auth.uid()::text
+  );
 
 -- ============================================================
 -- SEED DATA

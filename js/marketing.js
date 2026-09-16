@@ -79,7 +79,7 @@ async function loadMarketingDashboard() {
     const cDelivered = campaignEvents.filter((e) => e.event_type === 'delivered').length;
     const cOpened = campaignEvents.filter((e) => e.event_type === 'opened').length;
     const cClicked = campaignEvents.filter((e) => e.event_type === 'clicked').length;
-    return '<tr><td style="font-weight:500">' + escHtml(c.subject) + '</td><td>' + campaignStatusBadge(c.status) + '</td>'
+    return '<tr style="cursor:pointer;" onclick="openCampaignDetailModal(\'' + c.id + '\')"><td style="font-weight:500">' + escHtml(c.subject) + '</td><td>' + campaignStatusBadge(c.status) + '</td>'
       + '<td style="font-size:12px;color:var(--sub)">' + (c.sent_at ? new Date(c.sent_at).toLocaleDateString() : '—') + '</td>'
       + '<td style="font-size:12px;color:var(--sub)">' + pct(cOpened, cDelivered) + '</td>'
       + '<td style="font-size:12px;color:var(--sub)">' + pct(cClicked, cDelivered) + '</td></tr>';
@@ -163,13 +163,14 @@ async function loadMarketingCampaigns() {
   const rows = campaignList.map((c) => {
     const editable = c.status === 'draft';
     const runs = c.starts_at ? (c.starts_at + (c.ends_at ? ' – ' + c.ends_at : '')) : '—';
-    return '<tr' + (editable ? ' style="cursor:pointer;" onclick="loadCampaignIntoEditor(\'' + c.id + '\')"' : '') + '>'
+    const onClick = editable ? 'loadCampaignIntoEditor(\'' + c.id + '\')' : 'openCampaignDetailModal(\'' + c.id + '\')';
+    return '<tr style="cursor:pointer;" onclick="' + onClick + '">'
       + '<td style="font-weight:500">' + escHtml(c.subject) + '</td><td>' + campaignStatusBadge(c.status) + '</td>'
       + '<td style="font-size:12px;color:var(--sub)">' + runs + '</td>'
       + '<td style="font-size:12px;color:var(--sub)">' + new Date(c.created_at).toLocaleDateString() + '</td></tr>';
   }).join('');
   el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Subject</th><th>Status</th><th>Runs</th><th>Created</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
-    + '<div style="font-size:11px;color:var(--muted);margin-top:8px;">Click a draft to edit it. Sent campaigns are locked.</div>';
+    + '<div style="font-size:11px;color:var(--muted);margin-top:8px;">Click a draft to edit it, or a sent/scheduled campaign to view its details.</div>';
 }
 
 function loadCampaignIntoEditor(id) {
@@ -299,6 +300,68 @@ async function sendCampaignNow() {
   } catch (e) {
     campaignAlert('Network error sending campaign.', true);
   }
+}
+
+// ── CAMPAIGN DETAIL MODAL ─────────────────────────
+function closeCampaignDetailModal() {
+  document.getElementById('campaign-detail-modal').style.display = 'none';
+}
+
+async function openCampaignDetailModal(id) {
+  document.getElementById('campaign-detail-modal').style.display = 'flex';
+  document.getElementById('campaign-detail-title').textContent = 'Loading…';
+  document.getElementById('campaign-detail-info').innerHTML = '<div class="loading">Loading...</div>';
+  document.getElementById('campaign-detail-stats').innerHTML = '';
+  document.getElementById('campaign-detail-preview').srcdoc = '';
+
+  const [{ data: c, error }, { data: eventsData }] = await Promise.all([
+    window.supabase.from('email_campaigns').select('*').eq('id', id).single(),
+    window.supabase.from('email_events').select('event_type').eq('campaign_id', id),
+  ]);
+  if (error || !c) {
+    document.getElementById('campaign-detail-info').innerHTML = '<div class="loading">Could not load campaign.</div>';
+    return;
+  }
+
+  let topicName = 'All Subscribers';
+  if (c.topic_id) {
+    const t = marketingTopics.find((x) => x.id === c.topic_id);
+    if (t) topicName = t.name;
+    else {
+      const { data: topicRow } = await window.supabase.from('email_topics').select('name').eq('id', c.topic_id).single();
+      if (topicRow) topicName = topicRow.name;
+    }
+  }
+
+  let creatorName = marketingStaffNames[c.created_by];
+  if (!creatorName && c.created_by) {
+    const { data: staffRow } = await window.supabase.from('staff_profiles').select('name').eq('id', c.created_by).single();
+    creatorName = staffRow ? staffRow.name : null;
+  }
+
+  document.getElementById('campaign-detail-title').textContent = c.subject;
+
+  const infoRow = (label, value) => '<div style="margin-bottom:12px;"><div class="form-label">' + escHtml(label) + '</div><div style="font-weight:500;">' + value + '</div></div>';
+  document.getElementById('campaign-detail-info').innerHTML =
+    infoRow('Status', campaignStatusBadge(c.status))
+    + infoRow('Audience', escHtml(topicName))
+    + infoRow('Campaign Runs', c.starts_at ? escHtml(c.starts_at + (c.ends_at ? ' – ' + c.ends_at : '')) : '—')
+    + infoRow('Created By', escHtml(creatorName || '—'))
+    + infoRow('Created', new Date(c.created_at).toLocaleString())
+    + infoRow('Sent', c.sent_at ? new Date(c.sent_at).toLocaleString() : '—');
+
+  const events = eventsData || [];
+  const countOf = (type) => events.filter((e) => e.event_type === type).length;
+  const delivered = countOf('delivered'), opened = countOf('opened'), clicked = countOf('clicked'), bounced = countOf('bounced'), complained = countOf('complained');
+  const statBox = (label, val, sub) => '<div class="stat-box" style="margin-bottom:8px;"><div class="stat-label">' + escHtml(label) + '</div><div class="stat-val">' + val + '</div>' + (sub ? '<div class="card-sub">' + sub + '</div>' : '') + '</div>';
+  document.getElementById('campaign-detail-stats').innerHTML =
+    statBox('Delivered', delivered)
+    + statBox('Opened', opened, pct(opened, delivered) + ' of delivered')
+    + statBox('Clicked', clicked, pct(clicked, delivered) + ' of delivered')
+    + statBox('Bounced', bounced)
+    + statBox('Complained', complained);
+
+  document.getElementById('campaign-detail-preview').srcdoc = c.html_body || '<p style="font-family:sans-serif;color:#999;">No content.</p>';
 }
 
 // ── AUDIENCE ─────────────────────────────────────

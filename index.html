@@ -71,7 +71,7 @@
         <span class="logo">LVBC <span>Staff Panel</span></span>
       </div>
       <div style="display:flex;align-items:center;gap:12px;">
-        <span class="staff-badge" id="staff-name-badge"></span>
+        <button class="staff-badge" id="staff-name-badge" style="cursor:pointer;" onclick="openProfileModal()"></button>
         <button class="btn btn-secondary btn-sm" onclick="handleLogout()">Sign Out</button>
       </div>
     </header>
@@ -79,10 +79,31 @@
     <nav>
       <button class="nav-btn active" onclick="showScreen('menu', this); loadMenu()">Menu</button>
       <button class="nav-btn" onclick="showScreen('schedule', this); loadSchedule()">Schedule</button>
-      <button class="nav-btn" id="nav-btn-admin" style="display:none;" onclick="showScreen('admin', this); loadAdmin()">Admin</button>
       <button class="nav-btn" id="nav-btn-marketing" style="display:none;" onclick="showScreen('marketing', this); loadMarketing()">Marketing</button>
+      <button class="nav-btn" id="nav-btn-admin" style="display:none;" onclick="showScreen('admin', this); loadAdmin()">Admin</button>
       <!-- Dashboard, Reports tabs added as their .js files land -->
     </nav>
+
+    <!-- PROFILE MODAL -->
+    <div id="profile-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:700;align-items:center;justify-content:center;">
+      <div class="card" style="width:380px;max-width:90vw;">
+        <div class="menu-col-header">
+          <div class="section-label" style="margin:0;">My Profile</div>
+          <button class="btn btn-sm btn-secondary" onclick="closeProfileModal()">&#10005; Close</button>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:20px;">
+          <img id="profile-photo-preview" style="width:96px;height:96px;border-radius:50%;object-fit:cover;background:var(--raised);border:1px solid var(--border);margin-bottom:10px;" alt="">
+          <input type="file" accept="image/*" id="profile-photo-input" style="display:none;" onchange="handleProfilePhotoChosen(event)">
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('profile-photo-input').click()">Change Photo</button>
+        </div>
+        <div class="form-group" style="margin-bottom:16px;">
+          <label class="form-label">Name</label>
+          <input class="form-input" style="width:100%;" type="text" id="profile-name-input">
+        </div>
+        <div id="profile-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
+        <button class="btn btn-primary" style="width:100%;" onclick="saveProfile()">Save Changes</button>
+      </div>
+    </div>
 
     <main>
       <!-- SCHEDULE SCREEN -->
@@ -599,6 +620,27 @@
                 <button class="btn btn-primary" style="width:100%;" onclick="addSubscribersDirect()">Add Subscribers</button>
               </div>
               <div id="mkt-subscribers-list"><div class="loading">Loading...</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CAMPAIGN DETAIL MODAL -->
+        <div id="campaign-detail-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:500;align-items:center;justify-content:center;">
+          <div class="card" style="width:1100px;max-width:95vw;height:88vh;display:flex;flex-direction:column;">
+            <div class="menu-col-header" style="flex-shrink:0;">
+              <div class="section-label" style="margin:0;" id="campaign-detail-title">Campaign</div>
+              <button class="btn btn-sm btn-secondary" onclick="closeCampaignDetailModal()">&#10005; Close</button>
+            </div>
+            <div style="flex:1;overflow-y:auto;display:grid;grid-template-columns:320px 1fr;gap:20px;">
+              <div>
+                <div id="campaign-detail-info"><div class="loading">Loading...</div></div>
+                <div class="section-label">Delivery Stats</div>
+                <div id="campaign-detail-stats"></div>
+              </div>
+              <div>
+                <div class="section-label" style="margin-top:0;">Message Preview</div>
+                <iframe id="campaign-detail-preview" style="width:100%;height:calc(100% - 30px);border:1px solid var(--border);border-radius:6px;background:#fff;"></iframe>
+              </div>
             </div>
           </div>
         </div>
