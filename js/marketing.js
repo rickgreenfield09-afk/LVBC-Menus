@@ -11,6 +11,7 @@
 let marketingTopics = [], marketingSubscribers = [], marketingStaffNames = {};
 let campaignList = [], campaignEditId = null, campaignQuill = null;
 let topicModalId = null;
+let directAddTopicIds = new Set();
 
 function loadMarketing() {
   setMarketingTab('dashboard', document.getElementById('marketingtab-btn-dashboard'));
@@ -295,6 +296,21 @@ async function loadMarketingTopics() {
   )).join('');
   el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Name</th><th>Description</th><th>Added By</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
     + '<div style="font-size:11px;color:var(--muted);margin-top:8px;">Click a topic to view or add subscribers.</div>';
+  renderDirectAddTopicPicker();
+}
+
+function renderDirectAddTopicPicker() {
+  const el = document.getElementById('mkt-sub-topic-picker');
+  if (!el) return;
+  if (!marketingTopics.length) { el.innerHTML = '<span style="font-size:12px;color:var(--muted);">No topics yet</span>'; return; }
+  el.innerHTML = marketingTopics.map((t) => (
+    '<div class="badge-pill' + (directAddTopicIds.has(t.id) ? ' selected' : '') + '" onclick="toggleDirectAddTopic(\'' + t.id + '\')">' + escHtml(t.name) + '</div>'
+  )).join('');
+}
+
+function toggleDirectAddTopic(id) {
+  if (directAddTopicIds.has(id)) directAddTopicIds.delete(id); else directAddTopicIds.add(id);
+  renderDirectAddTopicPicker();
 }
 
 async function addMarketingTopic() {
@@ -417,6 +433,49 @@ async function loadMarketingSubscribers() {
     + '<td style="font-size:12px;color:var(--sub)">' + new Date(s.subscribed_at).toLocaleDateString() + '</td></tr>'
   )).join('');
   el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Joined</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+function subAlert(msg, isError) {
+  const el = document.getElementById('mkt-sub-alert');
+  el.style.display = 'block';
+  el.style.background = isError ? 'rgba(220,53,69,0.1)' : 'rgba(42,184,166,0.1)';
+  el.style.color = isError ? 'var(--red)' : 'var(--teal)';
+  el.textContent = msg;
+}
+
+// General-purpose subscriber add, independent of any topic — the
+// topic-scoped modal (openTopicSubscribersModal) covers "add people
+// to this specific audience"; this covers "add people at all,"
+// needed even when no topics exist yet.
+async function addSubscribersDirect() {
+  const raw = document.getElementById('mkt-sub-emails').value;
+  const entries = parseBulkEmailLines(raw);
+  document.getElementById('mkt-sub-alert').style.display = 'none';
+
+  if (!entries.length) { subAlert('Enter at least one email.', true); return; }
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const invalid = entries.find((e) => !emailRe.test(e.email));
+  if (invalid) { subAlert('Invalid email: ' + invalid.email, true); return; }
+
+  const emails = entries.map((e) => e.email.toLowerCase());
+  const newRows = entries.map((e) => ({ email: e.email.toLowerCase(), name: e.name, source: 'manual' }));
+  const { error: insErr } = await window.supabase.from('email_subscribers').upsert(newRows, { onConflict: 'email', ignoreDuplicates: true });
+  if (insErr) { subAlert(insErr.message, true); return; }
+
+  if (directAddTopicIds.size) {
+    const { data: subRows, error: fetchErr } = await window.supabase.from('email_subscribers').select('id,email').in('email', emails);
+    if (fetchErr) { subAlert(fetchErr.message, true); return; }
+    const prefRows = [];
+    (subRows || []).forEach((s) => { directAddTopicIds.forEach((topicId) => prefRows.push({ subscriber_id: s.id, topic_id: topicId, subscribed: true })); });
+    if (prefRows.length) {
+      const { error: prefErr } = await window.supabase.from('subscriber_topic_preferences').upsert(prefRows, { onConflict: 'subscriber_id,topic_id' });
+      if (prefErr) { subAlert(prefErr.message, true); return; }
+    }
+  }
+
+  subAlert('Added ' + entries.length + ' subscriber(s).');
+  document.getElementById('mkt-sub-emails').value = '';
+  loadMarketingSubscribers();
 }
 
 // ── SETTINGS ─────────────────────────────────────
