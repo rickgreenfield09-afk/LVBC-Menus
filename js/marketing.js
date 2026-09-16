@@ -8,8 +8,9 @@
 // access without being trusted to edit marketing data.
 // Depends on: window.supabase, toast(), escHtml() (js/menu.js)
 
-let marketingTopics = [], marketingSubscribers = [];
+let marketingTopics = [], marketingSubscribers = [], marketingStaffNames = {};
 let campaignList = [], campaignEditId = null, campaignQuill = null;
+let topicModalId = null;
 
 function loadMarketing() {
   setMarketingTab('dashboard', document.getElementById('marketingtab-btn-dashboard'));
@@ -126,11 +127,13 @@ async function loadMarketingCampaigns() {
   if (!campaignList.length) { el.innerHTML = '<div class="loading">No campaigns yet.</div>'; return; }
   const rows = campaignList.map((c) => {
     const editable = c.status === 'draft';
+    const runs = c.starts_at ? (c.starts_at + (c.ends_at ? ' – ' + c.ends_at : '')) : '—';
     return '<tr' + (editable ? ' style="cursor:pointer;" onclick="loadCampaignIntoEditor(\'' + c.id + '\')"' : '') + '>'
       + '<td style="font-weight:500">' + escHtml(c.subject) + '</td><td>' + campaignStatusBadge(c.status) + '</td>'
+      + '<td style="font-size:12px;color:var(--sub)">' + runs + '</td>'
       + '<td style="font-size:12px;color:var(--sub)">' + new Date(c.created_at).toLocaleDateString() + '</td></tr>';
   }).join('');
-  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Subject</th><th>Status</th><th>Created</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Subject</th><th>Status</th><th>Runs</th><th>Created</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
     + '<div style="font-size:11px;color:var(--muted);margin-top:8px;">Click a draft to edit it. Sent campaigns are locked.</div>';
 }
 
@@ -142,6 +145,8 @@ function loadCampaignIntoEditor(id) {
   document.getElementById('mkt-composer-cancel').style.visibility = 'visible';
   document.getElementById('mkt-camp-subject').value = c.subject || '';
   document.getElementById('mkt-camp-topic').value = c.topic_id || '';
+  document.getElementById('mkt-camp-starts').value = c.starts_at || '';
+  document.getElementById('mkt-camp-ends').value = c.ends_at || '';
   campaignQuill.setContents([]);
   campaignQuill.clipboard.dangerouslyPasteHTML(c.html_body || '');
   clearCampaignAlert();
@@ -153,6 +158,8 @@ function cancelCampaignEdit() {
   document.getElementById('mkt-composer-cancel').style.visibility = 'hidden';
   document.getElementById('mkt-camp-subject').value = '';
   document.getElementById('mkt-camp-topic').value = '';
+  document.getElementById('mkt-camp-starts').value = '';
+  document.getElementById('mkt-camp-ends').value = '';
   if (campaignQuill) campaignQuill.setContents([]);
   clearCampaignAlert();
 }
@@ -177,13 +184,16 @@ function campaignAlert(msg, isError) {
 async function saveCampaignDraft(silent) {
   const subject = document.getElementById('mkt-camp-subject').value.trim();
   const topicId = document.getElementById('mkt-camp-topic').value || null;
+  const startsAt = document.getElementById('mkt-camp-starts').value || null;
+  const endsAt = document.getElementById('mkt-camp-ends').value || null;
   const html = campaignQuill.root.innerHTML;
   clearCampaignAlert();
 
   if (!subject) { campaignAlert('Subject is required.', true); return false; }
   if (!campaignQuill.getText().trim()) { campaignAlert('Message body is empty.', true); return false; }
+  if (startsAt && endsAt && endsAt < startsAt) { campaignAlert('Campaign end date is before the start date.', true); return false; }
 
-  const payload = { subject, topic_id: topicId, html_body: html };
+  const payload = { subject, topic_id: topicId, html_body: html, starts_at: startsAt, ends_at: endsAt };
 
   if (campaignEditId) {
     const { error } = await window.supabase.from('email_campaigns').update(payload).eq('id', campaignEditId);
@@ -257,9 +267,16 @@ async function sendCampaignNow() {
 }
 
 // ── AUDIENCE ─────────────────────────────────────
-function loadMarketingAudience() {
+async function loadMarketingAudience() {
+  await loadMarketingStaffNames();
   loadMarketingTopics();
   loadMarketingSubscribers();
+}
+
+async function loadMarketingStaffNames() {
+  const { data } = await window.supabase.from('staff_profiles').select('id,name');
+  marketingStaffNames = {};
+  (data || []).forEach((s) => { marketingStaffNames[s.id] = s.name; });
 }
 
 async function loadMarketingTopics() {
@@ -270,18 +287,22 @@ async function loadMarketingTopics() {
   marketingTopics = data || [];
   if (!marketingTopics.length) { el.innerHTML = '<div class="loading">No topics yet.</div>'; return; }
   const rows = marketingTopics.map((t) => (
-    '<tr><td style="font-weight:500">' + escHtml(t.name) + '</td>'
+    '<tr style="cursor:pointer;" onclick="openTopicSubscribersModal(\'' + t.id + '\')">'
+    + '<td style="font-weight:500">' + escHtml(t.name) + '</td>'
     + '<td style="font-size:12px;color:var(--sub)">' + escHtml(t.description || '') + '</td>'
-    + '<td><button class="btn btn-sm btn-danger" onclick="removeMarketingTopic(\'' + t.id + '\',\'' + escHtml(t.name).replace(/'/g, "\\'") + '\')">Remove</button></td></tr>'
+    + '<td style="font-size:12px;color:var(--sub)">' + escHtml(marketingStaffNames[t.created_by] || '—') + '</td>'
+    + '<td><button class="btn btn-sm btn-danger" onclick="event.stopPropagation();removeMarketingTopic(\'' + t.id + '\',\'' + escHtml(t.name).replace(/'/g, "\\'") + '\')">Remove</button></td></tr>'
   )).join('');
-  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Name</th><th>Description</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Name</th><th>Description</th><th>Added By</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+    + '<div style="font-size:11px;color:var(--muted);margin-top:8px;">Click a topic to view or add subscribers.</div>';
 }
 
 async function addMarketingTopic() {
   const input = document.getElementById('mkt-new-topic-name');
   const name = input.value.trim();
   if (!name) { toast('Enter a topic name', true); return; }
-  const { error } = await window.supabase.from('email_topics').insert({ name });
+  const { data: { session } } = await window.supabase.auth.getSession();
+  const { error } = await window.supabase.from('email_topics').insert({ name, created_by: session ? session.user.id : null });
   if (error) { toast('Error: ' + error.message, true); return; }
   input.value = '';
   toast('Topic added');
@@ -294,6 +315,92 @@ async function removeMarketingTopic(id, name) {
   if (error) { toast('Error: ' + error.message, true); return; }
   toast('Removed ' + name);
   loadMarketingTopics();
+}
+
+// ── TOPIC SUBSCRIBERS MODAL (view + manually add) ─────────
+function topicModalAlert(msg, isError) {
+  const el = document.getElementById('topic-modal-alert');
+  el.style.display = 'block';
+  el.style.background = isError ? 'rgba(220,53,69,0.1)' : 'rgba(42,184,166,0.1)';
+  el.style.color = isError ? 'var(--red)' : 'var(--teal)';
+  el.textContent = msg;
+}
+
+function openTopicSubscribersModal(topicId) {
+  const t = marketingTopics.find((x) => x.id === topicId);
+  if (!t) return;
+  topicModalId = topicId;
+  document.getElementById('topic-modal-title').textContent = t.name;
+  document.getElementById('topic-modal-emails').value = '';
+  document.getElementById('topic-modal-alert').style.display = 'none';
+  document.getElementById('topic-subscribers-modal').style.display = 'flex';
+  loadTopicModalSubscribers();
+}
+
+function closeTopicSubscribersModal() {
+  document.getElementById('topic-subscribers-modal').style.display = 'none';
+  topicModalId = null;
+}
+
+async function loadTopicModalSubscribers() {
+  const el = document.getElementById('topic-modal-subscribers-list');
+  el.innerHTML = '<div class="loading">Loading...</div>';
+  const { data, error } = await window.supabase
+    .from('subscriber_topic_preferences')
+    .select('subscriber:subscriber_id(id,email,name,unsubscribed_at)')
+    .eq('topic_id', topicModalId)
+    .eq('subscribed', true);
+  if (error) { el.innerHTML = '<div class="loading">Error: ' + escHtml(error.message) + '</div>'; return; }
+  const list = (data || []).filter((r) => r.subscriber);
+  document.getElementById('topic-modal-count').textContent = list.length;
+  if (!list.length) { el.innerHTML = '<div class="loading">No subscribers yet.</div>'; return; }
+  el.innerHTML = '<div class="table-wrap"><table><tbody>' + list.map((r) => (
+    '<tr><td style="font-weight:500">' + escHtml(r.subscriber.name || '') + '</td>'
+    + '<td style="font-size:12px;color:var(--sub)">' + escHtml(r.subscriber.email) + '</td>'
+    + '<td>' + (r.subscriber.unsubscribed_at ? '<span class="badge badge-muted">Unsubscribed</span>' : '') + '</td></tr>'
+  )).join('') + '</tbody></table></div>';
+}
+
+// Splits pasted text one entry per line: "email" or "email, Name".
+function parseBulkEmailLines(text) {
+  return text.split('\n').map((line) => line.trim()).filter(Boolean).map((line) => {
+    const commaIdx = line.indexOf(',');
+    if (commaIdx === -1) return { email: line, name: null };
+    return { email: line.slice(0, commaIdx).trim(), name: line.slice(commaIdx + 1).trim() || null };
+  });
+}
+
+async function addSubscribersToTopic() {
+  const raw = document.getElementById('topic-modal-emails').value;
+  const entries = parseBulkEmailLines(raw);
+  document.getElementById('topic-modal-alert').style.display = 'none';
+
+  if (!entries.length) { topicModalAlert('Enter at least one email.', true); return; }
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const invalid = entries.find((e) => !emailRe.test(e.email));
+  if (invalid) { topicModalAlert('Invalid email: ' + invalid.email, true); return; }
+
+  const emails = entries.map((e) => e.email.toLowerCase());
+
+  // Insert only genuinely new subscribers (ON CONFLICT DO NOTHING) —
+  // re-adding an existing subscriber here must never overwrite their
+  // stored name, and must never silently clear an unsubscribed_at
+  // they set themselves.
+  const newRows = entries.map((e) => ({ email: e.email.toLowerCase(), name: e.name, source: 'manual' }));
+  const { error: insErr } = await window.supabase.from('email_subscribers').upsert(newRows, { onConflict: 'email', ignoreDuplicates: true });
+  if (insErr) { topicModalAlert(insErr.message, true); return; }
+
+  const { data: subRows, error: fetchErr } = await window.supabase.from('email_subscribers').select('id,email').in('email', emails);
+  if (fetchErr) { topicModalAlert(fetchErr.message, true); return; }
+
+  const prefRows = subRows.map((s) => ({ subscriber_id: s.id, topic_id: topicModalId, subscribed: true }));
+  const { error: prefErr } = await window.supabase.from('subscriber_topic_preferences').upsert(prefRows, { onConflict: 'subscriber_id,topic_id' });
+  if (prefErr) { topicModalAlert(prefErr.message, true); return; }
+
+  topicModalAlert('Added ' + subRows.length + ' subscriber(s) to this audience.');
+  document.getElementById('topic-modal-emails').value = '';
+  loadTopicModalSubscribers();
+  loadMarketingSubscribers();
 }
 
 async function loadMarketingSubscribers() {

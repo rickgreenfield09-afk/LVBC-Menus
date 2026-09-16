@@ -19,7 +19,7 @@
 
 function unsubscribeFooter(subscriberId, baseUrl) {
   return '<hr style="margin-top:24px;border:none;border-top:1px solid #ddd;">'
-    + '<p style="font-size:11px;color:#999;margin-top:8px;">You\'re receiving this because you subscribed to LVBC emails. '
+    + '<p style="font-size:11px;color:#999;margin-top:8px;">You\'re receiving this because you subscribed to Lago Vista Brewing Company emails. '
     + '<a href="' + baseUrl + '/api/unsubscribe?id=' + subscriberId + '" style="color:#999;">Unsubscribe</a></p>';
 }
 
@@ -73,7 +73,7 @@ export default async function handler(req, res) {
 
   const baseUrl = 'https://' + req.headers.host;
   const messages = recipients.map((r) => ({
-    from: 'LVBC Marketing <ricky.greenfield@axiomfwd.com>',
+    from: 'Lago Vista Brewing Company <ricky.greenfield@axiomfwd.com>',
     to: [r.email],
     subject: campaign.subject,
     html: campaign.html_body + unsubscribeFooter(r.id, baseUrl),

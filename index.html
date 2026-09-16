@@ -530,6 +530,16 @@
                     <option value="">All Subscribers</option>
                   </select>
                 </div>
+                <div class="form-row" style="margin-bottom:16px;">
+                  <div class="form-group">
+                    <label class="form-label">Campaign Start</label>
+                    <input class="form-input" style="width:100%;" type="date" id="mkt-camp-starts">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Campaign End</label>
+                    <input class="form-input" style="width:100%;" type="date" id="mkt-camp-ends">
+                  </div>
+                </div>
                 <div class="form-group" style="margin-bottom:16px;">
                   <label class="form-label">Message</label>
                   <div id="mkt-camp-editor" style="background:#fff;border-radius:0 0 6px 6px;min-height:200px;color:#111;"></div>
@@ -578,6 +588,24 @@
               </div>
               <div id="mkt-subscribers-list"><div class="loading">Loading...</div></div>
             </div>
+          </div>
+        </div>
+
+        <!-- TOPIC SUBSCRIBERS MODAL -->
+        <div id="topic-subscribers-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:500;align-items:center;justify-content:center;">
+          <div class="card" style="width:480px;max-width:90vw;max-height:80vh;overflow-y:auto;">
+            <div class="menu-col-header">
+              <div class="section-label" style="margin:0;" id="topic-modal-title">Topic</div>
+              <button class="btn btn-sm btn-secondary" onclick="closeTopicSubscribersModal()">&#10005; Close</button>
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+              <label class="form-label">Add Subscribers</label>
+              <textarea class="form-input" style="width:100%;min-height:90px;" id="topic-modal-emails" placeholder="One per line: jane@example.com or jane@example.com, Jane Doe"></textarea>
+            </div>
+            <div id="topic-modal-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
+            <button class="btn btn-primary" style="width:100%;margin-bottom:20px;" onclick="addSubscribersToTopic()">Add to This Audience</button>
+            <div class="section-label" style="margin-top:0;">Current Subscribers (<span id="topic-modal-count">0</span>)</div>
+            <div id="topic-modal-subscribers-list"><div class="loading">Loading...</div></div>
           </div>
         </div>
 
