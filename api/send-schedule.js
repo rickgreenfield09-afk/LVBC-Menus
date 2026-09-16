@@ -105,18 +105,20 @@ export default async function handler(req, res) {
   const shifts = await shiftsRes.json();
   if (!shiftsRes.ok) return res.status(500).json({ error: 'Could not load shifts' });
 
-  // Who's MOD each day this month (a day-level assignment, separate
-  // from this person's own rows — see schema.sql's note on `shifts`).
-  // In practice this brewery runs a separate AM and PM MOD, so each
-  // date can carry two manager rows — keep start_time so a bartender's
-  // morning shift only shows the morning MOD, not both.
-  const modRes = await fetch(
-    SUPABASE_URL + '/rest/v1/shifts?select=shift_date,start_time,staff:staff_id(name)&role=eq.manager&shift_date=gte.' + monthStart + '&shift_date=lt.' + monthEndExclusive,
+  // Every shift this month, for everyone — not just the recipient —
+  // so we can show who's MOD and which other bartenders are on the
+  // same shift alongside this person's own rows.
+  const allShiftsRes = await fetch(
+    SUPABASE_URL + '/rest/v1/shifts?select=shift_date,role,period,start_time,staff_id,staff:staff_id(name)&shift_date=gte.' + monthStart + '&shift_date=lt.' + monthEndExclusive,
     { headers: authHeaders }
   );
-  const modShifts = modRes.ok ? await modRes.json() : [];
+  const allShifts = allShiftsRes.ok ? await allShiftsRes.json() : [];
+
+  // In practice this brewery runs a separate AM and PM MOD, so each
+  // date can carry two manager rows — keep start_time so a morning
+  // shift only shows the morning MOD, not both.
   const modsByDate = {};
-  (modShifts || []).forEach((s) => {
+  (allShifts || []).filter((s) => s.role === 'manager').forEach((s) => {
     if (!s.staff || !s.staff.name) return;
     (modsByDate[s.shift_date] = modsByDate[s.shift_date] || []).push({ startTime: s.start_time, name: s.staff.name });
   });
@@ -126,6 +128,20 @@ export default async function handler(req, res) {
       ? mods.filter((mod) => !mod.startTime || (period === 'morning' ? mod.startTime < '12:00:00' : mod.startTime >= '12:00:00'))
       : mods;
     return (matching.length ? matching : mods).map((mod) => mod.name).join(', ');
+  }
+
+  // Other bartenders working the same date + period (morning/evening)
+  // as this person's own shift — MOD is covered by modLabelFor above,
+  // so manager rows are excluded here to avoid listing them twice.
+  const coworkersByDatePeriod = {};
+  (allShifts || []).filter((s) => s.role === 'bartender').forEach((s) => {
+    if (!s.staff || !s.staff.name) return;
+    const key = s.shift_date + '|' + s.period;
+    (coworkersByDatePeriod[key] = coworkersByDatePeriod[key] || []).push({ staffId: s.staff_id, name: s.staff.name });
+  });
+  function coworkersFor(shiftDate, period, excludeStaffIds) {
+    const list = coworkersByDatePeriod[shiftDate + '|' + period] || [];
+    return list.filter((c) => !excludeStaffIds.includes(c.staffId)).map((c) => c.name).join(', ');
   }
 
   // One-off events (Beer release, VFW night, etc.) plus recurring
@@ -149,24 +165,31 @@ export default async function handler(req, res) {
   computeRecurringOccurrences(recurringEvents || [], recurringOverrides || [], new Date(y, m - 1, 1), new Date(y, m, 0))
     .forEach((occ) => addEvent(occ.date, occ.name));
 
-  const CELL = 'padding:8px 12px;border:1px solid #ddd;';
-  const rows = (shifts || []).map((s) => {
-    const label = s.role === 'manager' ? 'Manager on Duty' : (s.period === 'morning' ? 'Morning' : 'Evening');
+  const ROW = 'padding:2px 0;';
+  const LABEL = 'display:inline-block;width:100px;color:#666;';
+  const dayBlocks = (shifts || []).map((s) => {
+    const position = s.role === 'manager' ? 'Manager on Duty' : ((s.period === 'morning' ? 'Morning' : 'Evening') + ' Bartender');
     const d = new Date(s.shift_date + 'T00:00:00');
     const dateLabel = d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
     const timeLabel = fmtTime(s.start_time) + (s.end_time ? ' – ' + fmtTime(s.end_time) : '');
     const modLabel = s.role === 'manager' ? '' : modLabelFor(s.shift_date, s.period);
+    const coworkerLabel = s.period ? coworkersFor(s.shift_date, s.period, staffIds) : '';
     const eventsLabel = eventsByDate[s.shift_date] || '';
-    return '<tr><td style="' + CELL + '">' + dateLabel + '</td><td style="' + CELL + '">' + label + '</td><td style="' + CELL + '">' + timeLabel + '</td>'
-      + '<td style="' + CELL + '">' + modLabel + '</td><td style="' + CELL + '">' + eventsLabel + '</td></tr>';
+
+    const lines = [['Position', position], ['Time', timeLabel]];
+    if (modLabel) lines.push(['MOD', modLabel]);
+    if (coworkerLabel) lines.push(['Also working', coworkerLabel]);
+    if (eventsLabel) lines.push(['Events', eventsLabel]);
+
+    return '<div style="margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #ddd;">'
+      + '<div style="font-weight:bold;margin-bottom:4px;">' + dateLabel + '</div>'
+      + lines.map(([label, value]) => '<div style="' + ROW + '"><span style="' + LABEL + '">' + label + ':</span>' + value + '</div>').join('')
+      + '</div>';
   }).join('');
 
   const monthLabel = new Date(y, m - 1, 1).toLocaleString('default', { month: 'long', year: 'numeric' });
-  const headerCell = CELL + 'text-align:left;background:#f4f4f4;';
-  const headerRow = '<tr><th style="' + headerCell + '">Date</th><th style="' + headerCell + '">Shift</th>'
-    + '<th style="' + headerCell + '">Time</th><th style="' + headerCell + '">MOD</th><th style="' + headerCell + '">Events</th></tr>';
   const html = '<h2>LVBC Schedule &mdash; ' + monthLabel + '</h2><p>Hi ' + (staffName || '') + ', here\'s your schedule.</p>'
-    + (rows ? '<table style="border-collapse:collapse;">' + headerRow + rows + '</table>' : '<p>No shifts scheduled this month.</p>');
+    + (dayBlocks || '<p>No shifts scheduled this month.</p>');
 
   const sendRes = await fetch('https://api.resend.com/emails', {
     method: 'POST',
