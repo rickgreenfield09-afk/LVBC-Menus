@@ -78,6 +78,7 @@
       <button class="nav-btn active" onclick="showScreen('menu', this); loadMenu()">Menu</button>
       <button class="nav-btn" onclick="showScreen('schedule', this); loadSchedule()">Schedule</button>
       <button class="nav-btn" id="nav-btn-admin" style="display:none;" onclick="showScreen('admin', this); loadAdmin()">Admin</button>
+      <button class="nav-btn" id="nav-btn-marketing" style="display:none;" onclick="showScreen('marketing', this); loadMarketing()">Marketing</button>
       <!-- Dashboard, Reports tabs added as their .js files land -->
     </nav>
 
@@ -469,6 +470,91 @@
         </div>
       </div>
 
+      <!-- MARKETING SCREEN -->
+      <div class="screen" id="screen-marketing">
+        <div class="sub-tabs">
+          <button class="sub-tab active" id="marketingtab-btn-dashboard" onclick="setMarketingTab('dashboard', this)">Dashboard</button>
+          <button class="sub-tab" id="marketingtab-btn-campaigns" onclick="setMarketingTab('campaigns', this)">Campaigns</button>
+          <button class="sub-tab" id="marketingtab-btn-audience" onclick="setMarketingTab('audience', this)">Audience</button>
+          <button class="sub-tab" id="marketingtab-btn-settings" onclick="setMarketingTab('settings', this)">Settings</button>
+        </div>
+
+        <!-- DASHBOARD -->
+        <div class="sub-sec active" id="marketingtab-dashboard">
+          <div class="section-label" style="margin-top:0;">Overview</div>
+          <div class="grid-2" style="grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;">
+            <div class="card">
+              <div class="card-title">Subscribers</div>
+              <div class="card-value" id="mkt-kpi-subscribers">&ndash;</div>
+              <div class="card-sub" id="mkt-kpi-subscribers-sub"></div>
+            </div>
+            <div class="card">
+              <div class="card-title">Campaigns Sent</div>
+              <div class="card-value" id="mkt-kpi-sent">&ndash;</div>
+            </div>
+            <div class="card">
+              <div class="card-title">Avg Open Rate</div>
+              <div class="card-value teal" id="mkt-kpi-open">&ndash;</div>
+            </div>
+            <div class="card">
+              <div class="card-title">Avg Click Rate</div>
+              <div class="card-value teal" id="mkt-kpi-click">&ndash;</div>
+            </div>
+          </div>
+
+          <div class="section-label">Subscribers by Topic</div>
+          <div class="grid-2" style="grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;" id="mkt-topic-breakdown"><div class="loading">Loading...</div></div>
+
+          <div class="section-label">Recent Campaigns</div>
+          <div id="mkt-recent-campaigns"><div class="loading">Loading...</div></div>
+        </div>
+
+        <!-- CAMPAIGNS -->
+        <div class="sub-sec" id="marketingtab-campaigns">
+          <div class="menu-col-header">
+            <div class="section-label" style="margin:0;">Campaigns</div>
+            <button class="btn btn-primary btn-sm" onclick="newCampaignStub()">New Campaign</button>
+          </div>
+          <div id="mkt-campaigns-list"><div class="loading">Loading...</div></div>
+        </div>
+
+        <!-- AUDIENCE -->
+        <div class="sub-sec" id="marketingtab-audience">
+          <div class="grid-2">
+            <div class="grid2-col">
+              <div class="menu-col-header">
+                <div class="section-label" style="margin:0;">Topics</div>
+              </div>
+              <div class="card" style="margin-bottom:16px;">
+                <div class="form-row" style="grid-template-columns:2fr 1fr;margin-bottom:0;">
+                  <div class="form-group">
+                    <label class="form-label">New Topic Name</label>
+                    <input class="form-input" style="width:100%;" type="text" id="mkt-new-topic-name" placeholder="e.g. Beer Club">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">&nbsp;</label>
+                    <button class="btn btn-primary" style="width:100%;" onclick="addMarketingTopic()">Add Topic</button>
+                  </div>
+                </div>
+              </div>
+              <div id="mkt-topics-list"><div class="loading">Loading...</div></div>
+            </div>
+            <div class="grid2-col">
+              <div class="menu-col-header">
+                <div class="section-label" style="margin:0;">Subscribers</div>
+              </div>
+              <div id="mkt-subscribers-list"><div class="loading">Loading...</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SETTINGS -->
+        <div class="sub-sec" id="marketingtab-settings">
+          <div class="section-label" style="margin-top:0;">Connection Status</div>
+          <div class="table-wrap" id="mkt-settings-status"><div class="loading">Loading...</div></div>
+        </div>
+      </div>
+
       <!-- MENU SCREEN -->
       <div class="screen active" id="screen-menu">
         <div class="sub-tabs">
@@ -736,6 +822,7 @@
   <script src="config.js"></script>
   <script src="js/app-core.js"></script>
   <script src="js/admin.js"></script>
+  <script src="js/marketing.js"></script>
   <script src="js/menu.js"></script>
   <script src="js/schedule.js"></script>
   <script src="js/recurring.js"></script>

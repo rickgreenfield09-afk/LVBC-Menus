@@ -152,6 +152,8 @@ function renderLoggedIn() {
   document.getElementById('staff-name-badge').textContent = window.currentStaff.name;
   const adminNavBtn = document.getElementById('nav-btn-admin');
   if (adminNavBtn) adminNavBtn.style.display = window.currentStaff.role === 'admin' ? '' : 'none';
+  const marketingNavBtn = document.getElementById('nav-btn-marketing');
+  if (marketingNavBtn) marketingNavBtn.style.display = window.currentStaff.role === 'admin' ? '' : 'none';
   if (typeof loadDashboard === 'function') loadDashboard();
   if (typeof loadMenu === 'function') loadMenu();
 }
