@@ -71,7 +71,12 @@ export default async function handler(req, res) {
 
   if (!recipients.length) return res.status(400).json({ error: 'No subscribers match this campaign\'s audience.' });
 
-  const baseUrl = 'https://' + req.headers.host;
+  // Hardcoded rather than derived from req.headers.host: the admin's
+  // browser may hit this API from the Vercel-assigned domain, but the
+  // unsubscribe link specifically needs to live under the same root
+  // domain mail is sent from (app.axiomfwd.com) for deliverability —
+  // Resend's Insights flagged a mismatched link domain as a spam signal.
+  const baseUrl = 'https://app.axiomfwd.com';
   const messages = recipients.map((r) => ({
     from: 'Lago Vista Brewing Company <ricky.greenfield@axiomfwd.com>',
     to: [r.email],
