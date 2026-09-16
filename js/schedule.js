@@ -575,6 +575,7 @@ async function deleteModalEvent(id) {
 // ── BULK SCHEDULING ───────────────────────────────────────
 let bulkSelectedWeekdays = new Set();
 let bulkSelectedDates = new Set();
+let lastBulkAction = null;
 
 function populateBulkSelectors() {
   document.getElementById('bulk-filter-staff').innerHTML = '<option value="">All Staff</option>' + scheduleStaff.map((s) => '<option value="' + s.id + '">' + escHtml(s.name) + '</option>').join('');
@@ -586,6 +587,18 @@ function populateBulkSelectors() {
   document.getElementById('bk-through').value = toDateStr(monthEnd);
   bulkSelectedWeekdays = new Set();
   recomputeBulkDatesFromPattern();
+  renderWeekdayPicker();
+  onBulkPositionChange();
+  lastBulkAction = null;
+  document.getElementById('bk-undo-btn').style.display = 'none';
+}
+
+// Clears the weekday/date pick after a successful apply so the next
+// bulk action starts from a deliberate choice instead of silently
+// reusing (and potentially double-applying to) the same dates.
+function resetBulkSelection() {
+  bulkSelectedWeekdays = new Set();
+  bulkSelectedDates = new Set();
   renderWeekdayPicker();
   onBulkPositionChange();
 }
@@ -718,6 +731,26 @@ async function applyBulkSchedule() {
 
   flash('rgba(42,184,166,0.12)', 'var(--teal)', 'Added ' + toInsert.length + ' shift(s)' + (dates.length > toInsert.length ? ', skipped ' + (dates.length - toInsert.length) + ' already scheduled' : '') + '.');
   logAudit('bulk_add_shifts', 'shifts', null, { staff_id: staffId, role, period, count: toInsert.length, dates: toInsert.map((s) => s.shift_date) });
+
+  lastBulkAction = { ids: (inserted || []).map((s) => s.id), count: (inserted || []).length };
+  document.getElementById('bk-undo-btn').style.display = lastBulkAction.ids.length ? '' : 'none';
+
+  resetBulkSelection();
+  loadBulkShiftList();
+  loadScheduleRange();
+}
+
+async function undoLastBulkAction() {
+  if (!lastBulkAction || !lastBulkAction.ids.length) return;
+  if (!confirm('Remove the ' + lastBulkAction.ids.length + ' shift(s) just added?')) return;
+
+  const { error } = await window.supabase.from('shifts').delete().in('id', lastBulkAction.ids);
+  if (error) { toast('Error: ' + error.message, true); return; }
+
+  logAudit('undo_bulk_add_shifts', 'shifts', null, { ids: lastBulkAction.ids });
+  toast('Removed ' + lastBulkAction.ids.length + ' shift(s)');
+  lastBulkAction = null;
+  document.getElementById('bk-undo-btn').style.display = 'none';
   loadBulkShiftList();
   loadScheduleRange();
 }
