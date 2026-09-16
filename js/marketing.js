@@ -88,6 +88,37 @@ async function loadMarketingDashboard() {
 }
 
 // ── CAMPAIGNS ────────────────────────────────────
+// Quill's default image button embeds the file as a base64 data: URI
+// inline in the HTML — most email clients (Gmail included) strip or
+// block data: images entirely, and it bloats the HTML besides. This
+// uploads to the same Supabase 'assets' bucket beer/wine photos use
+// (js/menu.js's uploadBeerImage) and inserts a real hosted URL.
+async function quillImageHandler() {
+  const input = document.createElement('input');
+  input.setAttribute('type', 'file');
+  input.setAttribute('accept', 'image/*');
+  input.click();
+  input.onchange = async () => {
+    const file = input.files[0];
+    if (!file) return;
+    const range = campaignQuill.getSelection(true) || { index: campaignQuill.getLength() };
+    campaignQuill.insertText(range.index, 'Uploading image…');
+    try {
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+      const path = 'campaigns/' + Date.now() + '-' + Math.random().toString(36).slice(2) + '.' + ext;
+      const { error } = await window.supabase.storage.from('assets').upload(path, file);
+      if (error) throw error;
+      const url = window.supabase.storage.from('assets').getPublicUrl(path).data.publicUrl;
+      campaignQuill.deleteText(range.index, 'Uploading image…'.length);
+      campaignQuill.insertEmbed(range.index, 'image', url, 'user');
+      campaignQuill.setSelection(range.index + 1);
+    } catch (e) {
+      campaignQuill.deleteText(range.index, 'Uploading image…'.length);
+      toast('Image upload failed: ' + e.message, true);
+    }
+  };
+}
+
 function initCampaignEditorIfNeeded() {
   if (campaignQuill) return;
   campaignQuill = new Quill('#mkt-camp-editor', {
@@ -96,13 +127,16 @@ function initCampaignEditorIfNeeded() {
       // Kept deliberately narrow to email-safe formatting — a
       // freeform WYSIWYG editor can produce CSS/layout that Outlook
       // and other email clients render inconsistently.
-      toolbar: [
-        [{ header: [2, 3, false] }],
-        ['bold', 'italic', 'underline'],
-        ['link', 'image'],
-        [{ list: 'ordered' }, { list: 'bullet' }],
-        ['clean'],
-      ],
+      toolbar: {
+        container: [
+          [{ header: [2, 3, false] }],
+          ['bold', 'italic', 'underline'],
+          ['link', 'image'],
+          [{ list: 'ordered' }, { list: 'bullet' }],
+          ['clean'],
+        ],
+        handlers: { image: quillImageHandler },
+      },
     },
   });
 }
@@ -426,13 +460,34 @@ async function loadMarketingSubscribers() {
   if (error) { el.innerHTML = '<div class="loading">Error: ' + escHtml(error.message) + '</div>'; return; }
   marketingSubscribers = data || [];
   if (!marketingSubscribers.length) { el.innerHTML = '<div class="loading">No subscribers yet.</div>'; return; }
-  const rows = marketingSubscribers.map((s) => (
-    '<tr><td style="font-weight:500">' + escHtml(s.name || '') + '</td>'
-    + '<td style="font-size:12px;color:var(--sub)">' + escHtml(s.email) + '</td>'
-    + '<td>' + (s.unsubscribed_at ? '<span class="badge badge-muted">Unsubscribed</span>' : '<span class="badge badge-teal">Subscribed</span>') + '</td>'
-    + '<td style="font-size:12px;color:var(--sub)">' + new Date(s.subscribed_at).toLocaleDateString() + '</td></tr>'
-  )).join('');
-  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Joined</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  const rows = marketingSubscribers.map((s) => {
+    const nameForJs = escHtml(s.name || s.email).replace(/'/g, "\\'");
+    const actionBtn = s.unsubscribed_at
+      ? '<button class="btn btn-sm btn-secondary" onclick="resubscribeSubscriber(\'' + s.id + '\',\'' + nameForJs + '\')">Resubscribe</button>'
+      : '';
+    return '<tr><td style="font-weight:500">' + escHtml(s.name || '') + '</td>'
+      + '<td style="font-size:12px;color:var(--sub)">' + escHtml(s.email) + '</td>'
+      + '<td>' + (s.unsubscribed_at ? '<span class="badge badge-muted">Unsubscribed</span>' : '<span class="badge badge-teal">Subscribed</span>') + '</td>'
+      + '<td style="font-size:12px;color:var(--sub)">' + new Date(s.subscribed_at).toLocaleDateString() + '</td>'
+      + '<td style="display:flex;gap:6px;">' + actionBtn
+      + '<button class="btn btn-sm btn-danger" onclick="removeSubscriber(\'' + s.id + '\',\'' + nameForJs + '\')">Remove</button></td></tr>';
+  }).join('');
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Joined</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+async function resubscribeSubscriber(id, name) {
+  const { error } = await window.supabase.from('email_subscribers').update({ unsubscribed_at: null }).eq('id', id);
+  if (error) { toast('Error: ' + error.message, true); return; }
+  toast('Resubscribed ' + name);
+  loadMarketingSubscribers();
+}
+
+async function removeSubscriber(id, name) {
+  if (!confirm('Permanently remove ' + name + ' from the subscriber list? This also removes their topic preferences and can\'t be undone.')) return;
+  const { error } = await window.supabase.from('email_subscribers').delete().eq('id', id);
+  if (error) { toast('Error: ' + error.message, true); return; }
+  toast('Removed ' + name);
+  loadMarketingSubscribers();
 }
 
 function subAlert(msg, isError) {
