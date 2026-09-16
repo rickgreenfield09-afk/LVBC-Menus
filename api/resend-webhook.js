@@ -91,14 +91,17 @@ export default async function handler(req, res) {
     'Content-Type': 'application/json',
   };
 
+  // Campaign sends (api/send-campaign.js) tag each message with
+  // campaign_id since they go out as individual batched emails, not
+  // Resend Broadcasts — there's no broadcast_id to key off. Resend
+  // echoes tags back as an object keyed by name, but handle an array
+  // of {name,value} too in case that ever changes.
   let campaignId = null;
-  if (data.broadcast_id) {
-    const campRes = await fetch(
-      SUPABASE_URL + '/rest/v1/email_campaigns?select=id&resend_broadcast_id=eq.' + encodeURIComponent(data.broadcast_id),
-      { headers: adminHeaders }
-    );
-    const campRows = await campRes.json();
-    if (campRes.ok && campRows && campRows.length) campaignId = campRows[0].id;
+  const tags = data.tags;
+  if (tags) {
+    campaignId = Array.isArray(tags)
+      ? (tags.find((t) => t.name === 'campaign_id') || {}).value || null
+      : tags.campaign_id || null;
   }
 
   const insertRes = await fetch(SUPABASE_URL + '/rest/v1/email_events', {

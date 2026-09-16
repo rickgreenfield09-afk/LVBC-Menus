@@ -6,7 +6,9 @@
 <title>LVBC Staff Panel</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css">
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
 </head>
 <body>
 
@@ -511,11 +513,42 @@
 
         <!-- CAMPAIGNS -->
         <div class="sub-sec" id="marketingtab-campaigns">
-          <div class="menu-col-header">
-            <div class="section-label" style="margin:0;">Campaigns</div>
-            <button class="btn btn-primary btn-sm" onclick="newCampaignStub()">New Campaign</button>
+          <div class="grid-2">
+            <div class="grid2-col">
+              <div class="menu-col-header">
+                <div class="section-label" style="margin:0;" id="mkt-composer-label">New Campaign</div>
+                <button class="btn btn-sm btn-secondary" id="mkt-composer-cancel" style="visibility:hidden;" onclick="cancelCampaignEdit()">&#10005; Cancel Edit</button>
+              </div>
+              <div class="card">
+                <div class="form-group" style="margin-bottom:16px;">
+                  <label class="form-label">Subject</label>
+                  <input class="form-input" style="width:100%;" type="text" id="mkt-camp-subject" placeholder="e.g. New Fall Release is Here">
+                </div>
+                <div class="form-group" style="margin-bottom:16px;">
+                  <label class="form-label">Audience</label>
+                  <select class="form-select" style="width:100%;" id="mkt-camp-topic">
+                    <option value="">All Subscribers</option>
+                  </select>
+                </div>
+                <div class="form-group" style="margin-bottom:16px;">
+                  <label class="form-label">Message</label>
+                  <div id="mkt-camp-editor" style="background:#fff;border-radius:0 0 6px 6px;min-height:200px;color:#111;"></div>
+                </div>
+                <div id="mkt-composer-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
+                <div class="form-row" style="margin-bottom:8px;">
+                  <button class="btn btn-secondary" onclick="saveCampaignDraft()">Save Draft</button>
+                  <button class="btn btn-secondary" onclick="sendCampaignTest()">Send Test to Me</button>
+                </div>
+                <button class="btn btn-primary" style="width:100%;" onclick="sendCampaignNow()">Send to Audience</button>
+              </div>
+            </div>
+            <div class="grid2-col">
+              <div class="menu-col-header">
+                <div class="section-label" style="margin:0;">Campaigns</div>
+              </div>
+              <div id="mkt-campaigns-list"><div class="loading">Loading...</div></div>
+            </div>
           </div>
-          <div id="mkt-campaigns-list"><div class="loading">Loading...</div></div>
         </div>
 
         <!-- AUDIENCE -->

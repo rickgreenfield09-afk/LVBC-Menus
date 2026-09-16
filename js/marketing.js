@@ -9,6 +9,7 @@
 // Depends on: window.supabase, toast(), escHtml() (js/menu.js)
 
 let marketingTopics = [], marketingSubscribers = [];
+let campaignList = [], campaignEditId = null, campaignQuill = null;
 
 function loadMarketing() {
   setMarketingTab('dashboard', document.getElementById('marketingtab-btn-dashboard'));
@@ -85,21 +86,174 @@ async function loadMarketingDashboard() {
 }
 
 // ── CAMPAIGNS ────────────────────────────────────
+function initCampaignEditorIfNeeded() {
+  if (campaignQuill) return;
+  campaignQuill = new Quill('#mkt-camp-editor', {
+    theme: 'snow',
+    modules: {
+      // Kept deliberately narrow to email-safe formatting — a
+      // freeform WYSIWYG editor can produce CSS/layout that Outlook
+      // and other email clients render inconsistently.
+      toolbar: [
+        [{ header: [2, 3, false] }],
+        ['bold', 'italic', 'underline'],
+        ['link', 'image'],
+        [{ list: 'ordered' }, { list: 'bullet' }],
+        ['clean'],
+      ],
+    },
+  });
+}
+
+async function populateCampaignTopicSelect() {
+  const { data, error } = await window.supabase.from('email_topics').select('*').order('name');
+  if (!error) marketingTopics = data || [];
+  const sel = document.getElementById('mkt-camp-topic');
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">All Subscribers</option>' + marketingTopics.map((t) => '<option value="' + t.id + '">' + escHtml(t.name) + '</option>').join('');
+  if (marketingTopics.some((t) => t.id === prev)) sel.value = prev;
+}
+
 async function loadMarketingCampaigns() {
+  initCampaignEditorIfNeeded();
+  await populateCampaignTopicSelect();
+
   const el = document.getElementById('mkt-campaigns-list');
   el.innerHTML = '<div class="loading">Loading...</div>';
   const { data, error } = await window.supabase.from('email_campaigns').select('*').order('created_at', { ascending: false });
   if (error) { el.innerHTML = '<div class="loading">Error: ' + escHtml(error.message) + '</div>'; return; }
-  if (!data.length) { el.innerHTML = '<div class="loading">No campaigns yet — click "New Campaign" to start one.</div>'; return; }
-  const rows = data.map((c) => (
-    '<tr><td style="font-weight:500">' + escHtml(c.subject) + '</td><td>' + campaignStatusBadge(c.status) + '</td>'
-    + '<td style="font-size:12px;color:var(--sub)">' + new Date(c.created_at).toLocaleDateString() + '</td></tr>'
-  )).join('');
-  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Subject</th><th>Status</th><th>Created</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  campaignList = data || [];
+  if (!campaignList.length) { el.innerHTML = '<div class="loading">No campaigns yet.</div>'; return; }
+  const rows = campaignList.map((c) => {
+    const editable = c.status === 'draft';
+    return '<tr' + (editable ? ' style="cursor:pointer;" onclick="loadCampaignIntoEditor(\'' + c.id + '\')"' : '') + '>'
+      + '<td style="font-weight:500">' + escHtml(c.subject) + '</td><td>' + campaignStatusBadge(c.status) + '</td>'
+      + '<td style="font-size:12px;color:var(--sub)">' + new Date(c.created_at).toLocaleDateString() + '</td></tr>';
+  }).join('');
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Subject</th><th>Status</th><th>Created</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+    + '<div style="font-size:11px;color:var(--muted);margin-top:8px;">Click a draft to edit it. Sent campaigns are locked.</div>';
 }
 
-function newCampaignStub() {
-  toast('The campaign composer is coming in a future update.');
+function loadCampaignIntoEditor(id) {
+  const c = campaignList.find((x) => x.id === id);
+  if (!c || c.status !== 'draft') return;
+  campaignEditId = c.id;
+  document.getElementById('mkt-composer-label').textContent = 'Edit Draft';
+  document.getElementById('mkt-composer-cancel').style.visibility = 'visible';
+  document.getElementById('mkt-camp-subject').value = c.subject || '';
+  document.getElementById('mkt-camp-topic').value = c.topic_id || '';
+  campaignQuill.setContents([]);
+  campaignQuill.clipboard.dangerouslyPasteHTML(c.html_body || '');
+  clearCampaignAlert();
+}
+
+function cancelCampaignEdit() {
+  campaignEditId = null;
+  document.getElementById('mkt-composer-label').textContent = 'New Campaign';
+  document.getElementById('mkt-composer-cancel').style.visibility = 'hidden';
+  document.getElementById('mkt-camp-subject').value = '';
+  document.getElementById('mkt-camp-topic').value = '';
+  if (campaignQuill) campaignQuill.setContents([]);
+  clearCampaignAlert();
+}
+
+function clearCampaignAlert() {
+  const el = document.getElementById('mkt-composer-alert');
+  el.style.display = 'none';
+  el.textContent = '';
+}
+
+function campaignAlert(msg, isError) {
+  const el = document.getElementById('mkt-composer-alert');
+  el.style.display = 'block';
+  el.style.background = isError ? 'rgba(220,53,69,0.1)' : 'rgba(42,184,166,0.1)';
+  el.style.color = isError ? 'var(--red)' : 'var(--teal)';
+  el.textContent = msg;
+}
+
+// Returns true on success (including "nothing to save yet" being
+// impossible since validation failed) so sendCampaignNow() can save
+// first and bail out cleanly if validation fails.
+async function saveCampaignDraft(silent) {
+  const subject = document.getElementById('mkt-camp-subject').value.trim();
+  const topicId = document.getElementById('mkt-camp-topic').value || null;
+  const html = campaignQuill.root.innerHTML;
+  clearCampaignAlert();
+
+  if (!subject) { campaignAlert('Subject is required.', true); return false; }
+  if (!campaignQuill.getText().trim()) { campaignAlert('Message body is empty.', true); return false; }
+
+  const payload = { subject, topic_id: topicId, html_body: html };
+
+  if (campaignEditId) {
+    const { error } = await window.supabase.from('email_campaigns').update(payload).eq('id', campaignEditId);
+    if (error) { campaignAlert(error.message, true); return false; }
+    if (!silent) toast('Draft updated');
+  } else {
+    const { data: { session } } = await window.supabase.auth.getSession();
+    const { data, error } = await window.supabase.from('email_campaigns')
+      .insert({ ...payload, status: 'draft', created_by: session ? session.user.id : null }).select().single();
+    if (error) { campaignAlert(error.message, true); return false; }
+    campaignEditId = data.id;
+    document.getElementById('mkt-composer-label').textContent = 'Edit Draft';
+    document.getElementById('mkt-composer-cancel').style.visibility = 'visible';
+    if (!silent) toast('Draft saved');
+  }
+  loadMarketingCampaigns();
+  return true;
+}
+
+async function sendCampaignTest() {
+  const subject = document.getElementById('mkt-camp-subject').value.trim();
+  const html = campaignQuill.root.innerHTML;
+  clearCampaignAlert();
+  if (!subject) { campaignAlert('Subject is required.', true); return; }
+  if (!campaignQuill.getText().trim()) { campaignAlert('Message body is empty.', true); return; }
+
+  const { data: { session } } = await window.supabase.auth.getSession();
+  if (!session) { campaignAlert('Your session expired — please sign in again.', true); return; }
+
+  try {
+    const res = await fetch('/api/send-campaign-test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token },
+      body: JSON.stringify({ subject, html }),
+    });
+    const data = await res.json();
+    if (!res.ok) { campaignAlert(data.error || 'Could not send test.', true); return; }
+    campaignAlert('Test sent to ' + data.sentTo);
+  } catch (e) {
+    campaignAlert('Network error sending test.', true);
+  }
+}
+
+async function sendCampaignNow() {
+  clearCampaignAlert();
+  const saved = await saveCampaignDraft(true);
+  if (!saved) return;
+
+  const topicSel = document.getElementById('mkt-camp-topic');
+  const audienceLabel = topicSel.value ? topicSel.options[topicSel.selectedIndex].text : 'All Subscribers';
+  if (!confirm('Send this campaign now to: ' + audienceLabel + '? This cannot be undone.')) return;
+
+  const { data: { session } } = await window.supabase.auth.getSession();
+  if (!session) { campaignAlert('Your session expired — please sign in again.', true); return; }
+
+  try {
+    const res = await fetch('/api/send-campaign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token },
+      body: JSON.stringify({ campaignId: campaignEditId }),
+    });
+    const data = await res.json();
+    if (!res.ok) { campaignAlert(data.error || 'Could not send campaign.', true); return; }
+    toast('Sent to ' + data.sent + ' subscriber(s)' + (data.warning ? ' — ' + data.warning : ''));
+    cancelCampaignEdit();
+    loadMarketingCampaigns();
+    loadMarketingDashboard();
+  } catch (e) {
+    campaignAlert('Network error sending campaign.', true);
+  }
 }
 
 // ── AUDIENCE ─────────────────────────────────────
