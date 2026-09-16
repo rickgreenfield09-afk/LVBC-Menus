@@ -62,7 +62,7 @@ async function logAudit(action, entityType, entityId, detail) {
 // ── ENTRY ────────────────────────────────────────────────
 async function loadStaffAndSettings() {
   const [{ data: staffData }, { data: daySettingsData }, { data: settingsData }, { data: recEvents }, { data: recOverrides }] = await Promise.all([
-    window.supabase.from('staff_profiles').select('id,name,role').order('name'),
+    window.supabase.from('staff_profiles').select('id,name,role,position').order('name'),
     window.supabase.from('shift_day_settings').select('*').order('day_of_week'),
     window.supabase.from('schedule_settings').select('*').limit(1),
     window.supabase.from('recurring_events').select('*').eq('is_active', true),
@@ -83,10 +83,12 @@ function shiftSlotLabel(setting, period) {
   return h >= 12 ? 'Afternoon' : 'Morning';
 }
 
-// Position dropdowns filter the staff list to admins for a manager
-// slot and non-admins for a bartender slot.
+// Position dropdowns filter the staff list to Managers for a manager
+// slot and everyone else for a bartender slot — keyed off the
+// person's actual job (staff_profiles.position), not their portal
+// permission role (see migration_017).
 function populateStaffSelect(selectEl, roleFilter) {
-  const list = scheduleStaff.filter((s) => (roleFilter === 'manager' ? s.role === 'admin' : s.role !== 'admin'));
+  const list = scheduleStaff.filter((s) => (roleFilter === 'manager' ? s.position === 'manager' : s.position !== 'manager'));
   const prev = selectEl.value;
   selectEl.innerHTML = '<option value="" disabled selected>Select staff member</option>' + list.map((s) => '<option value="' + s.id + '">' + escHtml(s.name) + '</option>').join('');
   if (list.some((s) => s.id === prev)) selectEl.value = prev;

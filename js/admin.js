@@ -24,17 +24,19 @@ async function loadStaffRoster() {
 function renderStaffRoster() {
   const el = document.getElementById('staff-list');
   if (!staffRoster.length) { el.innerHTML = '<div class="loading">No staff yet</div>'; return; }
+  const POSITION_LABELS = { bartender: 'Bartender', cellarman: 'Cellarman', manager: 'Manager' };
   const rows = staffRoster.map((s) => {
     const sel = s.id === selStaff;
-    const roleBadge = s.role === 'admin' ? '<span class="badge badge-teal">Admin</span>' : '<span style="font-size:11px;color:var(--muted)">Staff</span>';
+    const roleBadge = s.role === 'admin' ? '<span class="badge badge-teal">Admin</span>' : '<span style="font-size:11px;color:var(--muted)">User</span>';
     return '<tr style="cursor:pointer' + (sel ? ';background:rgba(42,184,166,0.06)' : '') + '" onclick="pickStaff(\'' + s.id + '\')">'
       + '<td style="font-weight:500' + (sel ? ';color:var(--teal)' : '') + '">' + escHtml(s.name) + '</td>'
       + '<td style="font-size:12px;color:var(--sub)">' + escHtml(s.email || '') + '</td>'
+      + '<td style="font-size:12px;color:var(--sub)">' + (POSITION_LABELS[s.position] || '') + '</td>'
       + '<td>' + roleBadge + '</td>'
       + '<td style="font-size:12px;color:var(--sub)">' + (s.can_schedule ? 'Yes' : 'No') + '</td>'
       + '<td><button class="btn btn-sm btn-danger" onclick="event.stopPropagation();removeStaff(\'' + s.id + '\',\'' + escHtml(s.name).replace(/'/g, "\\'") + '\')">Remove</button></td></tr>';
   }).join('');
-  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Can Schedule</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Position</th><th>Role</th><th>Can Schedule</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
 function pickStaff(id) {
@@ -52,7 +54,8 @@ function loadStaffIntoForm(s) {
   document.getElementById('staff-name').value = s.name || '';
   document.getElementById('staff-email').value = s.email || '';
   document.getElementById('staff-email').disabled = true;
-  document.getElementById('staff-role').value = s.role || 'staff';
+  document.getElementById('staff-role').value = s.role || 'user';
+  document.getElementById('staff-position').value = s.position || 'bartender';
   document.getElementById('staff-can-schedule').checked = !!s.can_schedule;
   document.getElementById('btn-save-staff').textContent = 'Save Changes';
   document.getElementById('staff-form-hint').textContent = "Email can't be changed here — remove and re-invite if it's wrong.";
@@ -67,7 +70,8 @@ function cancelStaffEdit() {
   document.getElementById('staff-name').value = '';
   document.getElementById('staff-email').value = '';
   document.getElementById('staff-email').disabled = false;
-  document.getElementById('staff-role').value = 'staff';
+  document.getElementById('staff-role').value = 'user';
+  document.getElementById('staff-position').value = 'bartender';
   document.getElementById('staff-can-schedule').checked = false;
   document.getElementById('btn-save-staff').textContent = 'Send Invite';
   document.getElementById('staff-form-hint').textContent = "They'll get an email to set their own password and sign in.";
@@ -93,6 +97,7 @@ async function saveStaff() {
   const name = document.getElementById('staff-name').value.trim();
   const email = document.getElementById('staff-email').value.trim();
   const role = document.getElementById('staff-role').value;
+  const position = document.getElementById('staff-position').value;
   const canSchedule = document.getElementById('staff-can-schedule').checked;
   clearStaffAlert();
 
@@ -103,7 +108,7 @@ async function saveStaff() {
   btn.disabled = true;
 
   if (staffEditMode) {
-    const { error } = await window.supabase.from('staff_profiles').update({ name, role, can_schedule: canSchedule }).eq('id', selStaff);
+    const { error } = await window.supabase.from('staff_profiles').update({ name, role, position, can_schedule: canSchedule }).eq('id', selStaff);
     btn.disabled = false;
     if (error) { staffAlert(error.message, true); return; }
     toast('Staff member updated');
@@ -119,7 +124,7 @@ async function saveStaff() {
     const res = await fetch('/api/invite-staff', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token },
-      body: JSON.stringify({ name, email, role, canSchedule, redirectTo: window.location.origin }),
+      body: JSON.stringify({ name, email, role, position, canSchedule, redirectTo: window.location.origin }),
     });
     const data = await res.json();
     btn.disabled = false;

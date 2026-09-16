@@ -13,7 +13,13 @@
 create table staff_profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   name text not null,
-  role text not null check (role in ('admin','staff')) default 'staff',
+  -- Portal permission, not their job — see `position` below and
+  -- migration_017.
+  role text not null check (role in ('admin','user')) default 'user',
+  -- Their actual job at the brewery. Drives real-world eligibility
+  -- (e.g. only Managers are offered for MOD shifts in the scheduler)
+  -- independently of portal permissions.
+  position text not null default 'bartender' check (position in ('bartender','cellarman','manager')),
   can_schedule boolean not null default false,
   -- matches the logged-in session's email so "my shifts" can find
   -- rows assigned to a duplicate/placeholder profile too — see

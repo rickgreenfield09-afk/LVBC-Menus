@@ -433,12 +433,22 @@
               <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Email</label><input class="form-input" style="width:100%;" type="email" id="staff-email" placeholder="e.g. jordan@example.com"></div>
               <div class="form-row">
                 <div class="form-group">
-                  <label class="form-label">Role</label>
+                  <label class="form-label">Position</label>
+                  <select class="form-select" style="width:100%;" id="staff-position">
+                    <option value="bartender">Bartender</option>
+                    <option value="cellarman">Cellarman</option>
+                    <option value="manager">Manager</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Portal Role</label>
                   <select class="form-select" style="width:100%;" id="staff-role">
-                    <option value="staff">Staff</option>
+                    <option value="user">User</option>
                     <option value="admin">Admin</option>
                   </select>
                 </div>
+              </div>
+              <div class="form-row">
                 <div class="form-group">
                   <label class="form-label">Scheduling Access</label>
                   <label class="checkbox-row" style="margin-top:10px;"><input type="checkbox" id="staff-can-schedule"> Can build the schedule</label>

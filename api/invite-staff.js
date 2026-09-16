@@ -29,7 +29,8 @@ export default async function handler(req, res) {
   const body = req.body || {};
   const name = String(body.name || '').trim();
   const email = String(body.email || '').trim().toLowerCase();
-  const role = body.role === 'admin' ? 'admin' : 'staff';
+  const role = body.role === 'admin' ? 'admin' : 'user';
+  const position = ['bartender', 'cellarman', 'manager'].includes(body.position) ? body.position : 'bartender';
   const canSchedule = !!body.canSchedule;
 
   if (!name) return res.status(400).json({ error: 'Name is required.' });
@@ -95,7 +96,7 @@ export default async function handler(req, res) {
   const profileRes = await fetch(SUPABASE_URL + '/rest/v1/staff_profiles?on_conflict=id', {
     method: 'POST',
     headers: { ...adminHeaders, Prefer: 'resolution=merge-duplicates,return=representation' },
-    body: JSON.stringify([{ id: userId, name, email, role, can_schedule: canSchedule }]),
+    body: JSON.stringify([{ id: userId, name, email, role, position, can_schedule: canSchedule }]),
   });
   const profileRows = await profileRes.json();
   if (!profileRes.ok || !profileRows || !profileRows.length) {
