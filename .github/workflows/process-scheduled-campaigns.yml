@@ -1,0 +1,19 @@
+name: Process scheduled campaigns
+
+on:
+  schedule:
+    # GitHub's cron scheduler is best-effort and can run a few minutes
+    # late during high load — fine for this, since it just means a
+    # scheduled send goes out a few minutes after its target time, not
+    # early.
+    - cron: '*/10 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call process-scheduled-campaigns
+        run: |
+          curl -sS -f -X POST "https://app.axiomfwd.com/api/process-scheduled-campaigns" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}"

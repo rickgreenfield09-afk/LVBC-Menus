@@ -570,7 +570,14 @@
                   <button class="btn btn-secondary" onclick="saveCampaignDraft()">Save Draft</button>
                   <button class="btn btn-secondary" onclick="sendCampaignTest()">Send Test to Me</button>
                 </div>
-                <button class="btn btn-primary" style="width:100%;" onclick="sendCampaignNow()">Send to Audience</button>
+                <button class="btn btn-primary" style="width:100%;margin-bottom:16px;" onclick="sendCampaignNow()">Send to Audience Now</button>
+                <div class="form-row" style="align-items:end;margin-bottom:0;">
+                  <div class="form-group">
+                    <label class="form-label">Schedule For</label>
+                    <input class="form-input" style="width:100%;" type="datetime-local" id="mkt-camp-schedule-at">
+                  </div>
+                  <button class="btn btn-secondary" onclick="scheduleCampaignSend()">Schedule Send</button>
+                </div>
               </div>
             </div>
             <div class="grid2-col">
@@ -634,7 +641,8 @@
             <div style="flex:1;overflow-y:auto;display:grid;grid-template-columns:320px 1fr;gap:20px;">
               <div>
                 <div id="campaign-detail-info"><div class="loading">Loading...</div></div>
-                <div class="section-label">Delivery Stats</div>
+                <button class="btn btn-secondary btn-sm" id="campaign-detail-cancel-schedule" style="display:none;width:100%;margin-bottom:20px;" onclick="cancelCampaignSchedule()">Cancel Schedule (back to draft)</button>
+                <div class="section-label" style="margin-top:0;">Delivery Stats</div>
                 <div id="campaign-detail-stats"></div>
               </div>
               <div>

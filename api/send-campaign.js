@@ -1,15 +1,12 @@
 // api/send-campaign.js
 // Vercel serverless function (Node runtime, no dependencies).
-// Sends a saved campaign to its audience (a specific topic's opted-in
-// subscribers, or everyone if no topic is set) and marks it sent.
-//
-// Recipients get individual emails via Resend's batch endpoint (not
-// a Resend Broadcast) — Resend's Contacts API has no audience/segment
-// concept we can rely on (see api/subscribe.js), so Supabase stays
-// the single source of truth for who's subscribed to what. Each
-// email is tagged with campaign_id so api/resend-webhook.js can
-// attribute opens/clicks back to this campaign, and gets its own
-// unsubscribe link (CAN-SPAM requires this on every marketing send).
+// Sends a saved campaign to its audience RIGHT NOW (a specific
+// topic's opted-in subscribers, or everyone if no topic is set) and
+// marks it sent. Scheduling a campaign for later just writes
+// status='scheduled'/scheduled_for from the client (see
+// js/marketing.js's scheduleCampaignSend) — the actual future send
+// is handled by api/process-scheduled-campaigns.js on a cron, which
+// shares the send logic in api/_lib/campaign-send.js with this file.
 //
 // Auth: same caller-is-admin check as api/invite-staff.js, then reads
 // with the caller's own forwarded token — RLS already lets any staff
@@ -17,11 +14,7 @@
 // needed here.
 // Requires SUPABASE_URL, SUPABASE_ANON_KEY, RESEND_API_KEY.
 
-function unsubscribeFooter(subscriberId, baseUrl) {
-  return '<hr style="margin-top:24px;border:none;border-top:1px solid #ddd;">'
-    + '<p style="font-size:11px;color:#999;margin-top:8px;">You\'re receiving this because you subscribed to Lago Vista Brewing Company emails. '
-    + '<a href="' + baseUrl + '/api/unsubscribe?id=' + subscriberId + '" style="color:#999;">Unsubscribe</a></p>';
-}
+import { resolveRecipients, sendCampaignToRecipients } from './_lib/campaign-send.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -55,57 +48,17 @@ export default async function handler(req, res) {
   if (campaign.status === 'sent') return res.status(409).json({ error: 'This campaign has already been sent.' });
 
   let recipients;
-  if (campaign.topic_id) {
-    const prefRes = await fetch(
-      SUPABASE_URL + '/rest/v1/subscriber_topic_preferences?select=subscriber:subscriber_id(id,email,unsubscribed_at)&topic_id=eq.' + campaign.topic_id + '&subscribed=eq.true',
-      { headers: authHeaders }
-    );
-    const prefRows = await prefRes.json();
-    if (!prefRes.ok) return res.status(500).json({ error: 'Could not load this topic\'s subscribers' });
-    recipients = (prefRows || []).map((r) => r.subscriber).filter((s) => s && !s.unsubscribed_at);
-  } else {
-    const subRes = await fetch(SUPABASE_URL + '/rest/v1/email_subscribers?select=id,email&unsubscribed_at=is.null', { headers: authHeaders });
-    recipients = await subRes.json();
-    if (!subRes.ok) return res.status(500).json({ error: 'Could not load subscribers' });
+  try {
+    recipients = await resolveRecipients(SUPABASE_URL, authHeaders, campaign);
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
   }
-
   if (!recipients.length) return res.status(400).json({ error: 'No subscribers match this campaign\'s audience.' });
 
-  // Hardcoded rather than derived from req.headers.host: the admin's
-  // browser may hit this API from the Vercel-assigned domain, but the
-  // unsubscribe link specifically needs to live under the same root
-  // domain mail is sent from (app.axiomfwd.com) for deliverability —
-  // Resend's Insights flagged a mismatched link domain as a spam signal.
-  const baseUrl = 'https://app.axiomfwd.com';
-  const messages = recipients.map((r) => ({
-    from: 'Lago Vista Brewing Company <ricky.greenfield@axiomfwd.com>',
-    to: [r.email],
-    subject: campaign.subject,
-    html: campaign.html_body + unsubscribeFooter(r.id, baseUrl),
-    tags: [{ name: 'campaign_id', value: campaign.id }],
-  }));
-
-  for (let i = 0; i < messages.length; i += 100) {
-    const chunk = messages.slice(i, i + 100);
-    const batchRes = await fetch('https://api.resend.com/emails/batch', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + RESEND_API_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify(chunk),
-    });
-    if (!batchRes.ok) {
-      const err = await batchRes.text();
-      return res.status(502).json({ error: 'Resend error: ' + err, sentBeforeError: i });
-    }
+  try {
+    const result = await sendCampaignToRecipients(SUPABASE_URL, authHeaders, RESEND_API_KEY, campaign, recipients);
+    return res.status(200).json({ ok: true, sent: result.sent, warning: result.warning });
+  } catch (e) {
+    return res.status(502).json({ error: e.message });
   }
-
-  const updateRes = await fetch(SUPABASE_URL + '/rest/v1/email_campaigns?id=eq.' + campaign.id, {
-    method: 'PATCH',
-    headers: { ...authHeaders, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-    body: JSON.stringify({ status: 'sent', sent_at: new Date().toISOString() }),
-  });
-  if (!updateRes.ok) {
-    return res.status(200).json({ ok: true, sent: recipients.length, warning: 'Emails were sent, but the campaign status could not be updated — refresh to check.' });
-  }
-
-  return res.status(200).json({ ok: true, sent: recipients.length });
 }

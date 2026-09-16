@@ -196,6 +196,7 @@ function cancelCampaignEdit() {
   document.getElementById('mkt-camp-topic').value = '';
   document.getElementById('mkt-camp-starts').value = '';
   document.getElementById('mkt-camp-ends').value = '';
+  document.getElementById('mkt-camp-schedule-at').value = '';
   if (campaignQuill) campaignQuill.setContents([]);
   clearCampaignAlert();
 }
@@ -302,6 +303,35 @@ async function sendCampaignNow() {
   }
 }
 
+// Scheduling just writes status/scheduled_for — RLS already lets any
+// staff update a campaign row. The actual future send is handled by
+// api/process-scheduled-campaigns.js on a cron (see that file and
+// .github/workflows/process-scheduled-campaigns.yml), not from here.
+async function scheduleCampaignSend() {
+  clearCampaignAlert();
+  const scheduleInput = document.getElementById('mkt-camp-schedule-at');
+  if (!scheduleInput.value) { campaignAlert('Pick a date and time to schedule for.', true); return; }
+  const scheduledFor = new Date(scheduleInput.value);
+  if (scheduledFor <= new Date()) { campaignAlert('Scheduled time must be in the future.', true); return; }
+
+  const saved = await saveCampaignDraft(true);
+  if (!saved) return;
+
+  const topicSel = document.getElementById('mkt-camp-topic');
+  const audienceLabel = topicSel.value ? topicSel.options[topicSel.selectedIndex].text : 'All Subscribers';
+  if (!confirm('Schedule this campaign to send to: ' + audienceLabel + ' at ' + scheduledFor.toLocaleString() + '?')) return;
+
+  const { error } = await window.supabase.from('email_campaigns')
+    .update({ status: 'scheduled', scheduled_for: scheduledFor.toISOString() })
+    .eq('id', campaignEditId);
+  if (error) { campaignAlert(error.message, true); return; }
+
+  toast('Scheduled for ' + scheduledFor.toLocaleString());
+  cancelCampaignEdit();
+  loadMarketingCampaigns();
+  loadMarketingDashboard();
+}
+
 // ── CAMPAIGN DETAIL MODAL ─────────────────────────
 function closeCampaignDetailModal() {
   document.getElementById('campaign-detail-modal').style.display = 'none';
@@ -345,10 +375,14 @@ async function openCampaignDetailModal(id) {
   document.getElementById('campaign-detail-info').innerHTML =
     infoRow('Status', campaignStatusBadge(c.status))
     + infoRow('Audience', escHtml(topicName))
+    + (c.status === 'scheduled' ? infoRow('Scheduled For', new Date(c.scheduled_for).toLocaleString()) : '')
     + infoRow('Campaign Runs', c.starts_at ? escHtml(c.starts_at + (c.ends_at ? ' – ' + c.ends_at : '')) : '—')
     + infoRow('Created By', escHtml(creatorName || '—'))
     + infoRow('Created', new Date(c.created_at).toLocaleString())
     + infoRow('Sent', c.sent_at ? new Date(c.sent_at).toLocaleString() : '—');
+
+  document.getElementById('campaign-detail-cancel-schedule').style.display = c.status === 'scheduled' ? 'block' : 'none';
+  document.getElementById('campaign-detail-cancel-schedule').setAttribute('data-campaign-id', c.id);
 
   const events = eventsData || [];
   const countOf = (type) => events.filter((e) => e.event_type === type).length;
@@ -362,6 +396,18 @@ async function openCampaignDetailModal(id) {
     + statBox('Complained', complained);
 
   document.getElementById('campaign-detail-preview').srcdoc = c.html_body || '<p style="font-family:sans-serif;color:#999;">No content.</p>';
+}
+
+async function cancelCampaignSchedule() {
+  const id = document.getElementById('campaign-detail-cancel-schedule').getAttribute('data-campaign-id');
+  if (!id) return;
+  if (!confirm('Cancel this scheduled send? It goes back to a draft you can edit or reschedule.')) return;
+  const { error } = await window.supabase.from('email_campaigns').update({ status: 'draft', scheduled_for: null }).eq('id', id);
+  if (error) { toast('Error: ' + error.message, true); return; }
+  toast('Schedule cancelled — back to draft');
+  closeCampaignDetailModal();
+  loadMarketingCampaigns();
+  loadMarketingDashboard();
 }
 
 // ── AUDIENCE ─────────────────────────────────────
