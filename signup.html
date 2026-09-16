@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Join Our Mailing List</title>
+<script src="config.js"></script>
+<style>
+  /* Self-contained styles, deliberately not sharing style.css —
+     this page is meant to be lifted into the brewery's own website
+     later, either pasted in directly or embedded via iframe, so it
+     shouldn't depend on this app's staff-facing look. */
+  #lvbc-signup-widget {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 24px;
+    box-sizing: border-box;
+  }
+  #lvbc-signup-widget * { box-sizing: border-box; }
+  #lvbc-signup-widget h2 {
+    margin: 0 0 8px;
+    font-size: 22px;
+  }
+  #lvbc-signup-widget p.lede {
+    margin: 0 0 20px;
+    color: #555;
+    font-size: 14px;
+  }
+  #lvbc-signup-widget label.field {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  #lvbc-signup-widget input[type="email"],
+  #lvbc-signup-widget input[type="text"] {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 15px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    margin-bottom: 16px;
+  }
+  #lvbc-signup-widget .topics {
+    margin-bottom: 20px;
+  }
+  #lvbc-signup-widget .topics legend {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    padding: 0;
+  }
+  #lvbc-signup-widget .topic-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 10px;
+    font-size: 14px;
+  }
+  #lvbc-signup-widget .topic-row input {
+    margin-top: 3px;
+  }
+  #lvbc-signup-widget .topic-row .topic-desc {
+    display: block;
+    color: #777;
+    font-size: 12px;
+  }
+  #lvbc-signup-widget button {
+    width: 100%;
+    padding: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    border: none;
+    border-radius: 6px;
+    background: #1a1a1a;
+    color: #fff;
+    cursor: pointer;
+  }
+  #lvbc-signup-widget button:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+  #lvbc-signup-widget .status {
+    margin-top: 14px;
+    font-size: 14px;
+    display: none;
+  }
+  #lvbc-signup-widget .status.success { color: #1a7a3a; }
+  #lvbc-signup-widget .status.error { color: #b3261e; }
+</style>
+</head>
+<body>
+
+<div id="lvbc-signup-widget">
+  <h2>Join Our Mailing List</h2>
+  <p class="lede">Pick what you want to hear about — you can change this anytime.</p>
+
+  <form id="signup-form">
+    <label class="field" for="signup-email">Email</label>
+    <input type="email" id="signup-email" required placeholder="you@example.com">
+
+    <label class="field" for="signup-name">Name (optional)</label>
+    <input type="text" id="signup-name" placeholder="Your name">
+
+    <fieldset class="topics" style="border:none; margin:0; padding:0;">
+      <legend>What would you like to hear about?</legend>
+      <div id="topics-list"></div>
+    </fieldset>
+
+    <button type="submit" id="signup-submit">Sign Up</button>
+    <div class="status" id="signup-status"></div>
+  </form>
+</div>
+
+<script>
+(function () {
+  const cfg = window.LVBC_CONFIG || {};
+  const form = document.getElementById('signup-form');
+  const topicsList = document.getElementById('topics-list');
+  const statusEl = document.getElementById('signup-status');
+  const submitBtn = document.getElementById('signup-submit');
+
+  function showStatus(message, kind) {
+    statusEl.textContent = message;
+    statusEl.className = 'status ' + kind;
+    statusEl.style.display = 'block';
+  }
+
+  async function loadTopics() {
+    try {
+      const res = await fetch(cfg.SUPABASE_URL + '/rest/v1/email_topics?select=id,name,description&order=name.asc', {
+        headers: { apikey: cfg.SUPABASE_ANON_KEY, Authorization: 'Bearer ' + cfg.SUPABASE_ANON_KEY },
+      });
+      const topics = await res.json();
+      if (!res.ok || !Array.isArray(topics)) throw new Error('bad response');
+      topicsList.innerHTML = topics.map((t) => (
+        '<label class="topic-row">'
+        + '<input type="checkbox" name="topic" value="' + t.id + '" checked>'
+        + '<span><span>' + t.name + '</span>'
+        + (t.description ? '<span class="topic-desc">' + t.description + '</span>' : '')
+        + '</span>'
+        + '</label>'
+      )).join('');
+    } catch (err) {
+      topicsList.innerHTML = '<p style="color:#777; font-size:13px;">Could not load preferences — you can still sign up below.</p>';
+    }
+  }
+
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    submitBtn.disabled = true;
+    statusEl.style.display = 'none';
+
+    const email = document.getElementById('signup-email').value.trim();
+    const name = document.getElementById('signup-name').value.trim();
+    const topicIds = Array.from(form.querySelectorAll('input[name="topic"]:checked')).map((el) => el.value);
+
+    try {
+      const res = await fetch('/api/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, name, topicIds }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Something went wrong');
+      form.reset();
+      loadTopics();
+      showStatus('You\'re on the list!', 'success');
+    } catch (err) {
+      showStatus(err.message || 'Something went wrong. Please try again.', 'error');
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+
+  loadTopics();
+})();
+</script>
+
+</body>
+</html>
