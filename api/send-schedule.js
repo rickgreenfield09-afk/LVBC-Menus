@@ -107,16 +107,26 @@ export default async function handler(req, res) {
 
   // Who's MOD each day this month (a day-level assignment, separate
   // from this person's own rows — see schema.sql's note on `shifts`).
+  // In practice this brewery runs a separate AM and PM MOD, so each
+  // date can carry two manager rows — keep start_time so a bartender's
+  // morning shift only shows the morning MOD, not both.
   const modRes = await fetch(
-    SUPABASE_URL + '/rest/v1/shifts?select=shift_date,staff:staff_id(name)&role=eq.manager&shift_date=gte.' + monthStart + '&shift_date=lt.' + monthEndExclusive,
+    SUPABASE_URL + '/rest/v1/shifts?select=shift_date,start_time,staff:staff_id(name)&role=eq.manager&shift_date=gte.' + monthStart + '&shift_date=lt.' + monthEndExclusive,
     { headers: authHeaders }
   );
   const modShifts = modRes.ok ? await modRes.json() : [];
-  const modByDate = {};
+  const modsByDate = {};
   (modShifts || []).forEach((s) => {
     if (!s.staff || !s.staff.name) return;
-    modByDate[s.shift_date] = modByDate[s.shift_date] ? modByDate[s.shift_date] + ', ' + s.staff.name : s.staff.name;
+    (modsByDate[s.shift_date] = modsByDate[s.shift_date] || []).push({ startTime: s.start_time, name: s.staff.name });
   });
+  function modLabelFor(shiftDate, period) {
+    const mods = modsByDate[shiftDate] || [];
+    const matching = period
+      ? mods.filter((mod) => !mod.startTime || (period === 'morning' ? mod.startTime < '12:00:00' : mod.startTime >= '12:00:00'))
+      : mods;
+    return (matching.length ? matching : mods).map((mod) => mod.name).join(', ');
+  }
 
   // One-off events (Beer release, VFW night, etc.) plus recurring
   // series (trivia, live music) computed the same way the in-app
@@ -139,22 +149,24 @@ export default async function handler(req, res) {
   computeRecurringOccurrences(recurringEvents || [], recurringOverrides || [], new Date(y, m - 1, 1), new Date(y, m, 0))
     .forEach((occ) => addEvent(occ.date, occ.name));
 
+  const CELL = 'padding:8px 12px;border:1px solid #ddd;';
   const rows = (shifts || []).map((s) => {
     const label = s.role === 'manager' ? 'Manager on Duty' : (s.period === 'morning' ? 'Morning' : 'Evening');
     const d = new Date(s.shift_date + 'T00:00:00');
-    const dateLabel = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    const timeLabel = fmtTime(s.start_time) + (s.end_time ? '–' + fmtTime(s.end_time) : '');
-    const modLabel = s.role === 'manager' ? '' : (modByDate[s.shift_date] || '');
+    const dateLabel = d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+    const timeLabel = fmtTime(s.start_time) + (s.end_time ? ' – ' + fmtTime(s.end_time) : '');
+    const modLabel = s.role === 'manager' ? '' : modLabelFor(s.shift_date, s.period);
     const eventsLabel = eventsByDate[s.shift_date] || '';
-    return '<tr><td style="padding:6px 12px;">' + dateLabel + '</td><td style="padding:6px 12px;">' + label + '</td><td style="padding:6px 12px;">' + timeLabel + '</td>'
-      + '<td style="padding:6px 12px;">' + modLabel + '</td><td style="padding:6px 12px;">' + eventsLabel + '</td></tr>';
+    return '<tr><td style="' + CELL + '">' + dateLabel + '</td><td style="' + CELL + '">' + label + '</td><td style="' + CELL + '">' + timeLabel + '</td>'
+      + '<td style="' + CELL + '">' + modLabel + '</td><td style="' + CELL + '">' + eventsLabel + '</td></tr>';
   }).join('');
 
   const monthLabel = new Date(y, m - 1, 1).toLocaleString('default', { month: 'long', year: 'numeric' });
-  const headerRow = '<tr><th style="text-align:left;padding:6px 12px;">Date</th><th style="text-align:left;padding:6px 12px;">Shift</th>'
-    + '<th style="text-align:left;padding:6px 12px;">Time</th><th style="text-align:left;padding:6px 12px;">MOD</th><th style="text-align:left;padding:6px 12px;">Events</th></tr>';
+  const headerCell = CELL + 'text-align:left;background:#f4f4f4;';
+  const headerRow = '<tr><th style="' + headerCell + '">Date</th><th style="' + headerCell + '">Shift</th>'
+    + '<th style="' + headerCell + '">Time</th><th style="' + headerCell + '">MOD</th><th style="' + headerCell + '">Events</th></tr>';
   const html = '<h2>LVBC Schedule &mdash; ' + monthLabel + '</h2><p>Hi ' + (staffName || '') + ', here\'s your schedule.</p>'
-    + (rows ? '<table>' + headerRow + rows + '</table>' : '<p>No shifts scheduled this month.</p>');
+    + (rows ? '<table style="border-collapse:collapse;">' + headerRow + rows + '</table>' : '<p>No shifts scheduled this month.</p>');
 
   const sendRes = await fetch('https://api.resend.com/emails', {
     method: 'POST',
