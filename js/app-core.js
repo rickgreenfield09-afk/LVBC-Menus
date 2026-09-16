@@ -18,8 +18,12 @@
   // Fires when someone lands here via an invite / password-recovery email
   // link; Supabase parses the token from the URL and hands us a temporary
   // session before checkSession() would otherwise run.
-  client.auth.onAuthStateChange((event) => {
-    if (event === 'PASSWORD_RECOVERY') {
+  // Recovery links fire PASSWORD_RECOVERY. Invite links (api/invite-staff.js)
+  // fire SIGNED_IN instead, with a valid session already attached before
+  // any password has ever been set — needs_password (set as user_metadata
+  // at invite time) is what tells them apart.
+  client.auth.onAuthStateChange((event, session) => {
+    if (event === 'PASSWORD_RECOVERY' || (event === 'SIGNED_IN' && session?.user?.user_metadata?.needs_password)) {
       awaitingPasswordSet = true;
       renderSetPassword();
     }
@@ -35,6 +39,13 @@ async function checkSession() {
   const { data: { session } } = await window.supabase.auth.getSession();
   if (!session) {
     renderLoggedOut();
+    return;
+  }
+  if (session.user?.user_metadata?.needs_password) {
+    // Reloaded mid-invite-flow before a password was ever set — this
+    // session is authenticated but shouldn't be treated as a real login.
+    awaitingPasswordSet = true;
+    renderSetPassword();
     return;
   }
   const { data: profile, error } = await window.supabase
@@ -124,7 +135,7 @@ async function handleSetPassword(e) {
     return;
   }
 
-  const { error } = await window.supabase.auth.updateUser({ password: pw1 });
+  const { error } = await window.supabase.auth.updateUser({ password: pw1, data: { needs_password: false } });
   if (error) {
     errEl.textContent = error.message;
     return;
@@ -139,6 +150,8 @@ function renderLoggedIn() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app-shell').style.display = 'flex';
   document.getElementById('staff-name-badge').textContent = window.currentStaff.name;
+  const adminNavBtn = document.getElementById('nav-btn-admin');
+  if (adminNavBtn) adminNavBtn.style.display = window.currentStaff.role === 'admin' ? '' : 'none';
   if (typeof loadDashboard === 'function') loadDashboard();
   if (typeof loadMenu === 'function') loadMenu();
 }

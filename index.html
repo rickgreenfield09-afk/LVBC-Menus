@@ -77,7 +77,8 @@
     <nav>
       <button class="nav-btn active" onclick="showScreen('menu', this); loadMenu()">Menu</button>
       <button class="nav-btn" onclick="showScreen('schedule', this); loadSchedule()">Schedule</button>
-      <!-- Dashboard, Admin, Reports tabs added as their .js files land -->
+      <button class="nav-btn" id="nav-btn-admin" style="display:none;" onclick="showScreen('admin', this); loadAdmin()">Admin</button>
+      <!-- Dashboard, Reports tabs added as their .js files land -->
     </nav>
 
     <main>
@@ -419,6 +420,44 @@
         </div>
       </div>
 
+      <!-- ADMIN SCREEN -->
+      <div class="screen" id="screen-admin">
+        <div class="grid-2">
+          <div class="grid2-col">
+            <div class="menu-col-header">
+              <div class="section-label" style="margin:0;" id="staff-form-label">Add Staff Member</div>
+              <button class="btn btn-sm btn-secondary" id="staff-cancel-edit" style="visibility:hidden;" onclick="cancelStaffEdit()">&#10005; Cancel Edit</button>
+            </div>
+            <div class="card">
+              <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Name</label><input class="form-input" style="width:100%;" type="text" id="staff-name" placeholder="e.g. Jordan Lee"></div>
+              <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Email</label><input class="form-input" style="width:100%;" type="email" id="staff-email" placeholder="e.g. jordan@example.com"></div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Role</label>
+                  <select class="form-select" style="width:100%;" id="staff-role">
+                    <option value="staff">Staff</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Scheduling Access</label>
+                  <label class="checkbox-row" style="margin-top:10px;"><input type="checkbox" id="staff-can-schedule"> Can build the schedule</label>
+                </div>
+              </div>
+              <div id="staff-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
+              <button class="btn btn-primary" style="width:100%;" id="btn-save-staff" onclick="saveStaff()">Send Invite</button>
+              <div style="font-size:11px;color:var(--muted);margin-top:8px;" id="staff-form-hint">They'll get an email to set their own password and sign in.</div>
+            </div>
+          </div>
+          <div class="grid2-col">
+            <div class="menu-col-header">
+              <div class="section-label" style="margin:0;">Staff Roster</div>
+            </div>
+            <div id="staff-list"><div class="loading">Loading...</div></div>
+          </div>
+        </div>
+      </div>
+
       <!-- MENU SCREEN -->
       <div class="screen active" id="screen-menu">
         <div class="sub-tabs">
@@ -685,6 +724,7 @@
 
   <script src="config.js"></script>
   <script src="js/app-core.js"></script>
+  <script src="js/admin.js"></script>
   <script src="js/menu.js"></script>
   <script src="js/schedule.js"></script>
   <script src="js/recurring.js"></script>
