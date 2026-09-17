@@ -513,6 +513,95 @@ create index subscriber_topic_preferences_topic_idx on subscriber_topic_preferen
 create index email_events_campaign_idx on email_events (campaign_id);
 create index email_events_subscriber_idx on email_events (subscriber_email);
 
+-- ---------- INVENTORY (see migration_020) ----------
+-- Estimated stock, not precise counts: staff log a rough percent
+-- remaining in the box/location. <= critical_threshold = red,
+-- <= low_threshold = yellow, else green. Per-row threshold columns
+-- let one item loosen/tighten the default without a settings table.
+create table inventory_vendors (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  contact_name text,
+  phone text,
+  email text,
+  notes text,
+  created_at timestamptz not null default now()
+);
+
+create table inventory_vendor_items (
+  id uuid primary key default gen_random_uuid(),
+  vendor_id uuid not null references inventory_vendors(id) on delete cascade,
+  item_name text not null,
+  sku_or_item_number text,
+  category text check (category in ('consumables','snacks','coffee','wine','merchandise')),
+  unit_cost numeric(8,2),
+  notes text,
+  created_at timestamptz not null default now()
+);
+
+-- Covers the four percent-based categories in one table (shaped
+-- identically, distinguished by the category tag) — same pattern as
+-- beers using one table with a category column.
+create table inventory_items (
+  id uuid primary key default gen_random_uuid(),
+  category text not null check (category in ('consumables','snacks','coffee','merchandise')),
+  subcategory text,
+  name text not null,
+  location text,
+  percent_remaining int not null default 100 check (percent_remaining between 0 and 100),
+  low_threshold int not null default 50 check (low_threshold between 0 and 100),
+  critical_threshold int not null default 25 check (critical_threshold between 0 and 100),
+  vendor_item_id uuid references inventory_vendor_items(id) on delete set null,
+  last_checked_at timestamptz,
+  last_checked_by uuid references staff_profiles(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index inventory_items_category_idx on inventory_items (category);
+
+create trigger inventory_items_set_updated_at
+  before update on inventory_items
+  for each row execute function set_updated_at();
+
+-- Wine is a real bottle count, not a percent estimate — kept
+-- separate since its shape differs from inventory_items.
+create table inventory_wine (
+  id uuid primary key default gen_random_uuid(),
+  label text not null,
+  vintage text,
+  location text,
+  bottle_count int not null default 0 check (bottle_count >= 0),
+  low_count_threshold int not null default 6 check (low_count_threshold >= 0),
+  critical_count_threshold int not null default 3 check (critical_count_threshold >= 0),
+  vendor_item_id uuid references inventory_vendor_items(id) on delete set null,
+  last_checked_at timestamptz,
+  last_checked_by uuid references staff_profiles(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create trigger inventory_wine_set_updated_at
+  before update on inventory_wine
+  for each row execute function set_updated_at();
+
+-- Polymorphic (item_type + item_id, no FK) since it points at either
+-- inventory_items or inventory_wine — app code queries the right
+-- table by item_type.
+create table inventory_order_log (
+  id uuid primary key default gen_random_uuid(),
+  item_type text not null check (item_type in ('item','wine')),
+  item_id uuid not null,
+  vendor_item_id uuid references inventory_vendor_items(id) on delete set null,
+  ordered_by uuid references staff_profiles(id) on delete set null,
+  ordered_at timestamptz not null default now(),
+  quantity_note text,
+  received_at timestamptz,
+  received_by uuid references staff_profiles(id) on delete set null
+);
+
+create index inventory_order_log_item_idx on inventory_order_log (item_type, item_id);
+
 -- ============================================================
 -- ROW LEVEL SECURITY
 -- Public (anon) = customer-facing surfaces only: menu, events, badge
@@ -552,6 +641,11 @@ alter table email_subscribers enable row level security;
 alter table subscriber_topic_preferences enable row level security;
 alter table email_campaigns enable row level security;
 alter table email_events enable row level security;
+alter table inventory_vendors enable row level security;
+alter table inventory_vendor_items enable row level security;
+alter table inventory_items enable row level security;
+alter table inventory_wine enable row level security;
+alter table inventory_order_log enable row level security;
 
 -- staff_profiles: staff can read the roster; only admins manage roles;
 -- anyone can update their OWN row (name/photo only — see the trigger
@@ -649,6 +743,27 @@ create policy "staff read preferences" on subscriber_topic_preferences for selec
 create policy "staff manage campaigns" on email_campaigns for all using (is_staff()) with check (is_staff());
 
 create policy "staff read events" on email_events for select using (is_staff());
+
+-- Inventory: vendor records are read-only for staff (need the
+-- contact/SKU info to reorder), admin-managed; item/wine counts and
+-- the order log are editable by any staff, same split as beers vs.
+-- rewards/badges above.
+create policy "staff read inventory_vendors" on inventory_vendors for select using (is_staff());
+create policy "admin write inventory_vendors" on inventory_vendors for all
+  using (is_admin()) with check (is_admin());
+
+create policy "staff read inventory_vendor_items" on inventory_vendor_items for select using (is_staff());
+create policy "admin write inventory_vendor_items" on inventory_vendor_items for all
+  using (is_admin()) with check (is_admin());
+
+create policy "staff all inventory_items" on inventory_items for all
+  using (is_staff()) with check (is_staff());
+
+create policy "staff all inventory_wine" on inventory_wine for all
+  using (is_staff()) with check (is_staff());
+
+create policy "staff all inventory_order_log" on inventory_order_log for all
+  using (is_staff()) with check (is_staff());
 
 -- Staff-only, both read and write: PII / financial-equivalent (points) data
 create policy "staff only members" on members for all using (is_staff()) with check (is_staff());

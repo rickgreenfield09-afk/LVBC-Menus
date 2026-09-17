@@ -79,6 +79,7 @@
     <nav>
       <button class="nav-btn active" onclick="showScreen('menu', this); loadMenu()">Menu</button>
       <button class="nav-btn" onclick="showScreen('schedule', this); loadSchedule()">Schedule</button>
+      <button class="nav-btn" onclick="showScreen('inventory', this); loadInventory()">Inventory</button>
       <button class="nav-btn" id="nav-btn-marketing" style="display:none;" onclick="showScreen('marketing', this); loadMarketing()">Marketing</button>
       <button class="nav-btn" id="nav-btn-admin" style="display:none;" onclick="showScreen('admin', this); loadAdmin()">Admin</button>
       <!-- Dashboard, Reports tabs added as their .js files land -->
@@ -489,6 +490,129 @@
               <div class="section-label" style="margin:0;">Staff Roster</div>
             </div>
             <div id="staff-list"><div class="loading">Loading...</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- INVENTORY SCREEN -->
+      <div class="screen" id="screen-inventory">
+        <div class="sub-tabs">
+          <button class="sub-tab active" id="inventorytab-btn-dashboard" onclick="setInventoryTab('dashboard', this)">Dashboard</button>
+          <button class="sub-tab" id="inventorytab-btn-consumables" onclick="setInventoryTab('consumables', this)">Consumables</button>
+          <button class="sub-tab" id="inventorytab-btn-snacks" onclick="setInventoryTab('snacks', this)">Snacks</button>
+          <button class="sub-tab" id="inventorytab-btn-coffee" onclick="setInventoryTab('coffee', this)">Coffee</button>
+          <button class="sub-tab" id="inventorytab-btn-wine" onclick="setInventoryTab('wine', this)">Wine</button>
+          <button class="sub-tab" id="inventorytab-btn-merchandise" onclick="setInventoryTab('merchandise', this)">Merchandise</button>
+          <button class="sub-tab" id="inventorytab-btn-vendors" onclick="setInventoryTab('vendors', this)">Vendors</button>
+        </div>
+
+        <!-- DASHBOARD -->
+        <div class="sub-sec active" id="inventorytab-dashboard">
+          <div class="section-label" style="margin-top:0;">By Category</div>
+          <div class="grid-2" style="grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:24px;" id="inv-dash-category-cards">
+            <div class="loading">Loading...</div>
+          </div>
+
+          <div class="section-label">Needs Attention</div>
+          <div id="inv-dash-needs-attention"><div class="loading">Loading...</div></div>
+        </div>
+
+        <!-- CONSUMABLES / SNACKS / COFFEE / MERCHANDISE (shared template) -->
+        <div class="sub-sec" id="inventorytab-consumables"></div>
+        <div class="sub-sec" id="inventorytab-snacks"></div>
+        <div class="sub-sec" id="inventorytab-coffee"></div>
+        <div class="sub-sec" id="inventorytab-merchandise"></div>
+
+        <!-- WINE -->
+        <div class="sub-sec" id="inventorytab-wine">
+          <div class="menu-col-header">
+            <div class="section-label" style="margin:0;" id="inv-wine-form-label">Add Wine</div>
+            <button class="btn btn-sm btn-secondary" id="inv-wine-cancel-edit" style="visibility:hidden;" onclick="cancelWineEdit()">&#10005; Cancel Edit</button>
+          </div>
+          <div class="card" style="margin-bottom:20px;">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Label</label>
+                <input class="form-input" style="width:100%;" type="text" id="inv-wine-label" placeholder="e.g. Pinot Grigio">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Vintage</label>
+                <input class="form-input" style="width:100%;" type="text" id="inv-wine-vintage" placeholder="optional">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Location</label>
+                <input class="form-input" style="width:100%;" type="text" id="inv-wine-location" placeholder="e.g. cellar rack 2">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Bottles on Hand</label>
+                <input class="form-input" style="width:100%;" type="number" min="0" id="inv-wine-count" value="0">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Yellow at / below</label>
+                <input class="form-input" style="width:100%;" type="number" min="0" id="inv-wine-low" value="6">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Red at / below</label>
+                <input class="form-input" style="width:100%;" type="number" min="0" id="inv-wine-critical" value="3">
+              </div>
+            </div>
+            <div class="form-group" style="margin-bottom:16px;">
+              <label class="form-label">Vendor Item (for reorder)</label>
+              <select class="form-select" style="width:100%;" id="inv-wine-vendor-item">
+                <option value="">None linked</option>
+              </select>
+            </div>
+            <div id="inv-wine-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
+            <button class="btn btn-primary" style="width:100%;" id="inv-wine-save-btn" onclick="saveWine()">Add Wine</button>
+          </div>
+          <div id="inv-wine-list"><div class="loading">Loading...</div></div>
+        </div>
+
+        <!-- VENDORS -->
+        <div class="sub-sec" id="inventorytab-vendors">
+          <div class="grid-2">
+            <div class="grid2-col">
+              <div class="menu-col-header">
+                <div class="section-label" style="margin:0;">Vendors</div>
+              </div>
+              <div class="card" style="margin-bottom:16px;" id="inv-vendor-form-card">
+                <div class="form-group" style="margin-bottom:16px;">
+                  <label class="form-label">Vendor Name</label>
+                  <input class="form-input" style="width:100%;" type="text" id="inv-vendor-name" placeholder="e.g. Ben E. Keith">
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">Contact Name</label>
+                    <input class="form-input" style="width:100%;" type="text" id="inv-vendor-contact">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Phone</label>
+                    <input class="form-input" style="width:100%;" type="text" id="inv-vendor-phone">
+                  </div>
+                </div>
+                <div class="form-group" style="margin-bottom:16px;">
+                  <label class="form-label">Email</label>
+                  <input class="form-input" style="width:100%;" type="text" id="inv-vendor-email">
+                </div>
+                <div class="form-group" style="margin-bottom:16px;">
+                  <label class="form-label">Notes</label>
+                  <input class="form-input" style="width:100%;" type="text" id="inv-vendor-notes" placeholder="optional">
+                </div>
+                <div id="inv-vendor-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
+                <button class="btn btn-primary" style="width:100%;" id="inv-vendor-save-btn" onclick="saveVendor()">Add Vendor</button>
+              </div>
+              <div id="inv-vendors-list"><div class="loading">Loading...</div></div>
+            </div>
+            <div class="grid2-col">
+              <div class="menu-col-header">
+                <div class="section-label" style="margin:0;" id="inv-vendor-items-title">Items &amp; Services</div>
+              </div>
+              <div id="inv-vendor-items-panel"><div class="loading">Select a vendor to see what they supply.</div></div>
+            </div>
           </div>
         </div>
       </div>
@@ -946,6 +1070,7 @@
   <script src="js/app-core.js"></script>
   <script src="js/admin.js"></script>
   <script src="js/marketing.js"></script>
+  <script src="js/inventory.js"></script>
   <script src="js/menu.js"></script>
   <script src="js/schedule.js"></script>
   <script src="js/recurring.js"></script>
