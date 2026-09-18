@@ -70,15 +70,42 @@ function setBeerFilter(status) {
   renderBeers();
 }
 
+// "Off" = temporarily out of stock: hidden from every generated menu
+// (they all filter status = 'active') but not retired, so it stays in
+// the Current list and can be flipped back on with one click.
+function offBadge(item) {
+  return item.status === 'off' ? ' <span class="badge badge-amber">Off</span>' : '';
+}
+
+function setMenuOffButton(prefix, saveBtnId, item, name, table, reload) {
+  const old = document.getElementById(prefix + '-off-btn');
+  if (old) old.remove();
+  if (item.status === 'archived') return;
+  const isOff = item.status === 'off';
+  const btn = document.createElement('button');
+  btn.id = prefix + '-off-btn';
+  btn.className = 'btn btn-sm ' + (isOff ? 'btn-success' : 'btn-secondary');
+  btn.textContent = isOff ? 'Turn On' : 'Turn Off';
+  btn.addEventListener('click', async () => {
+    const { error } = await window.supabase.from(table).update({ status: isOff ? 'active' : 'off' }).eq('id', item.id);
+    if (error) { toast('Error: ' + error.message, true); return; }
+    toast(name + (isOff ? ' is back on the menu' : ' turned off'));
+    reload();
+  });
+  const save = document.getElementById(saveBtnId);
+  save.parentNode.insertBefore(btn, save);
+}
+
 function makeBeerStatusBadge(b) {
   if (b.status === 'archived') return '<span class="badge badge-red">Retired</span>';
+  if (b.status === 'off') return '<span class="badge badge-amber">Off</span>';
   return '<span style="font-size:11px;color:var(--muted)">Active</span>';
 }
 
 function renderBeers() {
   const el = document.getElementById('beer-list');
   const admin = isMenuAdmin();
-  const list = beers.filter((b) => (beerFilter === 'archived' ? b.status === 'archived' : b.status === 'active'));
+  const list = beers.filter((b) => (beerFilter === 'archived' ? b.status === 'archived' : b.status !== 'archived'));
   if (!list.length) {
     el.innerHTML = '<div class="loading">' + (beerFilter === 'archived' ? 'No archived beers' : 'No active beers') + '</div>';
     return;
@@ -144,6 +171,7 @@ function loadBeerIntoForm(b) {
     abtn.addEventListener('click', () => restoreBeer(b.id, b.name));
   }
   document.getElementById('btn-save-beer').parentNode.insertBefore(abtn, document.getElementById('btn-save-beer'));
+  setMenuOffButton('bn', 'btn-save-beer', b, b.name, 'beers', () => { cancelBeerEdit(); loadBeers(); });
   document.getElementById('bn-name').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
@@ -162,6 +190,8 @@ function cancelBeerEdit() {
   clearBeerImage();
   const old = document.getElementById('bn-archive-btn');
   if (old) old.remove();
+  const offBtn = document.getElementById('bn-off-btn');
+  if (offBtn) offBtn.remove();
   if (beers.length) renderBeers();
 }
 
@@ -310,7 +340,7 @@ function setWineFilterBtn(status) {
 function renderWines() {
   const el = document.getElementById('wine-list');
   const admin = isMenuAdmin();
-  const list = wines.filter((w) => (wineFilter === 'archived' ? w.status === 'archived' : w.status === 'active'));
+  const list = wines.filter((w) => (wineFilter === 'archived' ? w.status === 'archived' : w.status !== 'archived'));
   if (!list.length) {
     el.innerHTML = '<div class="loading">' + (wineFilter === 'archived' ? 'No archived items' : 'No active items') + '</div>';
     return;
@@ -325,7 +355,7 @@ function renderWines() {
     groups[grp].forEach((w) => {
       const sel = w.id === selWine;
       rows += '<tr style="cursor:' + (admin ? 'pointer' : 'default') + (sel ? ';background:rgba(42,184,166,0.06)' : '') + '"' + (admin ? ' onclick="pickWine(\'' + w.id + '\')"' : '') + '>'
-        + '<td style="font-weight:500' + (sel ? ';color:var(--teal)' : '') + '">' + escHtml(w.name) + '</td>'
+        + '<td style="font-weight:500' + (sel ? ';color:var(--teal)' : '') + '">' + escHtml(w.name) + offBadge(w) + '</td>'
         + '<td style="font-size:12px;color:var(--sub)">' + escHtml(w.winery || '') + '</td>'
         + '<td style="font-size:12px;color:var(--sub)">' + escHtml(w.type || '') + '</td>'
         + '<td style="font-family:\'DM Mono\',monospace;font-size:12px">' + (w.price_glass ? '$' + Number(w.price_glass).toFixed(2) : '') + '</td>'
@@ -401,6 +431,7 @@ function loadWineIntoForm(w) {
     abtn.addEventListener('click', () => restoreWine(w.id, w.name));
   }
   document.getElementById('btn-save-wine').parentNode.insertBefore(abtn, document.getElementById('btn-save-wine'));
+  setMenuOffButton('wn', 'btn-save-wine', w, w.name, 'wine_menu', () => { cancelWineEdit(); loadWines(); });
   document.getElementById('wn-name').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
@@ -420,6 +451,8 @@ function cancelWineEdit() {
   document.getElementById('wn-group').value = '';
   const old = document.getElementById('wn-archive-btn');
   if (old) old.remove();
+  const offBtn = document.getElementById('wn-off-btn');
+  if (offBtn) offBtn.remove();
   if (wines.length) renderWines();
 }
 
@@ -506,7 +539,7 @@ function setCoffeeFilter(status) {
 function renderCoffeeMenu() {
   const el = document.getElementById('coffee-list');
   const admin = isMenuAdmin();
-  const list = coffeeItems.filter((c) => (coffeeFilter === 'archived' ? c.status === 'archived' : c.status === 'active'));
+  const list = coffeeItems.filter((c) => (coffeeFilter === 'archived' ? c.status === 'archived' : c.status !== 'archived'));
   if (!list.length) {
     el.innerHTML = '<div class="loading">' + (coffeeFilter === 'archived' ? 'No archived items' : 'No active items') + '</div>';
     return;
@@ -520,7 +553,7 @@ function renderCoffeeMenu() {
       const sel = c.id === selCoffeeItem;
       rows += '<tr style="cursor:' + (admin ? 'pointer' : 'default') + (sel ? ';background:rgba(42,184,166,0.06)' : '') + '"' + (admin ? ' onclick="pickCoffeeItem(\'' + c.id + '\')"' : '') + '>'
         + '<td style="font-weight:500' + (sel ? ';color:var(--teal)' : '') + '">' + escHtml(c.drink_name) + '</td>'
-        + '<td style="font-size:12px;color:var(--sub)">' + escHtml(c.size_label) + '</td>'
+        + '<td style="font-size:12px;color:var(--sub)">' + escHtml(c.size_label) + offBadge(c) + '</td>'
         + '<td style="font-family:\'DM Mono\',monospace;font-size:12px">$' + Number(c.price).toFixed(2) + '</td></tr>';
     });
   });
@@ -560,6 +593,7 @@ function loadCoffeeItemIntoForm(c) {
     abtn.addEventListener('click', () => restoreCoffeeItem(c.id, c.drink_name));
   }
   document.getElementById('btn-save-coffee').parentNode.insertBefore(abtn, document.getElementById('btn-save-coffee'));
+  setMenuOffButton('cf', 'btn-save-coffee', c, c.drink_name, 'coffee_menu', () => { cancelCoffeeEdit(); loadCoffeeMenu(); });
 }
 
 function cancelCoffeeEdit() {
@@ -573,6 +607,8 @@ function cancelCoffeeEdit() {
   ['cf-name', 'cf-size', 'cf-price', 'cf-desc'].forEach((id) => { document.getElementById(id).value = ''; });
   const old = document.getElementById('cf-archive-btn');
   if (old) old.remove();
+  const offBtn = document.getElementById('cf-off-btn');
+  if (offBtn) offBtn.remove();
   if (coffeeItems.length) renderCoffeeMenu();
 }
 

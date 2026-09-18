@@ -77,7 +77,7 @@
     </header>
 
     <nav>
-      <button class="nav-btn active" onclick="showScreen('menu', this); loadMenu()">Menu</button>
+      <button class="nav-btn active" onclick="showScreen('menu', this); loadMenu()">Menus</button>
       <button class="nav-btn" onclick="showScreen('schedule', this); loadSchedule()">Schedule</button>
       <button class="nav-btn" onclick="showScreen('inventory', this); loadInventory()">Inventory</button>
       <button class="nav-btn" id="nav-btn-marketing" style="display:none;" onclick="showScreen('marketing', this); loadMarketing()">Marketing</button>
@@ -517,64 +517,12 @@
           <div id="inv-dash-needs-attention"><div class="loading">Loading...</div></div>
         </div>
 
-        <!-- CONSUMABLES / SNACKS / COFFEE / MERCHANDISE (shared template) -->
+        <!-- CONSUMABLES / SNACKS / COFFEE / WINE / MERCHANDISE (shared template) -->
         <div class="sub-sec" id="inventorytab-consumables"></div>
         <div class="sub-sec" id="inventorytab-snacks"></div>
         <div class="sub-sec" id="inventorytab-coffee"></div>
+        <div class="sub-sec" id="inventorytab-wine"></div>
         <div class="sub-sec" id="inventorytab-merchandise"></div>
-
-        <!-- WINE -->
-        <div class="sub-sec" id="inventorytab-wine">
-         <div class="grid-2"><div class="grid2-col">
-          <div class="menu-col-header">
-            <div class="section-label" style="margin:0;" id="inv-wine-form-label">Add Wine</div>
-            <button class="btn btn-sm btn-secondary" id="inv-wine-cancel-edit" style="visibility:hidden;" onclick="cancelWineEdit()">&#10005; Cancel Edit</button>
-          </div>
-          <div class="card">
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">Label</label>
-                <input class="form-input" style="width:100%;" type="text" id="inv-wine-label" placeholder="e.g. Pinot Grigio">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Vintage</label>
-                <input class="form-input" style="width:100%;" type="text" id="inv-wine-vintage" placeholder="optional">
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">Location</label>
-                <input class="form-input" style="width:100%;" type="text" id="inv-wine-location" placeholder="e.g. cellar rack 2">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Bottles on Hand</label>
-                <input class="form-input" style="width:100%;" type="number" min="0" id="inv-wine-count" value="0">
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">Yellow at / below</label>
-                <input class="form-input" style="width:100%;" type="number" min="0" id="inv-wine-low" value="6">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Red at / below</label>
-                <input class="form-input" style="width:100%;" type="number" min="0" id="inv-wine-critical" value="3">
-              </div>
-            </div>
-            <div class="form-group" style="margin-bottom:16px;">
-              <label class="form-label">Vendor Item (for reorder)</label>
-              <select class="form-select" style="width:100%;" id="inv-wine-vendor-item">
-                <option value="">None linked</option>
-              </select>
-            </div>
-            <div id="inv-wine-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
-            <button class="btn btn-primary" style="width:100%;" id="inv-wine-save-btn" onclick="saveWine()">Add Wine</button>
-          </div>
-         </div><div class="grid2-col">
-          <div class="menu-col-header"><div class="section-label" style="margin:0;">Wine</div></div>
-          <div id="inv-wine-list"><div class="loading">Loading...</div></div>
-         </div></div>
-        </div>
 
         <!-- VENDORS -->
         <div class="sub-sec" id="inventorytab-vendors">

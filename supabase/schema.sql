@@ -88,7 +88,7 @@ create table beers (
   badges text[] not null default '{}',   -- e.g. 'new_release','back_again','seasonal','limited','collab','lactose','wheat'
   collab_partner text,
   image_url text,
-  status text not null default 'active' check (status in ('active','archived')),
+  status text not null default 'active' check (status in ('active','off','archived')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -118,7 +118,7 @@ create table wine_menu (
   price_glass numeric(6,2),
   price_bottle numeric(6,2),
   badge text[] not null default '{}',
-  status text not null default 'active' check (status in ('active','archived')),
+  status text not null default 'active' check (status in ('active','off','archived')),
   sort_order int not null default 0,
   created_at timestamptz not null default now()
 );
@@ -133,7 +133,7 @@ create table coffee_menu (
   price numeric(6,2) not null,
   description text,          -- one short line per drink; repeated across its size rows
   sort_order int not null default 0,
-  status text not null default 'active' check (status in ('active','archived')),
+  status text not null default 'active' check (status in ('active','off','archived')),
   created_at timestamptz not null default now()
 );
 
@@ -539,12 +539,12 @@ create table inventory_vendor_items (
   created_at timestamptz not null default now()
 );
 
--- Covers the four percent-based categories in one table (shaped
+-- Covers the five percent-based categories in one table (shaped
 -- identically, distinguished by the category tag) — same pattern as
 -- beers using one table with a category column.
 create table inventory_items (
   id uuid primary key default gen_random_uuid(),
-  category text not null check (category in ('consumables','snacks','coffee','merchandise')),
+  category text not null check (category in ('consumables','snacks','coffee','wine','merchandise')),
   subcategory text,
   name text not null,
   location text,
@@ -564,30 +564,8 @@ create trigger inventory_items_set_updated_at
   before update on inventory_items
   for each row execute function set_updated_at();
 
--- Wine is a real bottle count, not a percent estimate — kept
--- separate since its shape differs from inventory_items.
-create table inventory_wine (
-  id uuid primary key default gen_random_uuid(),
-  label text not null,
-  vintage text,
-  location text,
-  bottle_count int not null default 0 check (bottle_count >= 0),
-  low_count_threshold int not null default 6 check (low_count_threshold >= 0),
-  critical_count_threshold int not null default 3 check (critical_count_threshold >= 0),
-  vendor_item_id uuid references inventory_vendor_items(id) on delete set null,
-  last_checked_at timestamptz,
-  last_checked_by uuid references staff_profiles(id) on delete set null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create trigger inventory_wine_set_updated_at
-  before update on inventory_wine
-  for each row execute function set_updated_at();
-
 -- Polymorphic (item_type + item_id, no FK) since it points at either
--- inventory_items or inventory_wine — app code queries the right
--- table by item_type.
+-- inventory_items or (legacy) inventory_wine.
 create table inventory_order_log (
   id uuid primary key default gen_random_uuid(),
   item_type text not null check (item_type in ('item','wine')),
@@ -644,7 +622,6 @@ alter table email_events enable row level security;
 alter table inventory_vendors enable row level security;
 alter table inventory_vendor_items enable row level security;
 alter table inventory_items enable row level security;
-alter table inventory_wine enable row level security;
 alter table inventory_order_log enable row level security;
 
 -- staff_profiles: staff can read the roster; only admins manage roles;
@@ -757,9 +734,6 @@ create policy "admin write inventory_vendor_items" on inventory_vendor_items for
   using (is_admin()) with check (is_admin());
 
 create policy "staff all inventory_items" on inventory_items for all
-  using (is_staff()) with check (is_staff());
-
-create policy "staff all inventory_wine" on inventory_wine for all
   using (is_staff()) with check (is_staff());
 
 create policy "staff all inventory_order_log" on inventory_order_log for all

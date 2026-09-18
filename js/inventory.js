@@ -1,8 +1,7 @@
 // inventory.js
 // Screen: #screen-inventory — brewery inventory isn't a full retail
-// count, so items carry a rough percent remaining (or, for wine, an
-// actual bottle count) rather than exact quantities. Status color is
-// derived from percent/count vs. each row's own low/critical
+// count, so items carry a rough percent remaining rather than exact
+// quantities. Status color is derived from percent vs. each row's own low/critical
 // thresholds (defaults 50%/25%, editable per row) — never stored as
 // a separate field, so it can't drift out of sync with the number.
 //
@@ -12,21 +11,19 @@
 //
 // Vendor read is staff-wide; vendor add/edit/delete is admin-only
 // (window.currentStaff.role === 'admin'), enforced again server-side
-// by RLS. Item/wine counts and the order log are editable by any
+// by RLS. Item levels and the order log are editable by any
 // staff.
 // Depends on: window.supabase, toast(), escHtml() (js/menu.js)
 
-const INV_CATEGORY_LABELS = { consumables: 'Consumables', snacks: 'Snacks', coffee: 'Coffee', merchandise: 'Merchandise' };
+const INV_CATEGORY_LABELS = { consumables: 'Consumables', snacks: 'Snacks', coffee: 'Coffee', wine: 'Wine', merchandise: 'Merchandise' };
 const INV_ITEM_CATEGORIES = Object.keys(INV_CATEGORY_LABELS);
 
 let invItemsCache = [];
-let invWineCache = [];
 let invVendorsCache = [];
 let invVendorItemsCache = [];
 let invOpenOrdersCache = [];
 let invRefDataLoaded = false;
-let invItemEditId = { consumables: null, snacks: null, coffee: null, merchandise: null };
-let invWineEditId = null;
+let invItemEditId = { consumables: null, snacks: null, coffee: null, wine: null, merchandise: null };
 let invSelectedVendorId = null;
 let invVendorItemEditId = null;
 
@@ -41,7 +38,6 @@ function setInventoryTab(tab, btn) {
   document.getElementById('inventorytab-' + tab).classList.add('active');
   if (tab === 'dashboard') loadInventoryDashboard();
   else if (INV_ITEM_CATEGORIES.includes(tab)) { ensureCategoryTemplateBuilt(tab); loadInventoryCategory(tab); }
-  else if (tab === 'wine') loadInventoryWine();
   else if (tab === 'vendors') loadInventoryVendors();
 }
 
@@ -66,8 +62,6 @@ function invClearAlert(id) {
   el.textContent = '';
 }
 
-// value/low/critical follow the same "lower is worse" shape whether
-// it's a percent (item) or a bottle count (wine).
 function invStatusColor(value, low, critical) {
   if (value <= critical) return 'red';
   if (value <= low) return 'amber';
@@ -135,7 +129,7 @@ async function invMarkReceived(itemType, itemId, onDone) {
 }
 function invOrderCellHtml(itemType, itemId, color, vendorItemId, cat) {
   const openOrder = invOpenOrderFor(itemType, itemId);
-  const reloadCall = itemType === 'wine' ? 'loadInventoryWine()' : "loadInventoryCategory('" + cat + "')";
+  const reloadCall = "loadInventoryCategory('" + cat + "')";
   if (openOrder) {
     return '<span class="badge badge-amber">Ordered</span> <button class="btn btn-sm btn-secondary" onclick="invMarkReceived(\'' + itemType + '\',\'' + itemId + '\',()=>' + reloadCall + ')">Mark Received</button>';
   }
@@ -148,12 +142,8 @@ function invOrderCellHtml(itemType, itemId, color, vendorItemId, cat) {
 // ── DASHBOARD ────────────────────────────────────
 async function loadInventoryDashboard() {
   await invEnsureRefData();
-  const [{ data: items }, { data: wine }] = await Promise.all([
-    window.supabase.from('inventory_items').select('*'),
-    window.supabase.from('inventory_wine').select('*'),
-  ]);
+  const { data: items } = await window.supabase.from('inventory_items').select('*');
   invItemsCache = items || [];
-  invWineCache = wine || [];
   await invLoadOpenOrders();
 
   const cardsEl = document.getElementById('inv-dash-category-cards');
@@ -161,17 +151,12 @@ async function loadInventoryDashboard() {
     const rows = invItemsCache.filter((i) => i.category === cat);
     return invDashCardHtml(INV_CATEGORY_LABELS[cat], rows.map((i) => invStatusColor(i.percent_remaining, i.low_threshold, i.critical_threshold)));
   });
-  categoryCards.push(invDashCardHtml('Wine', invWineCache.map((w) => invStatusColor(w.bottle_count, w.low_count_threshold, w.critical_count_threshold))));
   cardsEl.innerHTML = categoryCards.join('');
 
   const needsAttention = [];
   invItemsCache.forEach((i) => {
     const color = invStatusColor(i.percent_remaining, i.low_threshold, i.critical_threshold);
     if (color !== 'ok') needsAttention.push({ itemType: 'item', id: i.id, cat: i.category, name: i.name, location: i.location, valueLabel: i.percent_remaining + '%', color, vendorItemId: i.vendor_item_id, sortValue: i.percent_remaining });
-  });
-  invWineCache.forEach((w) => {
-    const color = invStatusColor(w.bottle_count, w.low_count_threshold, w.critical_count_threshold);
-    if (color !== 'ok') needsAttention.push({ itemType: 'wine', id: w.id, cat: 'wine', name: w.label + (w.vintage ? ' (' + w.vintage + ')' : ''), location: w.location, valueLabel: w.bottle_count + ' bottles', color, vendorItemId: w.vendor_item_id, sortValue: w.bottle_count });
   });
   needsAttention.sort((a, b) => (a.color === b.color ? a.sortValue - b.sortValue : (a.color === 'red' ? -1 : 1)));
 
@@ -181,7 +166,7 @@ async function loadInventoryDashboard() {
     return;
   }
   const rows = needsAttention.map((n) => {
-    const catLabel = n.cat === 'wine' ? 'Wine' : INV_CATEGORY_LABELS[n.cat];
+    const catLabel = INV_CATEGORY_LABELS[n.cat];
     return '<tr><td>' + invStatusBadge(n.color) + '</td>'
       + '<td style="font-size:12px;color:var(--sub);">' + escHtml(catLabel) + '</td>'
       + '<td style="font-weight:500;">' + escHtml(n.name) + '</td>'
@@ -340,108 +325,6 @@ async function deleteItem(cat, id) {
   await loadInventoryCategory(cat);
 }
 
-// ── WINE ─────────────────────────────────────────
-async function loadInventoryWine() {
-  await invEnsureRefData();
-  const { data, error } = await window.supabase.from('inventory_wine').select('*');
-  if (error) { toast(error.message, true); return; }
-  invWineCache = data || [];
-  await invLoadOpenOrders();
-  document.getElementById('inv-wine-vendor-item').innerHTML = invVendorItemOptions(null, 'wine');
-  renderWineTable();
-}
-
-function renderWineTable() {
-  const el = document.getElementById('inv-wine-list');
-  const rows = [...invWineCache].sort((a, b) => a.bottle_count - b.bottle_count);
-  if (!rows.length) { el.innerHTML = '<div class="loading">No wine tracked yet — add one on the left.</div>'; return; }
-  const trs = rows.map((w) => {
-    const color = invStatusColor(w.bottle_count, w.low_count_threshold, w.critical_count_threshold);
-    const sub = [w.vintage, w.location].filter(Boolean).map(escHtml).join(' &middot; ');
-    return '<tr>'
-      + '<td style="font-weight:500;">' + escHtml(w.label) + (sub ? '<div style="font-size:11px;color:var(--sub);">' + sub + '</div>' : '') + '<div style="margin-top:2px;">' + invVendorItemLabel(w.vendor_item_id) + '</div></td>'
-      + '<td style="white-space:nowrap;">' + invStatusBadge(color) + '<div style="margin-top:6px;"><input class="form-input" style="width:60px;padding:6px 8px;" type="number" min="0" id="inv-wine-count-' + w.id + '" value="' + w.bottle_count + '"> btl <button class="btn btn-sm btn-secondary" onclick="saveWineCount(\'' + w.id + '\')">Save</button></div></td>'
-      + '<td>' + invOrderCellHtml('wine', w.id, color, w.vendor_item_id) + '</td>'
-      + '<td style="white-space:nowrap;"><button class="btn btn-sm btn-secondary" onclick="editWine(\'' + w.id + '\')">Edit</button> <button class="btn btn-sm btn-danger" onclick="deleteWine(\'' + w.id + '\')">Delete</button></td>'
-      + '</tr>';
-  }).join('');
-  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Wine</th><th>Bottles</th><th>Order</th><th></th></tr></thead><tbody>' + trs + '</tbody></table></div>';
-}
-
-async function saveWineCount(id) {
-  const count = invClampInt(document.getElementById('inv-wine-count-' + id).value, 0, 100000, 0);
-  const { error } = await window.supabase.from('inventory_wine')
-    .update({ bottle_count: count, last_checked_at: new Date().toISOString(), last_checked_by: window.currentStaff.id })
-    .eq('id', id);
-  if (error) { toast(error.message, true); return; }
-  toast('Updated');
-  await loadInventoryWine();
-}
-
-async function saveWine() {
-  const label = invVal('inv-wine-label');
-  if (!label) { invAlert('inv-wine-alert', 'Label is required.', true); return; }
-  const payload = {
-    label,
-    vintage: invVal('inv-wine-vintage') || null,
-    location: invVal('inv-wine-location') || null,
-    bottle_count: invClampInt(invVal('inv-wine-count'), 0, 100000, 0),
-    low_count_threshold: invClampInt(invVal('inv-wine-low'), 0, 100000, 6),
-    critical_count_threshold: invClampInt(invVal('inv-wine-critical'), 0, 100000, 3),
-    vendor_item_id: invVal('inv-wine-vendor-item') || null,
-    last_checked_at: new Date().toISOString(),
-    last_checked_by: window.currentStaff.id,
-  };
-  const editId = invWineEditId;
-  const { error } = editId
-    ? await window.supabase.from('inventory_wine').update(payload).eq('id', editId)
-    : await window.supabase.from('inventory_wine').insert(payload);
-  if (error) { invAlert('inv-wine-alert', error.message, true); return; }
-  toast(editId ? 'Wine updated' : 'Wine added');
-  cancelWineEdit();
-  await loadInventoryWine();
-}
-
-function editWine(id) {
-  const w = invWineCache.find((x) => x.id === id);
-  if (!w) return;
-  invWineEditId = id;
-  invSetVal('inv-wine-label', w.label);
-  invSetVal('inv-wine-vintage', w.vintage || '');
-  invSetVal('inv-wine-location', w.location || '');
-  invSetVal('inv-wine-count', w.bottle_count);
-  invSetVal('inv-wine-low', w.low_count_threshold);
-  invSetVal('inv-wine-critical', w.critical_count_threshold);
-  document.getElementById('inv-wine-vendor-item').value = w.vendor_item_id || '';
-  document.getElementById('inv-wine-form-label').textContent = 'Edit Wine';
-  document.getElementById('inv-wine-cancel-edit').style.visibility = 'visible';
-  document.getElementById('inv-wine-save-btn').textContent = 'Save Changes';
-}
-
-function cancelWineEdit() {
-  invWineEditId = null;
-  invSetVal('inv-wine-label', '');
-  invSetVal('inv-wine-vintage', '');
-  invSetVal('inv-wine-location', '');
-  invSetVal('inv-wine-count', 0);
-  invSetVal('inv-wine-low', 6);
-  invSetVal('inv-wine-critical', 3);
-  const vSel = document.getElementById('inv-wine-vendor-item');
-  if (vSel) vSel.value = '';
-  document.getElementById('inv-wine-form-label').textContent = 'Add Wine';
-  document.getElementById('inv-wine-cancel-edit').style.visibility = 'hidden';
-  document.getElementById('inv-wine-save-btn').textContent = 'Add Wine';
-  invClearAlert('inv-wine-alert');
-}
-
-async function deleteWine(id) {
-  if (!confirm('Remove this wine from inventory?')) return;
-  const { error } = await window.supabase.from('inventory_wine').delete().eq('id', id);
-  if (error) { toast(error.message, true); return; }
-  toast('Wine removed');
-  await loadInventoryWine();
-}
-
 // ── VENDORS ──────────────────────────────────────
 function invIsAdmin() { return window.currentStaff && window.currentStaff.role === 'admin'; }
 
@@ -511,7 +394,7 @@ function renderVendorItemsPanel() {
     return;
   }
   const rows = items.map((vi) => {
-    const catLabel = vi.category ? (INV_CATEGORY_LABELS[vi.category] || 'Wine') : 'General / Service';
+    const catLabel = vi.category ? INV_CATEGORY_LABELS[vi.category] : 'General / Service';
     return '<tr>'
       + '<td style="font-weight:500;">' + escHtml(vi.item_name) + '</td>'
       + '<td style="font-size:12px;color:var(--sub);">' + escHtml(vi.sku_or_item_number || '—') + '</td>'
