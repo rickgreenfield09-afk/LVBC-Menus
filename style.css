@@ -359,3 +359,8 @@
     .print-title{display:block;font-family:'Bebas Neue',sans-serif;font-size:22px;margin-bottom:12px;}
     .cal-day{border-color:#000;}
   }
+
+  /* Inventory: hide the number-input spinner arrows */
+  #screen-inventory input[type=number]{-moz-appearance:textfield;appearance:textfield;}
+  #screen-inventory input[type=number]::-webkit-outer-spin-button,
+  #screen-inventory input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
