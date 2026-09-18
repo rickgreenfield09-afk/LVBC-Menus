@@ -525,11 +525,12 @@
 
         <!-- WINE -->
         <div class="sub-sec" id="inventorytab-wine">
+         <div class="grid-2"><div class="grid2-col">
           <div class="menu-col-header">
             <div class="section-label" style="margin:0;" id="inv-wine-form-label">Add Wine</div>
             <button class="btn btn-sm btn-secondary" id="inv-wine-cancel-edit" style="visibility:hidden;" onclick="cancelWineEdit()">&#10005; Cancel Edit</button>
           </div>
-          <div class="card" style="margin-bottom:20px;">
+          <div class="card">
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">Label</label>
@@ -569,7 +570,10 @@
             <div id="inv-wine-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
             <button class="btn btn-primary" style="width:100%;" id="inv-wine-save-btn" onclick="saveWine()">Add Wine</button>
           </div>
+         </div><div class="grid2-col">
+          <div class="menu-col-header"><div class="section-label" style="margin:0;">Wine</div></div>
           <div id="inv-wine-list"><div class="loading">Loading...</div></div>
+         </div></div>
         </div>
 
         <!-- VENDORS -->

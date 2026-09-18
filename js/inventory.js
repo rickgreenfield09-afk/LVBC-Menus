@@ -208,11 +208,12 @@ function ensureCategoryTemplateBuilt(cat) {
   const el = document.getElementById('inventorytab-' + cat);
   if (el.dataset.built) return;
   const label = INV_CATEGORY_LABELS[cat];
-  el.innerHTML = '<div class="menu-col-header">'
+  el.innerHTML = '<div class="grid-2"><div class="grid2-col">'
+    + '<div class="menu-col-header">'
     + '<div class="section-label" style="margin:0;" id="inv-' + cat + '-form-label">Add ' + label + ' Item</div>'
     + '<button class="btn btn-sm btn-secondary" id="inv-' + cat + '-cancel-edit" style="visibility:hidden;" onclick="cancelItemEdit(\'' + cat + '\')">&#10005; Cancel Edit</button>'
     + '</div>'
-    + '<div class="card" style="margin-bottom:20px;">'
+    + '<div class="card">'
     + '<div class="form-row">'
     + '<div class="form-group"><label class="form-label">Name</label><input class="form-input" style="width:100%;" type="text" id="inv-' + cat + '-name"></div>'
     + '<div class="form-group"><label class="form-label">Subcategory</label><input class="form-input" style="width:100%;" type="text" id="inv-' + cat + '-subcategory" placeholder="optional"></div>'
@@ -229,7 +230,10 @@ function ensureCategoryTemplateBuilt(cat) {
     + '<div id="inv-' + cat + '-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:\'DM Mono\',monospace;"></div>'
     + '<button class="btn btn-primary" style="width:100%;" id="inv-' + cat + '-save-btn" onclick="saveItem(\'' + cat + '\')">Add Item</button>'
     + '</div>'
-    + '<div id="inv-' + cat + '-list"><div class="loading">Loading...</div></div>';
+    + '</div><div class="grid2-col">'
+    + '<div class="menu-col-header"><div class="section-label" style="margin:0;">' + label + '</div></div>'
+    + '<div id="inv-' + cat + '-list"><div class="loading">Loading...</div></div>'
+    + '</div></div>';
   el.dataset.built = '1';
 }
 
@@ -246,20 +250,18 @@ async function loadInventoryCategory(cat) {
 function renderItemsTable(cat) {
   const el = document.getElementById('inv-' + cat + '-list');
   const rows = invItemsCache.filter((i) => i.category === cat).sort((a, b) => a.percent_remaining - b.percent_remaining);
-  if (!rows.length) { el.innerHTML = '<div class="loading">No items yet — add one above.</div>'; return; }
+  if (!rows.length) { el.innerHTML = '<div class="loading">No items yet — add one on the left.</div>'; return; }
   const trs = rows.map((i) => {
     const color = invStatusColor(i.percent_remaining, i.low_threshold, i.critical_threshold);
+    const sub = [i.subcategory, i.location].filter(Boolean).map(escHtml).join(' &middot; ');
     return '<tr>'
-      + '<td style="font-weight:500;">' + escHtml(i.name) + (i.subcategory ? '<div style="font-size:11px;color:var(--sub);">' + escHtml(i.subcategory) + '</div>' : '') + '</td>'
-      + '<td style="font-size:12px;color:var(--sub);">' + escHtml(i.location || '—') + '</td>'
-      + '<td>' + invStatusBadge(color) + '</td>'
-      + '<td><input class="form-input" style="width:64px;padding:6px 8px;" type="number" min="0" max="100" id="inv-pct-' + i.id + '" value="' + i.percent_remaining + '"> <button class="btn btn-sm btn-secondary" onclick="saveItemPercent(\'' + cat + '\',\'' + i.id + '\')">Save</button></td>'
-      + '<td>' + invVendorItemLabel(i.vendor_item_id) + '</td>'
+      + '<td style="font-weight:500;">' + escHtml(i.name) + (sub ? '<div style="font-size:11px;color:var(--sub);">' + sub + '</div>' : '') + '<div style="margin-top:2px;">' + invVendorItemLabel(i.vendor_item_id) + '</div></td>'
+      + '<td style="white-space:nowrap;">' + invStatusBadge(color) + '<div style="margin-top:6px;"><input class="form-input" style="width:60px;padding:6px 8px;" type="number" min="0" max="100" id="inv-pct-' + i.id + '" value="' + i.percent_remaining + '"> % <button class="btn btn-sm btn-secondary" onclick="saveItemPercent(\'' + cat + '\',\'' + i.id + '\')">Save</button></div></td>'
       + '<td>' + invOrderCellHtml('item', i.id, color, i.vendor_item_id, cat) + '</td>'
-      + '<td><button class="btn btn-sm btn-secondary" onclick="editItem(\'' + cat + '\',\'' + i.id + '\')">Edit</button> <button class="btn btn-sm btn-danger" onclick="deleteItem(\'' + cat + '\',\'' + i.id + '\')">Delete</button></td>'
+      + '<td style="white-space:nowrap;"><button class="btn btn-sm btn-secondary" onclick="editItem(\'' + cat + '\',\'' + i.id + '\')">Edit</button> <button class="btn btn-sm btn-danger" onclick="deleteItem(\'' + cat + '\',\'' + i.id + '\')">Delete</button></td>'
       + '</tr>';
   }).join('');
-  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Location</th><th>Status</th><th>% Remaining</th><th>Vendor / Reorder Info</th><th>Order Status</th><th></th></tr></thead><tbody>' + trs + '</tbody></table></div>';
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Level</th><th>Order</th><th></th></tr></thead><tbody>' + trs + '</tbody></table></div>';
 }
 
 async function saveItemPercent(cat, id) {
@@ -352,20 +354,18 @@ async function loadInventoryWine() {
 function renderWineTable() {
   const el = document.getElementById('inv-wine-list');
   const rows = [...invWineCache].sort((a, b) => a.bottle_count - b.bottle_count);
-  if (!rows.length) { el.innerHTML = '<div class="loading">No wine tracked yet — add one above.</div>'; return; }
+  if (!rows.length) { el.innerHTML = '<div class="loading">No wine tracked yet — add one on the left.</div>'; return; }
   const trs = rows.map((w) => {
     const color = invStatusColor(w.bottle_count, w.low_count_threshold, w.critical_count_threshold);
+    const sub = [w.vintage, w.location].filter(Boolean).map(escHtml).join(' &middot; ');
     return '<tr>'
-      + '<td style="font-weight:500;">' + escHtml(w.label) + (w.vintage ? '<div style="font-size:11px;color:var(--sub);">' + escHtml(w.vintage) + '</div>' : '') + '</td>'
-      + '<td style="font-size:12px;color:var(--sub);">' + escHtml(w.location || '—') + '</td>'
-      + '<td>' + invStatusBadge(color) + '</td>'
-      + '<td><input class="form-input" style="width:64px;padding:6px 8px;" type="number" min="0" id="inv-wine-count-' + w.id + '" value="' + w.bottle_count + '"> <button class="btn btn-sm btn-secondary" onclick="saveWineCount(\'' + w.id + '\')">Save</button></td>'
-      + '<td>' + invVendorItemLabel(w.vendor_item_id) + '</td>'
+      + '<td style="font-weight:500;">' + escHtml(w.label) + (sub ? '<div style="font-size:11px;color:var(--sub);">' + sub + '</div>' : '') + '<div style="margin-top:2px;">' + invVendorItemLabel(w.vendor_item_id) + '</div></td>'
+      + '<td style="white-space:nowrap;">' + invStatusBadge(color) + '<div style="margin-top:6px;"><input class="form-input" style="width:60px;padding:6px 8px;" type="number" min="0" id="inv-wine-count-' + w.id + '" value="' + w.bottle_count + '"> btl <button class="btn btn-sm btn-secondary" onclick="saveWineCount(\'' + w.id + '\')">Save</button></div></td>'
       + '<td>' + invOrderCellHtml('wine', w.id, color, w.vendor_item_id) + '</td>'
-      + '<td><button class="btn btn-sm btn-secondary" onclick="editWine(\'' + w.id + '\')">Edit</button> <button class="btn btn-sm btn-danger" onclick="deleteWine(\'' + w.id + '\')">Delete</button></td>'
+      + '<td style="white-space:nowrap;"><button class="btn btn-sm btn-secondary" onclick="editWine(\'' + w.id + '\')">Edit</button> <button class="btn btn-sm btn-danger" onclick="deleteWine(\'' + w.id + '\')">Delete</button></td>'
       + '</tr>';
   }).join('');
-  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Wine</th><th>Location</th><th>Status</th><th>Bottles</th><th>Vendor / Reorder Info</th><th>Order Status</th><th></th></tr></thead><tbody>' + trs + '</tbody></table></div>';
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Wine</th><th>Bottles</th><th>Order</th><th></th></tr></thead><tbody>' + trs + '</tbody></table></div>';
 }
 
 async function saveWineCount(id) {
