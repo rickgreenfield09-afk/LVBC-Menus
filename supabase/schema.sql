@@ -552,6 +552,8 @@ create table inventory_items (
   low_threshold int not null default 50 check (low_threshold between 0 and 100),
   critical_threshold int not null default 25 check (critical_threshold between 0 and 100),
   vendor_item_id uuid references inventory_vendor_items(id) on delete set null,
+  -- wine/N/A rows link back to their menu item — see migration_024.
+  wine_menu_id uuid references wine_menu(id) on delete set null,
   last_checked_at timestamptz,
   last_checked_by uuid references staff_profiles(id) on delete set null,
   created_at timestamptz not null default now(),
@@ -579,6 +581,24 @@ create table inventory_order_log (
 );
 
 create index inventory_order_log_item_idx on inventory_order_log (item_type, item_id);
+
+-- Turning a wine/N/A menu item Off zeroes its inventory level (see
+-- migration_024); turning it back On leaves it for a recount.
+create or replace function zero_inventory_when_menu_off()
+returns trigger as $$
+begin
+  if new.status = 'off' and old.status is distinct from 'off' then
+    update inventory_items
+    set percent_remaining = 0, last_checked_at = now()
+    where wine_menu_id = new.id;
+  end if;
+  return new;
+end;
+$$ language plpgsql security definer;
+
+create trigger wine_menu_off_zeroes_inventory
+  after update of status on wine_menu
+  for each row execute function zero_inventory_when_menu_off();
 
 -- ============================================================
 -- ROW LEVEL SECURITY
