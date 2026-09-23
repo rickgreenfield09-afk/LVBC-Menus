@@ -80,6 +80,7 @@
       <button class="nav-btn active" onclick="showScreen('menu', this); loadMenu()">Menus</button>
       <button class="nav-btn" onclick="showScreen('schedule', this); loadSchedule()">Schedule</button>
       <button class="nav-btn" onclick="showScreen('inventory', this); loadInventory()">Inventory</button>
+      <button class="nav-btn" onclick="showScreen('bingo', this); loadBingo()">Bingo <span class="badge badge-teal" id="bingo-nav-ready" style="display:none;margin-left:4px;"></span></button>
       <button class="nav-btn" id="nav-btn-marketing" style="display:none;" onclick="showScreen('marketing', this); loadMarketing()">Marketing</button>
       <button class="nav-btn" id="nav-btn-admin" style="display:none;" onclick="showScreen('admin', this); loadAdmin()">Admin</button>
       <!-- Dashboard, Reports tabs added as their .js files land -->
@@ -569,6 +570,133 @@
         </div>
       </div>
 
+      <!-- BINGO SCREEN -->
+      <div class="screen" id="screen-bingo">
+        <div class="sub-tabs">
+          <button class="sub-tab active" id="bingotab-btn-dashboard" onclick="setBingoTab('dashboard', this)">Dashboard</button>
+          <button class="sub-tab" id="bingotab-btn-playlists" onclick="setBingoTab('playlists', this)">Playlists</button>
+          <button class="sub-tab" id="bingotab-btn-patterns" onclick="setBingoTab('patterns', this)">Win Patterns</button>
+          <button class="sub-tab" id="bingotab-btn-newgame" onclick="setBingoTab('newgame', this)">New Game</button>
+          <button class="sub-tab" id="bingotab-btn-history" onclick="setBingoTab('history', this)">History</button>
+        </div>
+
+        <!-- DASHBOARD -->
+        <div class="sub-sec active" id="bingotab-dashboard">
+          <div class="grid-4" id="bingo-dash-cards"><div class="loading">Loading...</div></div>
+          <div class="section-label">Back in Rotation</div>
+          <div id="bingo-dash-back"><div class="loading">Loading...</div></div>
+          <div class="section-label">Cooling Down</div>
+          <div id="bingo-dash-cooling"><div class="loading">Loading...</div></div>
+        </div>
+
+        <!-- PLAYLISTS -->
+        <div class="sub-sec" id="bingotab-playlists">
+          <div class="grid-2">
+            <div class="grid2-col">
+              <div class="menu-col-header">
+                <div class="section-label" style="margin:0;" id="bingo-pl-form-label">New Playlist</div>
+                <button class="btn btn-sm btn-secondary" id="bingo-pl-cancel" style="visibility:hidden;" onclick="resetBingoPlaylistForm()">&#10005; Cancel Edit</button>
+              </div>
+              <div class="card">
+                <div class="form-group" style="margin-bottom:16px;">
+                  <label class="form-label">Playlist Title</label>
+                  <input class="form-input" style="width:100%;" type="text" id="bingo-pl-title" placeholder="e.g. 80s Hair Bands">
+                </div>
+                <div class="form-group" style="margin-bottom:16px;">
+                  <label class="form-label">Notes (optional)</label>
+                  <input class="form-input" style="width:100%;" type="text" id="bingo-pl-notes">
+                </div>
+                <div class="menu-col-header" style="margin-bottom:8px;">
+                  <label class="form-label" style="margin:0;">Songs</label>
+                  <span class="badge badge-muted" id="bingo-pl-count">0 / 24</span>
+                </div>
+                <div id="bingo-pl-songs" style="margin-bottom:12px;"></div>
+                <div class="bingo-song-add">
+                  <input class="form-input" type="text" id="bingo-add-title" placeholder="Song title" list="bingo-title-list" onchange="bingoAutofillArtist()">
+                  <input class="form-input" type="text" id="bingo-add-artist" placeholder="Artist" list="bingo-artist-list" onkeydown="if(event.key==='Enter')addBingoSongFromInputs()">
+                  <button class="btn btn-secondary btn-sm" onclick="addBingoSongFromInputs()">Add</button>
+                </div>
+                <datalist id="bingo-title-list"></datalist>
+                <datalist id="bingo-artist-list"></datalist>
+                <details style="margin:12px 0 16px;">
+                  <summary style="font-size:12px;color:var(--sub);cursor:pointer;">Paste a list of songs</summary>
+                  <textarea class="form-input" id="bingo-paste" rows="6" style="width:100%;margin-top:8px;font-family:'DM Mono',monospace;font-size:12px;" placeholder="One per line:&#10;Livin' on a Prayer - Bon Jovi&#10;(tab-separated Title / Artist from a spreadsheet works too)"></textarea>
+                  <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="addBingoSongsFromPaste()">Add Pasted Songs</button>
+                </details>
+                <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Clip start / stop (m:ss) are optional and belong to the song everywhere it's used.</div>
+                <div id="bingo-pl-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
+                <button class="btn btn-primary" style="width:100%;" onclick="saveBingoPlaylist()">Save Playlist</button>
+              </div>
+            </div>
+            <div class="grid2-col">
+              <div class="menu-col-header">
+                <div class="section-label" style="margin:0;">All Playlists</div>
+              </div>
+              <div id="bingo-pl-list"><div class="loading">Loading...</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- WIN PATTERNS -->
+        <div class="sub-sec" id="bingotab-patterns">
+          <div class="grid-2">
+            <div class="grid2-col">
+              <div class="menu-col-header">
+                <div class="section-label" style="margin:0;" id="bingo-pat-form-label">New Win Pattern</div>
+                <button class="btn btn-sm btn-secondary" id="bingo-pat-cancel" style="visibility:hidden;" onclick="resetBingoPatternForm()">&#10005; Cancel Edit</button>
+              </div>
+              <div class="card">
+                <div class="form-group" style="margin-bottom:16px;">
+                  <label class="form-label">Pattern Name</label>
+                  <input class="form-input" style="width:100%;" type="text" id="bingo-pat-name" placeholder="e.g. Big X, Four Corners, Picture Frame">
+                </div>
+                <label class="form-label">Squares players must mark</label>
+                <div class="bingo-pattern-editor" id="bingo-pat-grid"></div>
+                <div style="font-size:11px;color:var(--muted);margin:8px 0 16px;">Click squares to toggle them. The center is the free space and always counts as marked.</div>
+                <div id="bingo-pat-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
+                <button class="btn btn-primary" style="width:100%;" onclick="saveBingoPattern()">Save Pattern</button>
+              </div>
+            </div>
+            <div class="grid2-col">
+              <div class="menu-col-header">
+                <div class="section-label" style="margin:0;">Saved Patterns</div>
+              </div>
+              <div id="bingo-pat-list" class="bingo-pat-list"><div class="loading">Loading...</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- NEW GAME -->
+        <div class="sub-sec" id="bingotab-newgame">
+          <div class="grid-2">
+            <div class="grid2-col">
+              <div class="section-label" style="margin-top:0;">Set Up the Game</div>
+              <div class="card">
+                <div class="form-row">
+                  <div class="form-group"><label class="form-label">Game Night</label><input class="form-input" style="width:100%;" type="date" id="bingo-game-date"></div>
+                  <div class="form-group"><label class="form-label">Sheets to Print</label><input class="form-input" style="width:100%;" type="number" min="1" max="200" id="bingo-game-sheets" value="40"></div>
+                </div>
+                <div id="bingo-game-rounds"></div>
+                <div id="bingo-game-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
+                <button class="btn btn-primary" style="width:100%;" id="bingo-print-btn" onclick="printBingoGame()">Print Game</button>
+                <div style="font-size:11px;color:var(--muted);margin-top:8px;">Printing marks all 3 playlists as used today. They come back into rotation in 90 days.</div>
+              </div>
+            </div>
+            <div class="grid2-col">
+              <div class="section-label" style="margin-top:0;">Output</div>
+              <div class="card" id="bingo-game-output">
+                <div style="font-size:13px;color:var(--sub);">Once the game is printed, the card sheets and the TV slideshow open from here. You can reopen any past game from History.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- HISTORY -->
+        <div class="sub-sec" id="bingotab-history">
+          <div id="bingo-history-list"><div class="loading">Loading...</div></div>
+        </div>
+      </div>
+
       <!-- MARKETING SCREEN -->
       <div class="screen" id="screen-marketing">
         <div class="sub-tabs">
@@ -1028,5 +1156,6 @@
   <script src="js/recurring.js"></script>
   <script src="js/myshifts.js"></script>
   <script src="js/events.js"></script>
+  <script src="js/bingo.js"></script>
 </body>
 </html>

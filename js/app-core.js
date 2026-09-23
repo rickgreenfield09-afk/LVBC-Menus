@@ -156,6 +156,7 @@ function renderLoggedIn() {
   if (marketingNavBtn) marketingNavBtn.style.display = window.currentStaff.role === 'admin' ? '' : 'none';
   if (typeof loadDashboard === 'function') loadDashboard();
   if (typeof loadMenu === 'function') loadMenu();
+  if (typeof refreshBingoNavBadge === 'function') refreshBingoNavBadge();
 }
 
 function renderLoggedOut() {
