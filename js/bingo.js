@@ -527,23 +527,85 @@ async function bingoFetchEvents(startStr, endStr) {
   return list.sort((a, b) => a.date.localeCompare(b.date) || minutes(a.time) - minutes(b.time));
 }
 
-async function printBingoGame() {
+// Validated New Game form, or null (with the alert shown).
+function bingoReadGameForm() {
   bingoClearAlert('bingo-game-alert');
   const eventDate = document.getElementById('bingo-game-date').value;
   const sheets = parseInt(document.getElementById('bingo-game-sheets').value, 10);
-  if (!eventDate) { bingoAlert('bingo-game-alert', 'Pick the game night date.', true); return; }
-  if (!(sheets >= 1 && sheets <= 200)) { bingoAlert('bingo-game-alert', 'Sheets must be between 1 and 200.', true); return; }
+  const fail = (msg) => { bingoAlert('bingo-game-alert', msg, true); return null; };
+  if (!eventDate) return fail('Pick the game night date.');
+  if (!(sheets >= 1 && sheets <= 200)) return fail('Sheets must be between 1 and 200.');
 
   const rounds = [1, 2, 3].map((r) => ({
     round_no: r,
     playlist_id: document.getElementById('bingo-r' + r + '-playlist').value,
     pattern_id: r === 1 ? null : document.getElementById('bingo-r' + r + '-pattern').value,
   }));
-  if (rounds.some((r) => !r.playlist_id)) { bingoAlert('bingo-game-alert', 'Choose a playlist for every round.', true); return; }
-  if (new Set(rounds.map((r) => r.playlist_id)).size < 3) { bingoAlert('bingo-game-alert', 'Each round needs a different playlist.', true); return; }
-  if (rounds.some((r) => r.round_no > 1 && !r.pattern_id)) { bingoAlert('bingo-game-alert', 'Choose a win pattern for rounds 2 and 3.', true); return; }
+  if (rounds.some((r) => !r.playlist_id)) return fail('Choose a playlist for every round.');
+  if (new Set(rounds.map((r) => r.playlist_id)).size < 3) return fail('Each round needs a different playlist.');
+  if (rounds.some((r) => r.round_no > 1 && !r.pattern_id)) return fail('Choose a win pattern for rounds 2 and 3.');
+  return { eventDate, sheets, rounds, pls: rounds.map((r) => bingoPlaylists.find((p) => p.id === r.playlist_id)) };
+}
 
-  const pls = rounds.map((r) => bingoPlaylists.find((p) => p.id === r.playlist_id));
+function bingoFetchGameEvents(eventDate) {
+  return Promise.all([
+    bingoFetchEvents(eventDate, bingoAddDays(eventDate, 6)),
+    bingoFetchEvents(bingoAddDays(eventDate, 1), bingoAddDays(eventDate, 14)),
+  ]);
+}
+
+// Builds an unsaved game in the same shape bingoLoadGame() returns —
+// a few sample sheets with random shuffles — so the real renderers can
+// show exactly what will print, without marking anything used.
+const BINGO_PREVIEW_SHEETS = 3;
+async function bingoBuildPreviewGame() {
+  const form = bingoReadGameForm();
+  if (!form) return null;
+  const [songLists, [sheetEvents, slideEvents]] = await Promise.all([
+    Promise.all(form.rounds.map((r) => window.supabase.from('bingo_playlist_songs')
+      .select('position, bingo_songs(id, title, artist)').eq('playlist_id', r.playlist_id).order('position'))),
+    bingoFetchGameEvents(form.eventDate),
+  ]);
+  const failed = songLists.find((res) => res.error);
+  if (failed) { bingoAlert('bingo-game-alert', failed.error.message, true); return null; }
+
+  const rounds = form.rounds.map((r, i) => {
+    const pat = bingoPatterns.find((p) => p.id === r.pattern_id);
+    return {
+      round_no: r.round_no,
+      playlist_title: form.pls[i].title,
+      songs: songLists[i].data.map((row) => row.bingo_songs),
+      pattern_name: pat ? pat.name : '5 in a Row',
+      pattern_cells: pat ? pat.cells : null,
+    };
+  });
+  const shuffle = () => {
+    const a = Array.from({ length: 24 }, (_, i) => i);
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+    return a;
+  };
+  const cards = [];
+  for (let s = 1; s <= BINGO_PREVIEW_SHEETS; s++) [1, 2, 3].forEach((r) => cards.push({ sheet_no: s, round_no: r, song_order: shuffle() }));
+  return {
+    game: { event_date: form.eventDate, sheet_count: form.sheets, sheet_events: sheetEvents, slide_events: slideEvents },
+    rounds, cards, preview: true,
+  };
+}
+
+async function previewBingoCards() {
+  const g = await bingoBuildPreviewGame();
+  if (g) openHtml(bingoCardSheetsHtml(g));
+}
+
+async function previewBingoSlideshow() {
+  const g = await bingoBuildPreviewGame();
+  if (g) openHtml(bingoSlideshowHtml(g));
+}
+
+async function printBingoGame() {
+  const form = bingoReadGameForm();
+  if (!form) return;
+  const { eventDate, sheets, rounds, pls } = form;
   const overrides = pls.filter(bingoIsCooling);
   const readyAgain = bingoFmtDate(bingoAddDays(bingoToday(), BINGO_COOLDOWN_DAYS));
   if (!confirm('Print ' + sheets + ' sheets for ' + bingoFmtDate(eventDate) + '?\n\n'
@@ -554,10 +616,7 @@ async function printBingoGame() {
   const btn = document.getElementById('bingo-print-btn');
   btn.disabled = true; btn.textContent = 'Printing…';
   try {
-    const [sheetEvents, slideEvents] = await Promise.all([
-      bingoFetchEvents(eventDate, bingoAddDays(eventDate, 6)),
-      bingoFetchEvents(bingoAddDays(eventDate, 1), bingoAddDays(eventDate, 14)),
-    ]);
+    const [sheetEvents, slideEvents] = await bingoFetchGameEvents(eventDate);
     const { data: gameId, error } = await window.supabase.rpc('create_bingo_game', {
       p_event_date: eventDate,
       p_sheet_count: sheets,
@@ -601,10 +660,22 @@ async function loadBingoHistory() {
         + rounds.map((r) => '<td>' + escHtml(r.playlist_title) + '<div style="font-size:11px;color:var(--sub);">' + escHtml(r.pattern_name) + '</div></td>').join('')
         + '<td>' + g.sheet_count + '</td>'
         + '<td style="font-size:12px;">' + bingoFmtDate(g.printed_on) + '<div style="font-size:11px;color:var(--sub);">' + escHtml(g.staff_profiles ? g.staff_profiles.name : '') + '</div></td>'
-        + '<td>' + bingoOutputButtons(g.id) + '</td></tr>';
+        + '<td>' + bingoOutputButtons(g.id)
+        + (bingoIsAdmin() ? '<button class="btn btn-danger btn-sm" style="margin-top:6px;" onclick="deleteBingoGame(\'' + g.id + '\', \'' + g.event_date + '\')">Delete</button>' : '')
+        + '</td></tr>';
     }).join('')
     + '</tbody></table></div>'
-    + '<div style="font-size:11px;color:var(--muted);margin-top:8px;">Reopening a past game reprints the exact same cards and doesn\'t count as another use.</div>';
+    + '<div style="font-size:11px;color:var(--muted);margin-top:8px;">Reopening a past game reprints the exact same cards and doesn\'t count as another use.'
+    + (bingoIsAdmin() ? ' Deleting a game undoes its use: counts go back down and its playlists return to their previous last-used date.' : '') + '</div>';
+}
+
+async function deleteBingoGame(gameId, eventDate) {
+  if (!confirm('Delete the game for ' + bingoFmtDate(eventDate) + '?\n\nIts cards can no longer be reprinted, and its playlists and songs are un-marked as used (counts go back down).')) return;
+  const { error } = await window.supabase.rpc('delete_bingo_game', { p_game_id: gameId });
+  if (error) { toast(error.message, true); return; }
+  logAudit('delete_bingo_game', 'bingo_games', gameId, { event_date: eventDate });
+  toast('Game deleted');
+  await loadBingoHistory();
 }
 
 // ── OUTPUT: shared ────────────────────────────────
@@ -631,47 +702,50 @@ function bingoPrintPattern(cells, cellSize) {
   return '<div class="pat-row">' + grid(new Set([10, 11, 13, 14])) + grid(new Set([2, 7, 17, 22])) + grid(new Set([0, 6, 18, 24])) + '</div>';
 }
 
-const BINGO_PAT_CSS = '.pat{display:grid;gap:2px;}.pat span{border:1px solid #1a1410;background:#fff;}.pat span.on{background:#8b3a1a;border-color:#8b3a1a;}.pat span.free{background:#c8a882;border-color:#c8a882;}.pat-row{display:flex;gap:6px;justify-content:center;}';
+const BINGO_PAT_CSS = '.pat{display:grid;gap:2px;}.pat span{border:1px solid #1a1410;background:#fff;}.pat span.on{background:#1a1410;}.pat span.free{background:#c4c4c4;border-color:#c4c4c4;}.pat-row{display:flex;gap:8px;justify-content:center;}';
 const BINGO_TOOLBAR_CSS = '.toolbar{position:fixed;top:12px;right:12px;z-index:10;display:flex;gap:8px;font-family:Inter,sans-serif;}.toolbar button{padding:8px 16px;border:none;border-radius:6px;background:#8b3a1a;color:#fff;font-weight:600;cursor:pointer;}.toolbar span{background:rgba(0,0,0,0.6);color:#fff;padding:8px 12px;border-radius:6px;font-size:12px;}@media print{.toolbar{display:none;}}';
 
 // ── OUTPUT: card sheets (8.5x11 portrait) ─────────
 // Quadrants: TL = round 1, TR = info (rules, events, patterns),
-// BL = round 2, BR = round 3.
+// BL = round 2, BR = round 3. Black and white only — the logo is the
+// one color element. The page's padding keeps everything clear of
+// the printer's unprintable edge.
 const BINGO_SHEET_CSS = PRINT_RESET + '*{box-sizing:border-box;margin:0;padding:0;}body{background:#777;font-family:Inter,sans-serif;color:#1a1410;}'
-  + '.page{width:8.5in;height:11in;background:#fff;margin:0 auto 0.3in;display:grid;grid-template-columns:4.25in 4.25in;grid-template-rows:5.5in 5.5in;page-break-after:always;overflow:hidden;}'
+  + '.page{width:8.5in;height:11in;padding:0.12in;background:#fff;margin:0 auto 0.3in;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;page-break-after:always;overflow:hidden;}'
   + '@media print{.page{margin:0;}}'
-  + '.quad{padding:0.22in 0.2in;display:flex;flex-direction:column;overflow:hidden;}'
+  + '.quad{padding:0.16in;display:flex;flex-direction:column;overflow:hidden;}'
   + '.quad:nth-child(1){border-right:1px dashed #bbb;border-bottom:1px dashed #bbb;}.quad:nth-child(2){border-bottom:1px dashed #bbb;}.quad:nth-child(3){border-right:1px dashed #bbb;}'
   + '.card-head{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid #1a1410;padding-bottom:3px;margin-bottom:2px;}'
   + '.round{font-family:Oswald,sans-serif;font-size:20px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;line-height:1;}'
-  + '.win{font-family:Oswald,sans-serif;font-size:10px;font-weight:600;letter-spacing:0.12em;color:#8b3a1a;text-transform:uppercase;}'
-  + '.playlist{font-family:Oswald,sans-serif;font-size:10px;font-weight:500;letter-spacing:0.08em;color:#5a544e;text-transform:uppercase;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
-  + '.grid{display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(5,0.84in);border:2px solid #1a1410;}'
+  + '.win{font-family:Oswald,sans-serif;font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;}'
+  + '.playlist{font-family:Oswald,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+  + '.grid{display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(5,0.82in);border:2px solid #1a1410;}'
   + '.cell{border:0.75px solid #1a1410;padding:3px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;overflow:hidden;}'
-  + '.t{font-weight:700;line-height:1.1;overflow-wrap:anywhere;}.a{font-style:italic;color:#5a544e;line-height:1.1;margin-top:2px;overflow-wrap:anywhere;}'
-  + '.free{background:#f4efe6;}.free img{width:0.42in;height:0.42in;object-fit:contain;}.free b{font-family:Oswald,sans-serif;font-size:11px;letter-spacing:0.15em;color:#8b3a1a;}'
-  + '.card-foot{margin-top:auto;padding-top:4px;font-size:8px;color:#7a6e66;text-align:right;font-family:Oswald,sans-serif;letter-spacing:0.1em;}'
-  + '.info{background:#faf6ef;}.brand{display:flex;align-items:center;gap:8px;}.brand img{width:0.62in;height:0.62in;object-fit:contain;}'
-  + '.brand-name{font-family:Oswald,sans-serif;font-size:9px;font-weight:600;letter-spacing:0.18em;color:#8b3a1a;text-transform:uppercase;}'
-  + '.title{font-family:Oswald,sans-serif;font-size:34px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;line-height:0.95;}'
-  + '.date{font-size:9px;color:#5a544e;margin:5px 0 7px;}'
-  + '.h{font-family:Oswald,sans-serif;font-size:10px;font-weight:600;letter-spacing:0.18em;color:#8b3a1a;text-transform:uppercase;border-bottom:1.5px solid rgba(139,58,26,0.4);margin:6px 0 3px;}'
+  + '.t{font-weight:700;line-height:1.1;overflow-wrap:anywhere;}.a{font-style:italic;font-weight:500;color:#222;line-height:1.1;margin-top:2px;overflow-wrap:anywhere;}'
+  + '.free img{width:0.44in;height:0.44in;object-fit:contain;}.free b{font-family:Oswald,sans-serif;font-size:11px;letter-spacing:0.15em;}'
+  + '.card-foot{margin-top:auto;padding-top:4px;font-size:8px;color:#555;text-align:right;font-family:Oswald,sans-serif;letter-spacing:0.1em;}'
+  + '.brand{display:flex;align-items:center;gap:8px;}.brand img{width:0.58in;height:0.58in;object-fit:contain;}'
+  + '.brand-name{font-family:Oswald,sans-serif;font-size:9px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;}'
+  + '.title{font-family:Oswald,sans-serif;font-size:30px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;line-height:0.95;}'
+  + '.date{font-size:9px;color:#444;margin:4px 0 6px;}'
+  + '.h{font-family:Oswald,sans-serif;font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;border-bottom:1.5px solid #1a1410;margin:6px 0 3px;}'
+  + '.keep{background:#1a1410;color:#fff;font-family:Oswald,sans-serif;font-size:12.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;text-align:center;padding:5px 6px;line-height:1.2;margin:3px 0 4px;}'
   + '.rules{font-size:8.5px;line-height:1.35;padding-left:12px;}.ev{font-size:8.5px;line-height:1.4;display:flex;gap:6px;}.ev b{min-width:0.62in;}'
-  + '.pats-block{margin-top:auto;height:1.75in;display:flex;flex-direction:column;}'
-  + '.pats{flex:1;display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:6px;text-align:center;align-items:end;}'
-  + '.pats .lbl{font-family:Oswald,sans-serif;font-size:9px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:3px;}'
-  + '.pats .nm{font-size:7.5px;color:#5a544e;margin-top:3px;}.pats .pat{justify-content:center;}'
+  + '.pats-block{margin-top:auto;text-align:center;}'
+  + '.pats .lbl{font-family:Oswald,sans-serif;font-size:9px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:3px;}'
+  + '.pats .nm{font-size:7.5px;color:#333;margin-top:3px;}.pats .pat{justify-content:center;}'
+  + '.pats-r1{margin-bottom:5px;}.pats-r23{display:grid;grid-template-columns:1fr 1fr;gap:6px;}'
   + BINGO_PAT_CSS + BINGO_TOOLBAR_CSS;
 
 function bingoCellHtml(song) {
   const len = song.title.length;
   const tSize = len > 40 ? 6.5 : len > 26 ? 7.5 : len > 16 ? 8.5 : 9.5;
-  const aSize = song.artist.length > 28 ? 6 : 7;
+  const aSize = song.artist.length > 28 ? 7 : 8;
   return '<div class="cell"><div class="t" style="font-size:' + tSize + 'px;">' + escHtml(song.title) + '</div>'
     + '<div class="a" style="font-size:' + aSize + 'px;">' + escHtml(song.artist) + '</div></div>';
 }
 
-function bingoCardQuadrant(round, card, sheetNo) {
+function bingoCardQuadrant(round, card, sheetLabel) {
   let cells = '', k = 0;
   for (let i = 0; i < 25; i++) {
     if (i === BINGO_FREE_CELL) cells += '<div class="cell free"><img src="' + LOGO_URL + '"><b>FREE</b></div>';
@@ -680,47 +754,65 @@ function bingoCardQuadrant(round, card, sheetNo) {
   return '<div class="quad"><div class="card-head"><span class="round">Round ' + round.round_no + '</span><span class="win">' + escHtml(round.pattern_name) + '</span></div>'
     + '<div class="playlist">' + escHtml(round.playlist_title) + '</div>'
     + '<div class="grid">' + cells + '</div>'
-    + '<div class="card-foot">SHEET ' + String(sheetNo).padStart(2, '0') + ' · R' + round.round_no + '</div></div>';
+    + '<div class="card-foot">SHEET ' + sheetLabel + ' · R' + round.round_no + '</div></div>';
 }
 
-function bingoInfoQuadrant(g, sheetNo) {
+function bingoPatternBlock(r, cellSize) {
+  return '<div><div class="lbl">Round ' + r.round_no + (r.pattern_cells ? '' : ' · 5 in a Row') + '</div>'
+    + bingoPrintPattern(r.pattern_cells, cellSize)
+    + '<div class="nm">' + escHtml(r.pattern_cells ? r.pattern_name : 'Any full row, column, or diagonal') + '</div></div>';
+}
+
+function bingoInfoQuadrant(g, sheetLabel) {
   const events = (g.game.sheet_events || []);
-  const shown = events.slice(0, 7);
+  const shown = events.slice(0, 5);
   const evHtml = shown.length
     ? shown.map((e) => '<div class="ev"><b>' + escHtml(bingoFmtDate(e.date, { weekday: 'short', month: 'numeric', day: 'numeric' })) + '</b><span>' + escHtml(e.name) + (e.time ? ' · ' + escHtml(e.time) : '') + '</span></div>').join('')
       + (events.length > shown.length ? '<div class="ev"><span>+ ' + (events.length - shown.length) + ' more — ask your bartender!</span></div>' : '')
     : '<div class="ev"><span>Ask your bartender what\'s coming up!</span></div>';
-  const pats = g.rounds.map((r) => '<div><div class="lbl">Round ' + r.round_no + '</div>'
-    + bingoPrintPattern(r.pattern_cells, r.pattern_cells ? '0.2in' : '0.075in')
-    + '<div class="nm">' + escHtml(r.pattern_cells ? r.pattern_name : '5 in a row — any direction') + '</div></div>').join('');
+  const round = (n) => g.rounds.find((r) => r.round_no === n);
   return '<div class="quad info">'
     + '<div class="brand"><img src="' + LOGO_URL + '"><div><div class="brand-name">' + BINGO_BREWERY + '</div><div class="title">Music<br>Bingo</div></div></div>'
-    + '<div class="date">' + escHtml(bingoFmtDate(g.game.event_date, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })) + ' · Sheet ' + String(sheetNo).padStart(2, '0') + '</div>'
-    + '<div class="h">How to Play</div><ul class="rules">'
+    + '<div class="date">' + escHtml(bingoFmtDate(g.game.event_date, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })) + ' · Sheet ' + sheetLabel + '</div>'
+    + '<div class="h">How to Play</div>'
+    + '<div class="keep">Your card for all 3 rounds — hang on to it!</div>'
+    + '<ul class="rules">'
     + '<li>Listen for the songs — mark the square when you hear one on your card.</li>'
-    + '<li>Each round uses its own card and its own winning pattern (below). The center is free.</li>'
+    + '<li>Each round has its own card on this sheet and its own winning pattern (below). The center is free.</li>'
     + '<li>Complete the pattern? Shout <b>BINGO!</b> and bring your sheet to the host to be checked.</li></ul>'
     + '<div class="h">This Week at LVBC</div>' + evHtml
-    + '<div class="pats-block"><div class="h">Winning Patterns</div><div class="pats">' + pats + '</div></div>'
+    + '<div class="pats-block pats"><div class="h">Winning Patterns</div>'
+    + '<div class="pats-r1">' + bingoPatternBlock(round(1), '0.09in') + '</div>'
+    + '<div class="pats-r23">' + bingoPatternBlock(round(2), '0.14in') + bingoPatternBlock(round(3), '0.14in') + '</div></div>'
     + '</div>';
+}
+
+// g = bingoLoadGame() result, or bingoBuildPreviewGame() (g.preview).
+function bingoCardSheetsHtml(g) {
+  const bySheet = {};
+  g.cards.forEach((c) => { (bySheet[c.sheet_no] = bySheet[c.sheet_no] || {})[c.round_no] = c; });
+  const round = (n) => g.rounds.find((r) => r.round_no === n);
+  const pages = Object.keys(bySheet).map(Number).sort((a, b) => a - b).map((s) => {
+    const label = g.preview ? 'PREVIEW' : String(s).padStart(2, '0');
+    return '<div class="page">'
+      + bingoCardQuadrant(round(1), bySheet[s][1], label)
+      + bingoInfoQuadrant(g, label)
+      + bingoCardQuadrant(round(2), bySheet[s][2], label)
+      + bingoCardQuadrant(round(3), bySheet[s][3], label)
+      + '</div>';
+  }).join('');
+  const note = g.preview
+    ? 'PREVIEW — ' + BINGO_PREVIEW_SHEETS + ' sample sheets, nothing saved. The real print has ' + g.game.sheet_count + ' sheets with fresh shuffles.'
+    : g.game.sheet_count + ' sheets · print single-sided, Letter, no margins';
+  return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>' + (g.preview ? 'PREVIEW — ' : '') + 'Music Bingo Cards — ' + escHtml(bingoFmtDate(g.game.event_date)) + '</title>'
+    + FONT_LINK + '<style>' + BINGO_SHEET_CSS + '</style></head><body>'
+    + '<div class="toolbar"><span>' + note + '</span>' + (g.preview ? '' : '<button onclick="window.print()">Print / Save PDF</button>') + '</div>'
+    + pages + '</body></html>';
 }
 
 async function openBingoCardSheets(gameId) {
   const g = await bingoLoadGame(gameId);
-  if (!g) return;
-  const bySheet = {};
-  g.cards.forEach((c) => { (bySheet[c.sheet_no] = bySheet[c.sheet_no] || {})[c.round_no] = c; });
-  const round = (n) => g.rounds.find((r) => r.round_no === n);
-  const pages = Object.keys(bySheet).map(Number).sort((a, b) => a - b).map((s) => '<div class="page">'
-    + bingoCardQuadrant(round(1), bySheet[s][1], s)
-    + bingoInfoQuadrant(g, s)
-    + bingoCardQuadrant(round(2), bySheet[s][2], s)
-    + bingoCardQuadrant(round(3), bySheet[s][3], s)
-    + '</div>').join('');
-  openHtml('<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Music Bingo Cards — ' + escHtml(bingoFmtDate(g.game.event_date)) + '</title>'
-    + FONT_LINK + '<style>' + BINGO_SHEET_CSS + '</style></head><body>'
-    + '<div class="toolbar"><span>' + g.game.sheet_count + ' sheets · print single-sided, Letter, no margins</span><button onclick="window.print()">Print / Save PDF</button></div>'
-    + pages + '</body></html>');
+  if (g) openHtml(bingoCardSheetsHtml(g));
 }
 
 // ── OUTPUT: TV slideshow (16:9 pages → PDF) ───────
@@ -752,7 +844,10 @@ function bingoRoundSlide(r) {
 
 async function openBingoSlideshow(gameId) {
   const g = await bingoLoadGame(gameId);
-  if (!g) return;
+  if (g) openHtml(bingoSlideshowHtml(g));
+}
+
+function bingoSlideshowHtml(g) {
   const round = (n) => g.rounds.find((r) => r.round_no === n);
   const events = g.game.slide_events || [];
   const eventsSlide = '<div class="slide"><img class="logo" src="' + LOGO_URL + '">'
@@ -765,8 +860,10 @@ async function openBingoSlideshow(gameId) {
       + '<div class="kicker">' + BINGO_BREWERY + '</div><div class="big">Music Bingo</div>'
       + '<div class="sub">' + escHtml(bingoFmtDate(g.game.event_date, { weekday: 'long', month: 'long', day: 'numeric' })) + '</div></div>'
     + bingoRoundSlide(round(1)) + bingoRoundSlide(round(2)) + eventsSlide + bingoRoundSlide(round(3));
-  openHtml('<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Music Bingo Slideshow — ' + escHtml(bingoFmtDate(g.game.event_date)) + '</title>'
+  return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>' + (g.preview ? 'PREVIEW — ' : '') + 'Music Bingo Slideshow — ' + escHtml(bingoFmtDate(g.game.event_date)) + '</title>'
     + FONT_LINK + '<style>' + BINGO_SLIDE_CSS + '</style></head><body>'
-    + '<div class="toolbar"><span>Save as PDF, then present full-screen</span><button onclick="window.print()">Print / Save PDF</button></div>'
-    + slides + '</body></html>');
+    + '<div class="toolbar">' + (g.preview
+      ? '<span>PREVIEW — nothing saved</span>'
+      : '<span>Save as PDF, then present full-screen</span><button onclick="window.print()">Print / Save PDF</button>') + '</div>'
+    + slides + '</body></html>';
 }
