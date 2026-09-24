@@ -13,9 +13,10 @@ export default async function handler(req, res) {
 
   const q = String((req.body || {}).q || '').trim();
   if (!q) return res.status(200).json({ tracks: [] });
+  const limit = Math.min(10, Math.max(1, parseInt((req.body || {}).limit, 10) || 10));
 
   try {
-    const { data } = await spotifyApi('GET', '/search?' + new URLSearchParams({ q, type: 'track', limit: '10' }).toString());
+    const { data } = await spotifyApi('GET', '/search?' + new URLSearchParams({ q, type: 'track', limit: String(limit) }).toString());
     const tracks = (data && data.tracks && data.tracks.items || []).filter(Boolean).map(trackSummary);
     return res.status(200).json({ tracks });
   } catch (e) {

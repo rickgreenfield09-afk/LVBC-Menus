@@ -633,6 +633,8 @@ create table bingo_playlists (
   times_used int not null default 0,
   spotify_playlist_id text,
   spotify_synced_at timestamptz,
+  -- set by every save/link, cleared by a Spotify sync (migration_028)
+  spotify_dirty boolean not null default true,
   created_by uuid references staff_profiles(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -761,6 +763,7 @@ declare
   v_id uuid := p_id;
   v_song jsonb;
   v_song_id uuid;
+  v_song_track text;
   v_track text;
   v_pos int := 0;
 begin
@@ -775,7 +778,7 @@ begin
     values (trim(p_title), nullif(trim(p_notes), ''), auth.uid())
     returning id into v_id;
   else
-    update bingo_playlists set title = trim(p_title), notes = nullif(trim(p_notes), '') where id = v_id;
+    update bingo_playlists set title = trim(p_title), notes = nullif(trim(p_notes), ''), spotify_dirty = true where id = v_id;
     if not found then raise exception 'Playlist not found'; end if;
     delete from bingo_playlist_songs where playlist_id = v_id;
   end if;
@@ -783,13 +786,14 @@ begin
   for v_song in select * from jsonb_array_elements(coalesce(p_songs, '[]'::jsonb)) loop
     v_pos := v_pos + 1;
     v_track := nullif(trim(v_song->>'spotify_track_id'), '');
-    v_song_id := null;
-
-    if v_track is not null then
-      select id into v_song_id from bingo_songs where spotify_track_id = v_track;
+    if v_track is null then
+      raise exception '"%" isn''t linked to Spotify — link it in the Song Bank or pick it from Spotify search', v_song->>'title';
     end if;
+
+    v_song_id := null;
+    select id, spotify_track_id into v_song_id, v_song_track from bingo_songs where spotify_track_id = v_track;
     if v_song_id is null then
-      select id into v_song_id from bingo_songs
+      select id, spotify_track_id into v_song_id, v_song_track from bingo_songs
         where lower(trim(title)) = lower(trim(v_song->>'title'))
           and lower(trim(artist)) = lower(trim(v_song->>'artist'));
     end if;
@@ -799,11 +803,16 @@ begin
       values (trim(v_song->>'title'), trim(v_song->>'artist'),
               (v_song->>'clip_start_seconds')::int, (v_song->>'clip_end_seconds')::int, v_track, auth.uid())
       returning id into v_song_id;
+    elsif v_song_track is null then
+      update bingo_songs set
+        title = trim(v_song->>'title'), artist = trim(v_song->>'artist'), spotify_track_id = v_track,
+        clip_start_seconds = (v_song->>'clip_start_seconds')::int,
+        clip_end_seconds = (v_song->>'clip_end_seconds')::int
+      where id = v_song_id;
     else
       update bingo_songs set
         clip_start_seconds = (v_song->>'clip_start_seconds')::int,
-        clip_end_seconds = (v_song->>'clip_end_seconds')::int,
-        spotify_track_id = coalesce(spotify_track_id, v_track)
+        clip_end_seconds = (v_song->>'clip_end_seconds')::int
       where id = v_song_id;
     end if;
 
@@ -873,6 +882,14 @@ begin
       where ps.playlist_id = v_playlist.id;
     if v_song_count <> 24 then
       raise exception '"%" has % songs — a playlist needs exactly 24', v_playlist.title, v_song_count;
+    end if;
+
+    if exists (select 1 from bingo_playlist_songs ps join bingo_songs s on s.id = ps.song_id
+               where ps.playlist_id = v_playlist.id and s.spotify_track_id is null) then
+      raise exception '"%" has songs that aren''t linked to Spotify — link them in the Song Bank first', v_playlist.title;
+    end if;
+    if v_playlist.spotify_playlist_id is null or v_playlist.spotify_dirty then
+      raise exception '"%" isn''t synced to Spotify yet — click Sync on the Playlists tab first', v_playlist.title;
     end if;
 
     if v_playlist.last_used_on is not null and v_playlist.last_used_on + 90 > v_today then
@@ -1000,6 +1017,76 @@ $$ language plpgsql security definer set search_path = public;
 
 grant execute on function spotify_connection_status() to authenticated;
 grant execute on function disconnect_spotify() to authenticated;
+
+-- ---------- SONGS MUST BE SPOTIFY TRACKS (see migration_028) ----------
+create or replace function bingo_songs_require_spotify()
+returns trigger as $
+begin
+  if tg_op = 'INSERT' and new.spotify_track_id is null then
+    raise exception 'Songs must be picked from Spotify';
+  end if;
+  if tg_op = 'UPDATE' and old.spotify_track_id is not null and new.spotify_track_id is null then
+    raise exception 'A song linked to Spotify can''t be unlinked';
+  end if;
+  return new;
+end;
+$ language plpgsql;
+
+create trigger bingo_songs_require_spotify
+  before insert or update on bingo_songs
+  for each row execute function bingo_songs_require_spotify();
+
+create or replace function link_bingo_song(p_song_id uuid, p_track_id text, p_title text, p_artist text)
+returns uuid as $
+declare
+  v_old bingo_songs%rowtype;
+  v_keep bingo_songs%rowtype;
+begin
+  if not is_staff() then raise exception 'Not authorized'; end if;
+  if coalesce(trim(p_track_id), '') = '' or coalesce(trim(p_title), '') = '' or coalesce(trim(p_artist), '') = '' then
+    raise exception 'Missing Spotify track details';
+  end if;
+
+  select * into v_old from bingo_songs where id = p_song_id for update;
+  if not found then raise exception 'Song not found'; end if;
+  if v_old.spotify_track_id is not null then raise exception '"%" is already linked to Spotify', v_old.title; end if;
+
+  select * into v_keep from bingo_songs where spotify_track_id = trim(p_track_id) and id <> p_song_id;
+  if not found then
+    select * into v_keep from bingo_songs
+      where lower(trim(title)) = lower(trim(p_title)) and lower(trim(artist)) = lower(trim(p_artist)) and id <> p_song_id;
+  end if;
+
+  if v_keep.id is null then
+    update bingo_songs set spotify_track_id = trim(p_track_id), title = trim(p_title), artist = trim(p_artist) where id = p_song_id;
+    update bingo_playlists set spotify_dirty = true
+      where id in (select playlist_id from bingo_playlist_songs where song_id = p_song_id);
+    return p_song_id;
+  end if;
+
+  -- Merge v_old into v_keep.
+  update bingo_playlists set spotify_dirty = true
+    where id in (select playlist_id from bingo_playlist_songs where song_id in (p_song_id, v_keep.id));
+  update bingo_playlist_songs set song_id = v_keep.id
+    where song_id = p_song_id
+      and playlist_id not in (select playlist_id from bingo_playlist_songs where song_id = v_keep.id);
+  delete from bingo_playlist_songs where song_id = p_song_id;  -- playlist already had v_keep
+  update bingo_songs set
+    times_used = v_keep.times_used + v_old.times_used,
+    last_used_on = greatest(v_keep.last_used_on, v_old.last_used_on),
+    clip_start_seconds = coalesce(v_keep.clip_start_seconds, v_old.clip_start_seconds),
+    clip_end_seconds = coalesce(v_keep.clip_end_seconds, v_old.clip_end_seconds),
+    -- an unlinked name-match takes this track and spelling
+    spotify_track_id = coalesce(v_keep.spotify_track_id, trim(p_track_id)),
+    title = case when v_keep.spotify_track_id is null then trim(p_title) else v_keep.title end,
+    artist = case when v_keep.spotify_track_id is null then trim(p_artist) else v_keep.artist end
+  where id = v_keep.id;
+  delete from bingo_songs where id = p_song_id;
+  return v_keep.id;
+end;
+$ language plpgsql security definer set search_path = public;
+
+grant execute on function link_bingo_song(uuid, text, text, text) to authenticated;
 
 -- ============================================================
 -- ROW LEVEL SECURITY

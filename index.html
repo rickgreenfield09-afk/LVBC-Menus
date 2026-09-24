@@ -575,6 +575,7 @@
         <div class="sub-tabs">
           <button class="sub-tab active" id="bingotab-btn-dashboard" onclick="setBingoTab('dashboard', this)">Dashboard</button>
           <button class="sub-tab" id="bingotab-btn-playlists" onclick="setBingoTab('playlists', this)">Playlists</button>
+          <button class="sub-tab" id="bingotab-btn-songs" onclick="setBingoTab('songs', this)">Song Bank</button>
           <button class="sub-tab" id="bingotab-btn-patterns" onclick="setBingoTab('patterns', this)">Win Patterns</button>
           <button class="sub-tab" id="bingotab-btn-newgame" onclick="setBingoTab('newgame', this)">New Game</button>
           <button class="sub-tab" id="bingotab-btn-history" onclick="setBingoTab('history', this)">History</button>
@@ -613,26 +614,21 @@
                   <span class="badge badge-muted" id="bingo-pl-count">0 / 24</span>
                 </div>
                 <div id="bingo-pl-songs" style="margin-bottom:12px;"></div>
-                <div id="bingo-spotify-search-wrap" style="display:none;margin-bottom:10px;position:relative;">
-                  <input class="form-input" style="width:100%;" type="text" id="bingo-spotify-q" placeholder="Search Spotify: song or artist…" oninput="onBingoSpotifySearchInput()" autocomplete="off">
-                  <div id="bingo-spotify-results" class="bingo-spotify-results" style="display:none;"></div>
+                <div id="bingo-spotify-required" class="bingo-warning" style="display:none;margin-bottom:12px;"></div>
+                <div id="bingo-spotify-add">
+                  <div id="bingo-spotify-search-wrap" style="margin-bottom:10px;position:relative;">
+                    <input class="form-input" style="width:100%;" type="text" id="bingo-spotify-q" placeholder="Search Spotify to add a song: title or artist…" oninput="onBingoSpotifySearchInput()" autocomplete="off">
+                    <div id="bingo-spotify-results" class="bingo-spotify-results" style="display:none;"></div>
+                  </div>
+                  <details style="margin:4px 0 16px;" id="bingo-paste-details">
+                    <summary style="font-size:12px;color:var(--sub);cursor:pointer;">Paste a list to match on Spotify</summary>
+                    <textarea class="form-input" id="bingo-paste" rows="6" style="width:100%;margin-top:8px;font-family:'DM Mono',monospace;font-size:12px;" placeholder="One per line:&#10;Livin' on a Prayer - Bon Jovi&#10;(tab-separated Title / Artist from a spreadsheet works too)"></textarea>
+                    <button class="btn btn-secondary btn-sm" style="margin-top:8px;" id="bingo-paste-btn" onclick="matchBingoPasteOnSpotify()">Find on Spotify</button>
+                    <div id="bingo-paste-review" style="margin-top:10px;"></div>
+                  </details>
                 </div>
-                <div style="font-size:11px;color:var(--muted);margin-bottom:6px;" id="bingo-manual-add-label">Or type one in:</div>
-                <div class="bingo-song-add">
-                  <input class="form-input" type="text" id="bingo-add-title" placeholder="Song title" list="bingo-title-list" onchange="bingoAutofillArtist()">
-                  <input class="form-input" type="text" id="bingo-add-artist" placeholder="Artist" list="bingo-artist-list" onkeydown="if(event.key==='Enter')addBingoSongFromInputs()">
-                  <button class="btn btn-secondary btn-sm" onclick="addBingoSongFromInputs()">Add</button>
-                </div>
-                <datalist id="bingo-title-list"></datalist>
-                <datalist id="bingo-artist-list"></datalist>
-                <details style="margin:12px 0 16px;">
-                  <summary style="font-size:12px;color:var(--sub);cursor:pointer;">Paste a list of songs</summary>
-                  <textarea class="form-input" id="bingo-paste" rows="6" style="width:100%;margin-top:8px;font-family:'DM Mono',monospace;font-size:12px;" placeholder="One per line:&#10;Livin' on a Prayer - Bon Jovi&#10;(tab-separated Title / Artist from a spreadsheet works too)"></textarea>
-                  <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="addBingoSongsFromPaste()">Add Pasted Songs</button>
-                </details>
-                <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Clip start / stop (m:ss) are optional and belong to the song everywhere it's used.</div>
                 <div id="bingo-pl-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
-                <button class="btn btn-primary" style="width:100%;" onclick="saveBingoPlaylist()">Save Playlist</button>
+                <button class="btn btn-primary" style="width:100%;" id="bingo-pl-save-btn" onclick="saveBingoPlaylist()">Save Playlist</button>
               </div>
             </div>
             <div class="grid2-col">
@@ -642,6 +638,17 @@
               <div id="bingo-pl-list"><div class="loading">Loading...</div></div>
             </div>
           </div>
+        </div>
+
+        <!-- SONG BANK -->
+        <div class="sub-sec" id="bingotab-songs">
+          <div id="bingo-songs-spotify-note"></div>
+          <div id="bingo-songs-unlinked"></div>
+          <div class="menu-col-header" style="margin-top:8px;">
+            <div class="section-label" style="margin:0;">All Songs</div>
+            <input class="form-input" type="text" id="bingo-songs-filter" placeholder="Filter by title or artist" style="min-width:240px;" oninput="renderBingoSongBankList()">
+          </div>
+          <div id="bingo-songs-list"><div class="loading">Loading...</div></div>
         </div>
 
         <!-- WIN PATTERNS -->

@@ -43,6 +43,7 @@ function setBingoTab(tab, btn) {
   document.getElementById('bingotab-' + tab).classList.add('active');
   if (tab === 'dashboard') loadBingoDashboard();
   else if (tab === 'playlists') loadBingoPlaylistsTab();
+  else if (tab === 'songs') loadBingoSongBank();
   else if (tab === 'patterns') loadBingoPatternsTab();
   else if (tab === 'newgame') loadBingoNewGameTab();
   else if (tab === 'history') loadBingoHistory();
@@ -149,12 +150,13 @@ async function refreshBingoNavBadge() {
 
 // ── DASHBOARD ─────────────────────────────────────
 async function loadBingoDashboard() {
-  const [, { count: songCount }] = await Promise.all([
+  const [, { count: songCount }, , { count: unlinkedCount }] = await Promise.all([
     bingoLoadPlaylists(),
     window.supabase.from('bingo_songs').select('id', { count: 'exact', head: true }),
     bingoLoadSpotifyStatus(),
+    window.supabase.from('bingo_songs').select('id', { count: 'exact', head: true }).is('spotify_track_id', null),
   ]);
-  renderBingoSpotifyCard();
+  renderBingoSpotifyCard(unlinkedCount || 0);
 
   const complete = bingoPlaylists.filter(bingoIsComplete);
   const ready = complete.filter((p) => !bingoIsCooling(p));
@@ -190,32 +192,34 @@ async function loadBingoDashboard() {
 }
 
 // ── PLAYLISTS ─────────────────────────────────────
+// Songs only come from Spotify (migration_028): the search box, or a
+// pasted list matched on Spotify and confirmed line by line. A song
+// that's already in the bank is reused as-is — whoever added it first
+// chose the version (and spelling) everyone uses.
 async function loadBingoPlaylistsTab() {
-  await Promise.all([bingoLoadPlaylists(), bingoLoadSpotifyStatus()]);
-  document.getElementById('bingo-spotify-search-wrap').style.display = bingoSpotify.connected ? '' : 'none';
-  document.getElementById('bingo-manual-add-label').style.display = bingoSpotify.connected ? '' : 'none';
+  await Promise.all([bingoLoadPlaylists(), bingoLoadSpotifyStatus(), bingoLoadSongLibrary()]);
+  renderBingoSpotifyRequired();
   renderBingoPlaylistList();
   renderBingoEditSongs();
-  bingoLoadSongSuggestions();
 }
 
-// Title/artist autocomplete from the library, so re-used songs match
-// the existing row instead of creating a near-duplicate.
 let bingoSongLibrary = [];
-async function bingoLoadSongSuggestions() {
-  const { data } = await window.supabase.from('bingo_songs').select('title,artist,clip_start_seconds,clip_end_seconds,spotify_track_id').order('title');
+async function bingoLoadSongLibrary() {
+  const { data } = await window.supabase.from('bingo_songs').select('id,title,artist,clip_start_seconds,clip_end_seconds,spotify_track_id');
   bingoSongLibrary = data || [];
-  const uniq = (arr) => Array.from(new Set(arr));
-  document.getElementById('bingo-title-list').innerHTML = uniq(bingoSongLibrary.map((s) => s.title)).map((t) => '<option value="' + escHtml(t) + '">').join('');
-  document.getElementById('bingo-artist-list').innerHTML = uniq(bingoSongLibrary.map((s) => s.artist)).map((a) => '<option value="' + escHtml(a) + '">').join('');
 }
 
-function bingoAutofillArtist() {
-  const title = document.getElementById('bingo-add-title').value.trim().toLowerCase();
-  const artistEl = document.getElementById('bingo-add-artist');
-  if (artistEl.value.trim()) return;
-  const matches = bingoSongLibrary.filter((s) => s.title.toLowerCase() === title);
-  if (matches.length === 1) artistEl.value = matches[0].artist;
+function bingoSongKey(title, artist) { return (String(title).trim() + '|' + String(artist).trim()).toLowerCase(); }
+
+// Without a Spotify connection nothing can be added or saved.
+function renderBingoSpotifyRequired() {
+  const ok = bingoSpotify.connected;
+  const warn = document.getElementById('bingo-spotify-required');
+  warn.style.display = ok ? 'none' : '';
+  warn.innerHTML = ok ? '' : '&#9888; Spotify isn\'t connected, so songs can\'t be added and playlists can\'t be saved. '
+    + (bingoIsAdmin() ? 'Connect it from the Bingo Dashboard.' : 'Ask an admin to connect it from the Bingo Dashboard.');
+  document.getElementById('bingo-spotify-add').style.display = ok ? '' : 'none';
+  document.getElementById('bingo-pl-save-btn').disabled = !ok;
 }
 
 function renderBingoPlaylistList() {
@@ -223,29 +227,30 @@ function renderBingoPlaylistList() {
   if (!bingoPlaylists.length) { el.innerHTML = '<div class="loading">No playlists yet — build one on the left.</div>'; return; }
   const sp = bingoSpotify.connected;
   el.innerHTML = (sp ? '<div style="display:flex;justify-content:flex-end;margin-bottom:8px;"><button class="btn btn-secondary btn-sm" id="bingo-sync-all-btn" onclick="syncAllBingoPlaylists()">Sync All to Spotify</button></div>' : '')
-    + '<div class="table-wrap"><table><thead><tr><th>Playlist</th><th>Status</th><th>Last Used</th><th>Used</th><th>Created</th>' + (sp ? '<th>Spotify</th>' : '') + '<th></th></tr></thead><tbody>'
+    + '<div class="table-wrap"><table><thead><tr><th>Playlist</th><th>Status</th><th>Last Used</th><th>Used</th><th>Created</th><th>Spotify</th><th></th></tr></thead><tbody>'
     + bingoPlaylists.map((p) => '<tr>'
       + '<td style="font-weight:500;">' + escHtml(p.title) + (p.notes ? '<div style="font-size:11px;color:var(--sub);font-weight:400;">' + escHtml(p.notes) + '</div>' : '') + '</td>'
       + '<td>' + bingoStatusBadge(p) + '</td>'
       + '<td style="font-size:12px;">' + bingoFmtDate(p.last_used_on) + '</td>'
       + '<td>' + p.times_used + '</td>'
       + '<td style="font-size:11px;color:var(--sub);">' + escHtml(p.creator_name || '—') + '<br>' + bingoFmtDate(toDateStr(new Date(p.created_at))) + '</td>'
-      + (sp ? '<td style="white-space:nowrap;font-size:12px;">' + bingoSpotifyCell(p) + '</td>' : '')
+      + '<td style="white-space:nowrap;font-size:12px;">' + bingoSpotifyCell(p) + '</td>'
       + '<td style="white-space:nowrap;"><button class="btn btn-secondary btn-sm" onclick="editBingoPlaylist(\'' + p.id + '\')">Edit</button>'
       + (bingoCanDelete(p) ? ' <button class="btn btn-danger btn-sm" onclick="deleteBingoPlaylist(\'' + p.id + '\')">Delete</button>' : '')
       + '</td></tr>').join('')
     + '</tbody></table></div>';
 }
 
-// The sync itself also bumps updated_at (trigger) a beat after the
-// synced_at the server stamps, so allow a minute of slack before
-// calling a playlist "changed since sync".
+// spotify_dirty is set by every save/link and cleared by a sync, so it
+// says exactly whether the Spotify copy matches.
 function bingoSpotifyCell(p) {
-  const btn = '<button class="btn btn-secondary btn-sm" id="bingo-sync-' + p.id + '" onclick="syncBingoPlaylist(\'' + p.id + '\')">' + (p.spotify_playlist_id ? 'Sync' : 'Create') + '</button>';
-  if (!p.spotify_playlist_id) return btn;
-  const stale = !p.spotify_synced_at || new Date(p.updated_at) - new Date(p.spotify_synced_at) > 60000;
-  return '<a href="https://open.spotify.com/playlist/' + encodeURIComponent(p.spotify_playlist_id) + '" target="_blank" rel="noopener" style="color:#1DB954;">Open &#8599;</a> '
-    + btn + (stale ? '<div style="font-size:10px;color:var(--amber);margin-top:2px;">changed since last sync</div>' : '');
+  const btn = bingoSpotify.connected
+    ? ' <button class="btn btn-secondary btn-sm" id="bingo-sync-' + p.id + '" onclick="syncBingoPlaylist(\'' + p.id + '\')">Sync</button>' : '';
+  const open = p.spotify_playlist_id
+    ? '<a href="https://open.spotify.com/playlist/' + encodeURIComponent(p.spotify_playlist_id) + '" target="_blank" rel="noopener" style="color:#1DB954;">Open &#8599;</a>' : '';
+  const note = !p.spotify_playlist_id ? '<div style="font-size:10px;color:var(--amber);margin-top:2px;">not on Spotify yet</div>'
+    : (p.spotify_dirty ? '<div style="font-size:10px;color:var(--amber);margin-top:2px;">needs sync</div>' : '');
+  return open + btn + note;
 }
 
 function renderBingoEditSongs() {
@@ -256,11 +261,13 @@ function renderBingoEditSongs() {
   el.innerHTML = '<div class="bingo-song-row" style="font-size:10px;color:var(--muted);font-family:\'DM Mono\',monospace;text-transform:uppercase;"><span></span><span>Song</span><span>Start</span><span>Stop</span><span></span></div>'
     + bingoEditSongs.map((s, i) => '<div class="bingo-song-row">'
       + '<span class="bingo-song-num">' + (i + 1) + '</span>'
-      + '<div><div>' + escHtml(s.title) + (s.spotify_track_id ? '<span class="bingo-spotify-dot" title="Linked to a Spotify track"></span>' : '') + '</div><div class="bingo-song-artist">' + escHtml(s.artist) + '</div></div>'
+      + '<div><div>' + escHtml(s.title) + '</div><div class="bingo-song-artist">' + escHtml(s.artist) + '</div>'
+      + (s.spotify_track_id ? '' : '<div style="font-size:10px;color:var(--red);">Not linked to Spotify — link it in the Song Bank</div>') + '</div>'
       + '<input class="form-input" placeholder="m:ss" value="' + bingoFmtClip(s.clip_start_seconds) + '" onchange="setBingoSongClip(' + i + ', \'clip_start_seconds\', this)">'
       + '<input class="form-input" placeholder="m:ss" value="' + bingoFmtClip(s.clip_end_seconds) + '" onchange="setBingoSongClip(' + i + ', \'clip_end_seconds\', this)">'
       + '<button class="bingo-song-remove" title="Remove" onclick="removeBingoSong(' + i + ')">&#10005;</button>'
-      + '</div>').join('');
+      + '</div>').join('')
+    + '<div style="font-size:11px;color:var(--muted);margin-top:6px;">Clip start / stop (m:ss) are optional and belong to the song everywhere it\'s used.</div>';
 }
 
 function setBingoSongClip(i, field, input) {
@@ -275,56 +282,27 @@ function removeBingoSong(i) {
   renderBingoEditSongs();
 }
 
-// Returns an error string, or null once added.
-function bingoAddSong(title, artist, spotifyTrackId) {
-  title = title.trim(); artist = artist.trim();
-  if (!title || !artist) return 'Need both a title and an artist';
-  if (bingoEditSongs.length >= BINGO_SONGS_PER_PLAYLIST) return 'Playlist already has 24 songs';
-  const key = (title + '|' + artist).toLowerCase();
-  const sameSong = (s) => (spotifyTrackId && s.spotify_track_id === spotifyTrackId) || (s.title + '|' + s.artist).toLowerCase() === key;
-  if (bingoEditSongs.some(sameSong)) return '"' + title + '" is already on this playlist';
-  const lib = bingoSongLibrary.find(sameSong);
-  bingoEditSongs.push({
-    title, artist,
-    clip_start_seconds: lib ? lib.clip_start_seconds : null,
-    clip_end_seconds: lib ? lib.clip_end_seconds : null,
-    spotify_track_id: spotifyTrackId || (lib ? lib.spotify_track_id : null),
-  });
-  return null;
-}
-
-function addBingoSongFromInputs() {
-  const titleEl = document.getElementById('bingo-add-title'), artistEl = document.getElementById('bingo-add-artist');
-  const err = bingoAddSong(titleEl.value, artistEl.value);
-  if (err) { toast(err, true); return; }
-  titleEl.value = ''; artistEl.value = '';
-  titleEl.focus();
-  renderBingoEditSongs();
-}
-
-// One song per line: "Title<TAB>Artist" (spreadsheet paste) or
-// "Title - Artist". Splits on the LAST " - " since titles often carry
-// their own ("Song - 2011 Remaster") and artist names rarely do.
-function addBingoSongsFromPaste() {
-  const el = document.getElementById('bingo-paste');
-  const lines = el.value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const skipped = [];
-  let added = 0;
-  lines.forEach((line) => {
-    let title, artist;
-    if (line.includes('\t')) {
-      [title, artist] = line.split('\t');
-    } else {
-      const at = line.lastIndexOf(' - ');
-      if (at > 0) { title = line.slice(0, at); artist = line.slice(at + 3); }
-    }
-    const err = title && artist ? bingoAddSong(title, artist) : 'no "Title - Artist" found';
-    if (err) skipped.push(line + ' (' + err + ')'); else added++;
-  });
-  renderBingoEditSongs();
-  el.value = skipped.map((s) => s.replace(/ \(.*\)$/, '')).join('\n');
-  if (skipped.length) toast('Added ' + added + '. Skipped ' + skipped.length + ': ' + skipped[0] + (skipped.length > 1 ? '…' : ''), true);
-  else toast('Added ' + added + ' song' + (added === 1 ? '' : 's'));
+// Adds a Spotify search result to the playlist being edited. If the
+// bank already has this song — same track, or another version with the
+// same cleaned title + artist — the bank's version is used instead.
+// Returns { error } or { reused } (true when a different version won).
+function bingoAddSpotifyTrack(t) {
+  if (bingoEditSongs.length >= BINGO_SONGS_PER_PLAYLIST) return { error: 'Playlist already has 24 songs' };
+  const title = bingoCleanSpotifyTitle(t.title), artist = t.artist;
+  const bank = bingoSongLibrary.find((s) => s.spotify_track_id === t.id)
+    || bingoSongLibrary.find((s) => bingoSongKey(s.title, s.artist) === bingoSongKey(title, artist));
+  const useBank = bank && bank.spotify_track_id;
+  const song = {
+    title: useBank ? bank.title : title,
+    artist: useBank ? bank.artist : artist,
+    spotify_track_id: useBank ? bank.spotify_track_id : t.id,
+    clip_start_seconds: bank ? bank.clip_start_seconds : null,
+    clip_end_seconds: bank ? bank.clip_end_seconds : null,
+  };
+  const dup = bingoEditSongs.some((s) => s.spotify_track_id === song.spotify_track_id || bingoSongKey(s.title, s.artist) === bingoSongKey(song.title, song.artist));
+  if (dup) return { error: '"' + song.title + '" is already on this playlist' };
+  bingoEditSongs.push(song);
+  return { reused: !!useBank && bank.spotify_track_id !== t.id };
 }
 
 async function editBingoPlaylist(id) {
@@ -347,9 +325,11 @@ async function editBingoPlaylist(id) {
 function resetBingoPlaylistForm() {
   bingoEditPlaylistId = null;
   bingoEditSongs = [];
+  bingoPasteMatches = [];
   document.getElementById('bingo-pl-title').value = '';
   document.getElementById('bingo-pl-notes').value = '';
   document.getElementById('bingo-paste').value = '';
+  document.getElementById('bingo-paste-review').innerHTML = '';
   document.getElementById('bingo-pl-form-label').textContent = 'New Playlist';
   document.getElementById('bingo-pl-cancel').style.visibility = 'hidden';
   bingoClearAlert('bingo-pl-alert');
@@ -357,8 +337,14 @@ function resetBingoPlaylistForm() {
 }
 
 async function saveBingoPlaylist() {
+  if (!bingoSpotify.connected) { bingoAlert('bingo-pl-alert', 'Spotify isn\'t connected — playlists can\'t be saved until it is.', true); return; }
   const title = document.getElementById('bingo-pl-title').value.trim();
   if (!title) { bingoAlert('bingo-pl-alert', 'Give the playlist a title.', true); return; }
+  const unlinked = bingoEditSongs.filter((s) => !s.spotify_track_id);
+  if (unlinked.length) {
+    bingoAlert('bingo-pl-alert', 'Link these songs in the Song Bank first (or remove them): ' + unlinked.map((s) => s.title).join(', '), true);
+    return;
+  }
   const bad = bingoEditSongs.find((s) => s.clip_start_seconds != null && s.clip_end_seconds != null && s.clip_end_seconds <= s.clip_start_seconds);
   if (bad) { bingoAlert('bingo-pl-alert', 'Clip stop must be after start for "' + bad.title + '".', true); return; }
 
@@ -376,12 +362,12 @@ async function saveBingoPlaylist() {
   resetBingoPlaylistForm();
   await loadBingoPlaylistsTab();
   // Keep the Spotify copy in step with every save.
-  if (bingoSpotify.connected && n) await syncBingoPlaylist(id);
+  if (n) await syncBingoPlaylist(id);
 }
 
 async function deleteBingoPlaylist(id) {
   const pl = bingoPlaylists.find((p) => p.id === id);
-  if (!pl || !confirm('Delete the playlist "' + pl.title + '"? Past games that used it keep their copy of its songs.')) return;
+  if (!pl || !confirm('Delete the playlist "' + pl.title + '"? Past games that used it keep their copy of its songs. Its Spotify copy stays in the Spotify account.')) return;
   const { error } = await window.supabase.from('bingo_playlists').delete().eq('id', id);
   if (error) { toast(error.message, true); return; }
   logAudit('delete_bingo_playlist', 'bingo_playlists', id, { title: pl.title });
@@ -414,23 +400,27 @@ async function bingoApi(path, body) {
   return json;
 }
 
-function renderBingoSpotifyCard() {
+function renderBingoSpotifyCard(unlinkedCount) {
   const el = document.getElementById('bingo-spotify-card');
   const admin = bingoIsAdmin();
+  const unlinkedNote = unlinkedCount
+    ? '<div class="bingo-warning">&#9888; ' + unlinkedCount + ' song' + (unlinkedCount === 1 ? '' : 's') + ' in the Song Bank still need a Spotify link. Playlists with unlinked songs can\'t be synced or printed. '
+      + '<a href="#" onclick="setBingoTab(\'songs\', document.getElementById(\'bingotab-btn-songs\'));return false;" style="color:inherit;text-decoration:underline;">Open the Song Bank</a></div>'
+    : '';
   if (bingoSpotify.connected) {
     el.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">'
       + '<div><span class="badge badge-teal">Connected</span> <strong style="margin-left:6px;">' + escHtml(bingoSpotify.display_name || bingoSpotify.spotify_user_id) + '</strong>'
       + '<div style="font-size:12px;color:var(--sub);margin-top:6px;">Every bingo playlist is copied to this account as a private "LVBC Bingo · …" playlist and updated whenever it\'s saved.'
       + ' Connected ' + escHtml(bingoFmtDate(toDateStr(new Date(bingoSpotify.connected_at)))) + (bingoSpotify.connected_by_name ? ' by ' + escHtml(bingoSpotify.connected_by_name) : '') + '.</div></div>'
       + (admin ? '<button class="btn btn-danger btn-sm" onclick="disconnectSpotify()">Disconnect</button>' : '')
-      + '</div>';
+      + '</div>' + unlinkedNote;
   } else {
     el.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">'
-      + '<div><span class="badge badge-muted">Not connected</span>'
-      + '<div style="font-size:12px;color:var(--sub);margin-top:6px;">Connect the brewery\'s Spotify account to search Spotify when adding songs and keep a matching Spotify playlist for every bingo playlist.'
+      + '<div><span class="badge badge-red">Not connected</span>'
+      + '<div style="font-size:12px;color:var(--sub);margin-top:6px;">Bingo needs the brewery\'s Spotify account: songs are added by searching Spotify, and every playlist is kept in sync there. Until it\'s connected, playlists can\'t be created or edited.'
       + (admin ? '' : ' Ask an admin to connect it.') + '</div></div>'
       + (admin ? '<button class="btn btn-primary btn-sm" onclick="connectSpotify()">Connect Spotify</button>' : '')
-      + '</div>';
+      + '</div>' + unlinkedNote;
   }
 }
 
@@ -442,12 +432,11 @@ async function connectSpotify() {
 }
 
 async function disconnectSpotify() {
-  if (!confirm('Disconnect Spotify? Existing Spotify playlists stay in the account, but the app stops updating them until it\'s connected again.')) return;
+  if (!confirm('Disconnect Spotify? Playlists can\'t be created or edited until it\'s connected again. Existing Spotify playlists stay in the account.')) return;
   const { error } = await window.supabase.rpc('disconnect_spotify');
   if (error) { toast(error.message, true); return; }
   toast('Spotify disconnected');
-  await bingoLoadSpotifyStatus();
-  renderBingoSpotifyCard();
+  await loadBingoDashboard();
 }
 
 // api/spotify-callback sends the admin back to /?spotify=connected (or
@@ -461,6 +450,23 @@ function bingoHandleSpotifyReturn() {
   else toast('Spotify connection failed: ' + (params.get('reason') || 'unknown error'), true);
   const navBtn = Array.from(document.querySelectorAll('.nav-btn')).find((b) => b.textContent.trim().startsWith('Bingo'));
   if (navBtn) { showScreen('bingo', navBtn); loadBingo(); }
+}
+
+// Spotify titles often carry release noise ("- Remastered 2011",
+// "(2008 Remaster)") that just crowds a bingo square.
+function bingoCleanSpotifyTitle(title) {
+  return title
+    .replace(/\s+-\s+[^-]*\b(remaster(ed)?|mono|stereo|single version|radio edit|album version)\b.*$/i, '')
+    .replace(/\s*[([][^)\]]*\b(remaster(ed)?|mono|stereo|single version|radio edit|album version)\b[^)\]]*[)\]]/ig, '')
+    .trim() || title;
+}
+
+function bingoSpotifyHitHtml(t, onclick, extra) {
+  return '<div class="bingo-spotify-hit" onclick="' + onclick + '">'
+    + (t.image ? '<img src="' + escHtml(t.image) + '" alt="">' : '<span class="noart"></span>')
+    + '<div class="meta"><div>' + escHtml(t.title) + '</div><div class="sub">' + escHtml(t.artist) + ' · ' + escHtml(t.album) + '</div></div>'
+    + (extra || '<span class="sub" style="font-size:11px;color:var(--muted);">' + bingoFmtClip(Math.round(t.duration_ms / 1000)) + '</span>')
+    + '</div>';
 }
 
 // Search-as-you-type in the playlist editor. A sequence number drops
@@ -486,30 +492,19 @@ async function runBingoSpotifySearch() {
     if (seq !== bingoSpotifySearchSeq) return;
     bingoSpotifyHits = tracks;
     box.innerHTML = tracks.length
-      ? tracks.map((t, i) => '<div class="bingo-spotify-hit" onclick="pickBingoSpotifyTrack(' + i + ')">'
-        + (t.image ? '<img src="' + escHtml(t.image) + '" alt="">' : '<span class="noart"></span>')
-        + '<div class="meta"><div>' + escHtml(t.title) + '</div><div class="sub">' + escHtml(t.artist) + ' · ' + escHtml(t.album) + '</div></div>'
-        + '<span class="sub" style="font-size:11px;color:var(--muted);">' + bingoFmtClip(Math.round(t.duration_ms / 1000)) + '</span></div>').join('')
+      ? tracks.map((t, i) => bingoSpotifyHitHtml(t, 'pickBingoSpotifyTrack(' + i + ')')).join('')
       : '<div class="loading" style="padding:12px;">No matches on Spotify.</div>';
   } catch (e) {
     if (seq === bingoSpotifySearchSeq) box.innerHTML = '<div style="padding:12px;color:var(--red);font-size:12px;">' + escHtml(e.message) + '</div>';
   }
 }
 
-// Spotify titles often carry release noise ("- Remastered 2011",
-// "(2008 Remaster)") that just crowds a bingo square.
-function bingoCleanSpotifyTitle(title) {
-  return title
-    .replace(/\s+-\s+[^-]*\b(remaster(ed)?|mono|stereo|single version|radio edit|album version)\b.*$/i, '')
-    .replace(/\s*[([][^)\]]*\b(remaster(ed)?|mono|stereo|single version|radio edit|album version)\b[^)\]]*[)\]]/ig, '')
-    .trim() || title;
-}
-
 function pickBingoSpotifyTrack(i) {
   const t = bingoSpotifyHits[i];
   if (!t) return;
-  const err = bingoAddSong(bingoCleanSpotifyTitle(t.title), t.artist, t.id);
-  if (err) { toast(err, true); return; }
+  const r = bingoAddSpotifyTrack(t);
+  if (r.error) { toast(r.error, true); return; }
+  if (r.reused) toast('That song is already in the Song Bank — using the version picked first');
   const input = document.getElementById('bingo-spotify-q');
   input.value = '';
   document.getElementById('bingo-spotify-results').style.display = 'none';
@@ -523,19 +518,90 @@ document.addEventListener('click', (e) => {
   if (wrap && box && !wrap.contains(e.target)) box.style.display = 'none';
 });
 
-// Returns the api result, or null on failure (after alerting unless quiet).
+// Pasted list: each line is searched on Spotify, the top hit is
+// preselected, and nothing is added until staff review and confirm.
+// One song per line: "Title<TAB>Artist" (spreadsheet paste) or
+// "Title - Artist" (split on the LAST " - "); anything else is
+// searched as typed.
+let bingoPasteMatches = [];
+
+async function matchBingoPasteOnSpotify() {
+  const lines = document.getElementById('bingo-paste').value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) return;
+  const btn = document.getElementById('bingo-paste-btn');
+  btn.disabled = true;
+  bingoPasteMatches = lines.map((line) => {
+    let q = line;
+    if (line.includes('\t')) q = line.split('\t').join(' ');
+    else { const at = line.lastIndexOf(' - '); if (at > 0) q = line.slice(0, at) + ' ' + line.slice(at + 3); }
+    return { line, q, hits: [], choice: -1, error: null };
+  });
+  for (let i = 0; i < bingoPasteMatches.length; i += 4) {
+    btn.textContent = 'Searching ' + Math.min(i + 4, bingoPasteMatches.length) + ' / ' + bingoPasteMatches.length + '…';
+    await Promise.all(bingoPasteMatches.slice(i, i + 4).map(async (m) => {
+      try {
+        m.hits = (await bingoApi('spotify-search', { q: m.q, limit: 3 })).tracks;
+        m.choice = m.hits.length ? 0 : -1;
+      } catch (e) { m.error = e.message; }
+    }));
+  }
+  btn.disabled = false;
+  btn.textContent = 'Find on Spotify';
+  renderBingoPasteReview();
+}
+
+function renderBingoPasteReview() {
+  const el = document.getElementById('bingo-paste-review');
+  if (!bingoPasteMatches.length) { el.innerHTML = ''; return; }
+  const chosen = bingoPasteMatches.filter((m) => m.choice >= 0).length;
+  el.innerHTML = '<div style="font-size:12px;color:var(--sub);margin-bottom:8px;">Check each match — click the right version, or Skip. Nothing is added until you click Add.</div>'
+    + bingoPasteMatches.map((m, i) => '<div class="bingo-paste-item">'
+      + '<div class="bingo-paste-line">' + (i + 1) + '. ' + escHtml(m.line) + '</div>'
+      + (m.error ? '<div style="color:var(--red);font-size:12px;">' + escHtml(m.error) + '</div>'
+        : (m.hits.length ? '' : '<div style="color:var(--amber);font-size:12px;">No match on Spotify — try the search box with different wording.</div>')
+          + m.hits.map((t, h) => bingoSpotifyHitHtml(t, 'setBingoPasteChoice(' + i + ',' + h + ')',
+            '<span class="bingo-radio' + (m.choice === h ? ' on' : '') + '"></span>')).join('')
+          + (m.hits.length ? '<div class="bingo-paste-skip' + (m.choice === -1 ? ' on' : '') + '" onclick="setBingoPasteChoice(' + i + ',-1)"><span class="bingo-radio' + (m.choice === -1 ? ' on' : '') + '"></span> Skip this line</div>' : ''))
+      + '</div>').join('')
+    + '<button class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="addBingoPasteSelections()"' + (chosen ? '' : ' disabled') + '>Add ' + chosen + ' Selected Song' + (chosen === 1 ? '' : 's') + '</button>';
+}
+
+function setBingoPasteChoice(i, h) {
+  bingoPasteMatches[i].choice = h;
+  renderBingoPasteReview();
+}
+
+function addBingoPasteSelections() {
+  let added = 0, reused = 0;
+  const problems = [];
+  bingoPasteMatches.forEach((m) => {
+    if (m.choice < 0) return;
+    const r = bingoAddSpotifyTrack(m.hits[m.choice]);
+    if (r.error) problems.push(m.line + ' (' + r.error + ')');
+    else { added++; if (r.reused) reused++; }
+  });
+  bingoPasteMatches = [];
+  document.getElementById('bingo-paste').value = '';
+  renderBingoPasteReview();
+  renderBingoEditSongs();
+  toast('Added ' + added + ' song' + (added === 1 ? '' : 's')
+    + (reused ? ' (' + reused + ' already in the Song Bank — kept the version picked first)' : '')
+    + (problems.length ? '. Skipped: ' + problems.join('; ') : ''), problems.length > 0);
+}
+
+// Returns the api result, or { error } (and alerts unless quiet).
 async function syncBingoPlaylist(id, quiet) {
   const pl = bingoPlaylists.find((p) => p.id === id);
   const title = pl ? pl.title : 'playlist';
   const btn = document.getElementById('bingo-sync-' + id);
   if (btn) { btn.disabled = true; btn.textContent = 'Syncing…'; }
-  let result = null;
+  let result;
   try {
     result = await bingoApi('spotify-sync-playlist', { playlist_id: id });
     if (!quiet) bingoShowSyncReport([{ title, result }]);
   } catch (e) {
-    if (!quiet) bingoAlert('bingo-pl-alert', 'Spotify sync failed for "' + title + '": ' + e.message, true);
-    else result = { error: e.message };
+    result = { error: e.message };
+    if (!quiet) bingoShowSyncReport([{ title, result }]);
   }
   await bingoLoadPlaylists();
   renderBingoPlaylistList();
@@ -543,39 +609,152 @@ async function syncBingoPlaylist(id, quiet) {
 }
 
 async function syncAllBingoPlaylists() {
-  const btn = document.getElementById('bingo-sync-all-btn');
   const targets = bingoPlaylists.filter((p) => p.song_count > 0).map((p) => ({ id: p.id, title: p.title }));
   if (!targets.length) return;
-  if (btn) { btn.disabled = true; btn.textContent = 'Syncing 0 / ' + targets.length + '…'; }
   const reports = [];
   for (let i = 0; i < targets.length; i++) {
     const b = document.getElementById('bingo-sync-all-btn');
-    if (b) b.textContent = 'Syncing ' + (i + 1) + ' / ' + targets.length + '…';
+    if (b) { b.disabled = true; b.textContent = 'Syncing ' + (i + 1) + ' / ' + targets.length + '…'; }
     reports.push({ title: targets[i].title, result: await syncBingoPlaylist(targets[i].id, true) });
   }
   bingoShowSyncReport(reports);
 }
 
 function bingoShowSyncReport(reports) {
-  const lines = [];
-  let problems = false;
-  reports.forEach(({ title, result }) => {
-    if (!result || result.error) { problems = true; lines.push('✗ "' + title + '" failed: ' + (result ? result.error : 'unknown error')); return; }
-    lines.push('✓ "' + title + '" synced to Spotify (' + result.synced + ' songs).');
-    if (result.auto_matched.length) {
-      lines.push('   Matched automatically — worth a quick check:');
-      result.auto_matched.forEach((m) => lines.push('   • ' + m.title + ' – ' + m.artist + '  →  ' + m.spotify_title + ' – ' + m.spotify_artist));
-    }
-    if (result.unmatched.length) {
-      problems = true;
-      lines.push('   Not found on Spotify (left off the Spotify playlist):');
-      result.unmatched.forEach((m) => lines.push('   • ' + m.title + ' – ' + m.artist));
-    }
-  });
-  bingoAlert('bingo-pl-alert', lines.join('\n'), problems);
+  const failed = reports.filter((r) => r.result.error);
+  const lines = reports.map(({ title, result }) => result.error
+    ? '✗ "' + title + '": ' + result.error
+    : '✓ "' + title + '" synced to Spotify (' + result.synced + ' songs).');
+  bingoAlert('bingo-pl-alert', lines.join('\n'), failed.length > 0);
   const el = document.getElementById('bingo-pl-alert');
   el.style.whiteSpace = 'pre-line';
   el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ── SONG BANK ─────────────────────────────────────
+// Every song ever added, with usage. Songs typed in before Spotify was
+// required (migration_028) are listed first and linked one by one:
+// each shows its top Spotify matches, and picking one replaces the
+// typed spelling with Spotify's — or merges it into the bank's song if
+// that song is already there (link_bingo_song).
+let bingoSongBank = [];
+const bingoLinkHits = {};  // song id → Spotify search results (or { error })
+
+async function loadBingoSongBank() {
+  const [{ data, error }] = await Promise.all([
+    window.supabase.from('bingo_songs')
+      .select('id,title,artist,times_used,last_used_on,spotify_track_id,bingo_playlist_songs(count)')
+      .order('title'),
+    bingoLoadSpotifyStatus(),
+  ]);
+  if (error) { document.getElementById('bingo-songs-list').innerHTML = '<div class="loading">Error: ' + escHtml(error.message) + '</div>'; return; }
+  bingoSongBank = (data || []).map((s) => Object.assign({}, s, {
+    playlist_count: (s.bingo_playlist_songs && s.bingo_playlist_songs[0] && s.bingo_playlist_songs[0].count) || 0,
+  }));
+  document.getElementById('bingo-songs-spotify-note').innerHTML = bingoSpotify.connected ? ''
+    : '<div class="bingo-warning" style="margin-bottom:12px;">&#9888; Spotify isn\'t connected, so songs can\'t be linked right now.</div>';
+  renderBingoUnlinkedSongs();
+  renderBingoSongBankList();
+  if (bingoSpotify.connected) bingoAutoSearchUnlinked();
+}
+
+function renderBingoUnlinkedSongs() {
+  const el = document.getElementById('bingo-songs-unlinked');
+  const unlinked = bingoSongBank.filter((s) => !s.spotify_track_id);
+  if (!unlinked.length) { el.innerHTML = ''; return; }
+  el.innerHTML = '<div class="section-label" style="margin-top:0;">Needs a Spotify Link (' + unlinked.length + ')</div>'
+    + '<div style="font-size:12px;color:var(--sub);margin-bottom:12px;">These were typed in before songs had to come from Spotify. Pick the right version for each — its Spotify title and artist replace what was typed. Afterwards, sync the affected playlists from the Playlists tab.</div>'
+    + '<div class="bingo-link-grid">' + unlinked.map((s) => {
+      const hits = bingoLinkHits[s.id];
+      const results = !bingoSpotify.connected ? ''
+        : !hits ? '<div class="loading" style="padding:8px;">Finding matches…</div>'
+        : hits.error ? '<div style="color:var(--red);font-size:12px;padding:6px 0;">' + escHtml(hits.error) + '</div>'
+        : !hits.length ? '<div style="color:var(--amber);font-size:12px;padding:6px 0;">No matches — try different wording.</div>'
+        : hits.map((t, h) => bingoSpotifyHitHtml(t, 'linkBingoSongTo(\'' + s.id + '\',' + h + ')', '<span class="btn btn-secondary btn-sm">Use</span>')).join('');
+      return '<div class="card" style="padding:12px;">'
+        + '<div style="font-weight:500;">' + escHtml(s.title) + '</div><div style="font-size:12px;color:var(--sub);margin-bottom:8px;">' + escHtml(s.artist)
+        + ' · on ' + s.playlist_count + ' playlist' + (s.playlist_count === 1 ? '' : 's') + ' · used ' + s.times_used + 'x</div>'
+        + (bingoSpotify.connected ? '<div style="display:flex;gap:6px;margin-bottom:6px;"><input class="form-input" style="flex:1;padding:5px 8px;font-size:12px;" id="bingo-link-q-' + s.id + '" value="' + escHtml(s.title + ' ' + s.artist) + '" onkeydown="if(event.key===\'Enter\')searchBingoLink(\'' + s.id + '\')">'
+          + '<button class="btn btn-secondary btn-sm" onclick="searchBingoLink(\'' + s.id + '\')">Search</button></div>' : '')
+        + '<div id="bingo-link-results-' + s.id + '">' + results + '</div></div>';
+    }).join('') + '</div>';
+}
+
+// Loads matches for every unlinked song, two at a time, so they're
+// ready to pick from without clicking Search on each.
+async function bingoAutoSearchUnlinked() {
+  const queue = bingoSongBank.filter((s) => !s.spotify_track_id && !bingoLinkHits[s.id]);
+  const worker = async () => {
+    while (queue.length) {
+      const s = queue.shift();
+      await searchBingoLink(s.id, s.title + ' ' + s.artist);
+    }
+  };
+  await Promise.all([worker(), worker()]);
+}
+
+async function searchBingoLink(songId, query) {
+  const input = document.getElementById('bingo-link-q-' + songId);
+  const q = (query || (input ? input.value : '')).trim();
+  if (!q) return;
+  const box = document.getElementById('bingo-link-results-' + songId);
+  if (box && !query) box.innerHTML = '<div class="loading" style="padding:8px;">Searching…</div>';
+  try {
+    bingoLinkHits[songId] = (await bingoApi('spotify-search', { q, limit: 5 })).tracks;
+  } catch (e) {
+    bingoLinkHits[songId] = { error: e.message };
+  }
+  // Only this card's results change — don't rebuild the whole grid
+  // (that would wipe what someone is typing in another card).
+  const song = bingoSongBank.find((s) => s.id === songId);
+  if (box && song) {
+    const hits = bingoLinkHits[songId];
+    box.innerHTML = hits.error ? '<div style="color:var(--red);font-size:12px;padding:6px 0;">' + escHtml(hits.error) + '</div>'
+      : !hits.length ? '<div style="color:var(--amber);font-size:12px;padding:6px 0;">No matches — try different wording.</div>'
+      : hits.map((t, h) => bingoSpotifyHitHtml(t, 'linkBingoSongTo(\'' + songId + '\',' + h + ')', '<span class="btn btn-secondary btn-sm">Use</span>')).join('');
+  }
+}
+
+async function linkBingoSongTo(songId, h) {
+  const t = (bingoLinkHits[songId] || [])[h];
+  const song = bingoSongBank.find((s) => s.id === songId);
+  if (!t || !song) return;
+  const { data: keptId, error } = await window.supabase.rpc('link_bingo_song', {
+    p_song_id: songId, p_track_id: t.id, p_title: bingoCleanSpotifyTitle(t.title), p_artist: t.artist,
+  });
+  if (error) { toast(error.message, true); return; }
+  logAudit('link_bingo_song', 'bingo_songs', keptId, { from: song.title + ' – ' + song.artist, spotify_track_id: t.id });
+  toast(keptId === songId
+    ? 'Linked: ' + bingoCleanSpotifyTitle(t.title) + ' – ' + t.artist
+    : '"' + song.title + '" was already in the Song Bank — merged into it');
+  delete bingoLinkHits[songId];
+  const { data } = await window.supabase.from('bingo_songs')
+    .select('id,title,artist,times_used,last_used_on,spotify_track_id,bingo_playlist_songs(count)').order('title');
+  bingoSongBank = (data || []).map((s) => Object.assign({}, s, {
+    playlist_count: (s.bingo_playlist_songs && s.bingo_playlist_songs[0] && s.bingo_playlist_songs[0].count) || 0,
+  }));
+  // Drop just this card rather than re-rendering the grid.
+  const card = document.getElementById('bingo-link-results-' + songId);
+  if (card && card.closest('.card')) card.closest('.card').remove();
+  const left = bingoSongBank.filter((s) => !s.spotify_track_id).length;
+  const label = document.querySelector('#bingo-songs-unlinked .section-label');
+  if (!left) renderBingoUnlinkedSongs();
+  else if (label) label.textContent = 'Needs a Spotify Link (' + left + ')';
+  renderBingoSongBankList();
+}
+
+function renderBingoSongBankList() {
+  const el = document.getElementById('bingo-songs-list');
+  const f = document.getElementById('bingo-songs-filter').value.trim().toLowerCase();
+  const rows = bingoSongBank.filter((s) => !f || (s.title + ' ' + s.artist).toLowerCase().includes(f));
+  if (!rows.length) { el.innerHTML = '<div class="loading">' + (bingoSongBank.length ? 'No songs match.' : 'No songs yet.') + '</div>'; return; }
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Song</th><th>Playlists</th><th>Times Used</th><th>Last Used</th><th>Spotify</th></tr></thead><tbody>'
+    + rows.map((s) => '<tr><td><div style="font-weight:500;">' + escHtml(s.title) + '</div><div style="font-size:11px;color:var(--sub);">' + escHtml(s.artist) + '</div></td>'
+      + '<td>' + s.playlist_count + '</td><td>' + s.times_used + '</td><td style="font-size:12px;">' + bingoFmtDate(s.last_used_on) + '</td>'
+      + '<td style="font-size:12px;">' + (s.spotify_track_id
+        ? '<a href="https://open.spotify.com/track/' + encodeURIComponent(s.spotify_track_id) + '" target="_blank" rel="noopener" style="color:#1DB954;">Open &#8599;</a>'
+        : '<span class="badge badge-red">Not linked</span>') + '</td></tr>').join('')
+    + '</tbody></table></div>';
 }
 
 // ── WIN PATTERNS ──────────────────────────────────
@@ -708,10 +887,13 @@ function renderBingoRoundNotes() {
     const plId = document.getElementById('bingo-r' + r + '-playlist').value;
     const pl = bingoPlaylists.find((p) => p.id === plId);
     const note = document.getElementById('bingo-r' + r + '-note');
-    note.innerHTML = pl && bingoIsCooling(pl)
+    note.innerHTML = (pl && bingoIsCooling(pl)
       ? '<div class="bingo-warning">&#9888; "' + escHtml(pl.title) + '" was used on ' + bingoFmtDate(pl.last_used_on)
         + ' — inside the ' + BINGO_COOLDOWN_DAYS + '-day window (ready ' + bingoFmtDate(bingoReadyOn(pl)) + '). Printing will use your admin override.</div>'
-      : '';
+      : '')
+      + (pl && (!pl.spotify_playlist_id || pl.spotify_dirty)
+        ? '<div class="bingo-warning">&#9888; "' + escHtml(pl.title) + '" isn\'t synced to Spotify, so it can\'t be printed yet — sync it on the Playlists tab (link any unlinked songs in the Song Bank first).</div>'
+        : '');
     if (r > 1) {
       const pat = bingoPatterns.find((p) => p.id === document.getElementById('bingo-r' + r + '-pattern').value);
       document.getElementById('bingo-r' + r + '-pattern-preview').innerHTML = pat ? bingoMiniGrid(pat.cells) : '';
