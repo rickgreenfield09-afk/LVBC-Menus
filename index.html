@@ -583,6 +583,8 @@
         <!-- DASHBOARD -->
         <div class="sub-sec active" id="bingotab-dashboard">
           <div class="grid-4" id="bingo-dash-cards"><div class="loading">Loading...</div></div>
+          <div class="section-label">Spotify</div>
+          <div class="card" id="bingo-spotify-card"><div class="loading">Loading...</div></div>
           <div class="section-label">Back in Rotation</div>
           <div id="bingo-dash-back"><div class="loading">Loading...</div></div>
           <div class="section-label">Cooling Down</div>
@@ -611,6 +613,11 @@
                   <span class="badge badge-muted" id="bingo-pl-count">0 / 24</span>
                 </div>
                 <div id="bingo-pl-songs" style="margin-bottom:12px;"></div>
+                <div id="bingo-spotify-search-wrap" style="display:none;margin-bottom:10px;position:relative;">
+                  <input class="form-input" style="width:100%;" type="text" id="bingo-spotify-q" placeholder="Search Spotify: song or artist…" oninput="onBingoSpotifySearchInput()" autocomplete="off">
+                  <div id="bingo-spotify-results" class="bingo-spotify-results" style="display:none;"></div>
+                </div>
+                <div style="font-size:11px;color:var(--muted);margin-bottom:6px;" id="bingo-manual-add-label">Or type one in:</div>
                 <div class="bingo-song-add">
                   <input class="form-input" type="text" id="bingo-add-title" placeholder="Song title" list="bingo-title-list" onchange="bingoAutofillArtist()">
                   <input class="form-input" type="text" id="bingo-add-artist" placeholder="Artist" list="bingo-artist-list" onkeydown="if(event.key==='Enter')addBingoSongFromInputs()">
