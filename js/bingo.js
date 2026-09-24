@@ -778,7 +778,8 @@ function bingoInfoQuadrant(g, sheetLabel) {
     + '<div class="keep">Your card for all 3 rounds — hang on to it!</div>'
     + '<ul class="rules">'
     + '<li>Listen for the songs — mark the square when you hear one on your card.</li>'
-    + '<li>Each round has its own card on this sheet and its own winning pattern (below). The center is free.</li>'
+    + '<li><b>The first person to yell BINGO will have their card reviewed first — yell it loud!</b></li>'
+    + '<li>Each round has its own card and winning pattern (below). The center is free.</li>'
     + '<li>Complete the pattern? Shout <b>BINGO!</b> and bring your sheet to the host to be checked.</li></ul>'
     + '<div class="h">This Week at LVBC</div>' + evHtml
     + '<div class="pats-block pats"><div class="h">Winning Patterns</div>'
