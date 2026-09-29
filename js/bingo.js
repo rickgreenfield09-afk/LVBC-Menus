@@ -1058,6 +1058,11 @@ async function previewBingoSlideshow() {
   if (g) openHtml(bingoSlideshowHtml(g));
 }
 
+async function previewBingoCallSheet() {
+  const g = await bingoBuildPreviewGame();
+  if (g) openHtml(bingoCallSheetHtml(await bingoAttachClips(g)));
+}
+
 async function printBingoGame() {
   const form = bingoReadGameForm();
   if (!form) return;
@@ -1097,7 +1102,8 @@ async function printBingoGame() {
 function bingoOutputButtons(gameId) {
   return '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
     + '<button class="btn btn-primary btn-sm" onclick="openBingoCardSheets(\'' + gameId + '\')">Card Sheets</button>'
-    + '<button class="btn btn-secondary btn-sm" onclick="openBingoSlideshow(\'' + gameId + '\')">TV Slideshow</button></div>';
+    + '<button class="btn btn-secondary btn-sm" onclick="openBingoSlideshow(\'' + gameId + '\')">TV Slideshow</button>'
+    + '<button class="btn btn-secondary btn-sm" onclick="openBingoCallSheet(\'' + gameId + '\')">Call Sheet</button></div>';
 }
 
 // ── HISTORY ───────────────────────────────────────
@@ -1353,4 +1359,94 @@ function bingoSlideshowHtml(g) {
       ? '<span>PREVIEW — nothing saved</span>'
       : '<span>Save as PDF, then present full-screen</span><button onclick="window.print()">Print / Save PDF</button>') + '</div>'
     + slides + '</body></html>';
+}
+
+// ── OUTPUT: host call sheet (8.5x11 portrait) ─────
+// For the bartender/host: each round's playlist, its win pattern, and
+// its 24 songs with a box to tick as each one plays (they're played in
+// any order, so songs are listed A–Z to find them fast when checking a
+// BINGO). Ends with the same events as the slideshow's between-rounds
+// slide. Clip start/stop show when a song has them.
+
+// Adds clip_start_seconds/clip_end_seconds to each round's songs (the
+// game snapshot only keeps id/title/artist). Songs merged away since
+// the print just show without clip times.
+async function bingoAttachClips(g) {
+  const ids = Array.from(new Set(g.rounds.flatMap((r) => r.songs.map((s) => s.id)).filter(Boolean)));
+  if (!ids.length) return g;
+  const { data } = await window.supabase.from('bingo_songs').select('id, clip_start_seconds, clip_end_seconds').in('id', ids);
+  const byId = {};
+  (data || []).forEach((s) => { byId[s.id] = s; });
+  g.rounds = g.rounds.map((r) => Object.assign({}, r, {
+    songs: r.songs.map((s) => Object.assign({}, s, byId[s.id] ? { clip_start_seconds: byId[s.id].clip_start_seconds, clip_end_seconds: byId[s.id].clip_end_seconds } : {})),
+  }));
+  return g;
+}
+
+const BINGO_CALL_CSS = '@media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}@page{size:8.5in 11in;margin:0.4in;}body{margin:0;background:#fff;}.sheet{width:auto;min-height:0;margin:0;padding:0;}}'
+  + '*{box-sizing:border-box;margin:0;padding:0;}body{background:#777;font-family:Inter,sans-serif;color:#1a1410;}'
+  + '.sheet{width:8.5in;min-height:11in;background:#fff;margin:0 auto 0.3in;padding:0.45in 0.5in;page-break-after:always;break-after:page;}.sheet:last-child{page-break-after:auto;break-after:auto;}'
+  + '.top{display:flex;align-items:center;gap:12px;border-bottom:3px solid #1a1410;padding-bottom:8px;margin-bottom:14px;}'
+  + '.top img{width:0.6in;height:0.6in;object-fit:contain;}'
+  + '.top h1{font-family:Oswald,sans-serif;font-size:28px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;line-height:1;}'
+  + '.top .sub{font-size:11px;color:#444;margin-top:3px;}'
+  + '.round{break-inside:avoid;page-break-inside:avoid;border:1.5px solid #1a1410;border-radius:4px;padding:10px 12px;margin-bottom:12px;}'
+  + '.round-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;border-bottom:1.5px solid #1a1410;padding-bottom:6px;margin-bottom:6px;}'
+  + '.rn{font-family:Oswald,sans-serif;font-size:13px;font-weight:600;letter-spacing:0.2em;text-transform:uppercase;color:#444;}'
+  + '.pl{font-family:Oswald,sans-serif;font-size:22px;font-weight:700;text-transform:uppercase;line-height:1.1;}'
+  + '.win{display:flex;align-items:center;gap:8px;text-align:right;flex-shrink:0;}'
+  + '.win .nm{font-family:Oswald,sans-serif;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;}'
+  + '.win .ds{font-size:9px;color:#444;max-width:1.5in;}'
+  + '.songs{display:grid;grid-template-columns:1fr 1fr;column-gap:18px;}'
+  + '.song{display:flex;align-items:baseline;gap:6px;font-size:10px;padding:2.5px 0;border-bottom:0.5px dotted #bbb;}'
+  + '.box{width:10px;height:10px;border:1.2px solid #1a1410;flex-shrink:0;align-self:center;}'
+  + '.song .t{font-weight:700;}.song .a{color:#444;font-style:italic;}.song .clip{margin-left:auto;font-family:monospace;font-size:9px;color:#444;white-space:nowrap;}'
+  + '.events{break-inside:avoid;page-break-inside:avoid;margin-top:4px;}'
+  + '.events h2{font-family:Oswald,sans-serif;font-size:15px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;border-bottom:1.5px solid #1a1410;margin-bottom:4px;}'
+  + '.events .note{font-size:9px;color:#444;margin-bottom:6px;}'
+  + '.ev{display:flex;gap:10px;font-size:11px;padding:2px 0;}.ev b{min-width:1in;}'
+  + BINGO_PAT_CSS + BINGO_TOOLBAR_CSS;
+
+function bingoCallRoundHtml(r) {
+  const songs = r.songs.slice().sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
+  const clip = (s) => (s.clip_start_seconds != null || s.clip_end_seconds != null)
+    ? '<span class="clip">' + (bingoFmtClip(s.clip_start_seconds) || '0:00') + '–' + (bingoFmtClip(s.clip_end_seconds) || 'end') + '</span>' : '';
+  // Column-major so the A–Z order reads down the left column first.
+  const half = Math.ceil(songs.length / 2);
+  const ordered = [];
+  for (let i = 0; i < half; i++) { ordered.push(songs[i]); if (songs[i + half]) ordered.push(songs[i + half]); }
+  return '<div class="round"><div class="round-head">'
+    + '<div><div class="rn">Round ' + r.round_no + '</div><div class="pl">' + escHtml(r.playlist_title) + '</div></div>'
+    + '<div class="win"><div><div class="nm">' + escHtml(r.pattern_name) + '</div><div class="ds">'
+    + (r.pattern_cells ? 'Mark every highlighted square. Center is free.' : 'Any full row, column, or diagonal.') + '</div></div>'
+    + bingoPrintPattern(r.pattern_cells, r.pattern_cells ? '0.14in' : '0.08in') + '</div></div>'
+    + '<div class="songs">' + ordered.map((s) => '<div class="song"><span class="box"></span><span><span class="t">' + escHtml(s.title) + '</span> — <span class="a">' + escHtml(s.artist) + '</span></span>' + clip(s) + '</div>').join('') + '</div>'
+    + '</div>';
+}
+
+function bingoCallSheetHtml(g) {
+  const round = (n) => g.rounds.find((r) => r.round_no === n);
+  // Same list (and cap) as the slideshow's events slide.
+  const events = (g.game.slide_events || []).slice(0, 16);
+  const eventsHtml = '<div class="events"><h2>Coming Up at LVBC</h2>'
+    + '<div class="note">On the TV between Rounds 2 and 3 — the next two weeks.</div>'
+    + (events.length
+      ? events.map((e) => '<div class="ev"><b>' + escHtml(bingoFmtDate(e.date, { weekday: 'short', month: 'short', day: 'numeric' })) + '</b><span>' + escHtml(e.name) + (e.time ? ' · ' + escHtml(e.time) : '') + '</span></div>').join('')
+      : '<div class="ev"><span>No events scheduled in the next two weeks.</span></div>')
+    + '</div>';
+  const head = (page) => '<div class="top"><img src="' + LOGO_URL + '"><div><h1>Music Bingo · Call Sheet' + (g.preview ? ' (Preview)' : '') + '</h1>'
+    + '<div class="sub">' + escHtml(bingoFmtDate(g.game.event_date, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })) + ' · ' + BINGO_BREWERY
+    + (g.preview ? '' : ' · ' + g.game.sheet_count + ' sheets printed') + ' · Songs A–Z; tick each as it plays · Page ' + page + ' of 2</div></div></div>';
+  return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>' + (g.preview ? 'PREVIEW — ' : '') + 'Music Bingo Call Sheet — ' + escHtml(bingoFmtDate(g.game.event_date)) + '</title>'
+    + FONT_LINK + '<style>' + BINGO_CALL_CSS + '</style></head><body>'
+    + '<div class="toolbar">' + (g.preview ? '<span>PREVIEW — nothing saved</span>' : '<span>Host call sheet</span><button onclick="window.print()">Print / Save PDF</button>') + '</div>'
+    // Two pages: rounds 1–2, then round 3 + events.
+    + '<div class="sheet">' + head(1) + bingoCallRoundHtml(round(1)) + bingoCallRoundHtml(round(2)) + '</div>'
+    + '<div class="sheet">' + head(2) + bingoCallRoundHtml(round(3)) + eventsHtml + '</div>'
+    + '</body></html>';
+}
+
+async function openBingoCallSheet(gameId) {
+  const g = await bingoLoadGame(gameId);
+  if (g) openHtml(bingoCallSheetHtml(await bingoAttachClips(g)));
 }

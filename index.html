@@ -693,9 +693,10 @@
                 </div>
                 <div id="bingo-game-rounds"></div>
                 <div id="bingo-game-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
-                <div style="display:flex;gap:8px;margin-bottom:8px;">
+                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
                   <button class="btn btn-secondary" style="flex:1;" onclick="previewBingoCards()">Preview Cards</button>
                   <button class="btn btn-secondary" style="flex:1;" onclick="previewBingoSlideshow()">Preview Slideshow</button>
+                  <button class="btn btn-secondary" style="flex:1;" onclick="previewBingoCallSheet()">Preview Call Sheet</button>
                 </div>
                 <button class="btn btn-primary" style="width:100%;" id="bingo-print-btn" onclick="printBingoGame()">Print Game</button>
                 <div style="font-size:11px;color:var(--muted);margin-top:8px;">Printing marks all 3 playlists as used today. They come back into rotation in 90 days.</div>
@@ -704,7 +705,7 @@
             <div class="grid2-col">
               <div class="section-label" style="margin-top:0;">Output</div>
               <div class="card" id="bingo-game-output">
-                <div style="font-size:13px;color:var(--sub);">Once the game is printed, the card sheets and the TV slideshow open from here. You can reopen any past game from History.</div>
+                <div style="font-size:13px;color:var(--sub);">Once the game is printed, the card sheets, TV slideshow and host call sheet open from here. You can reopen any past game from History.</div>
               </div>
             </div>
           </div>
