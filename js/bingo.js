@@ -108,7 +108,8 @@ function bingoMiniGrid(cells, px) {
 
 async function bingoLoadPlaylists() {
   const { data, error } = await window.supabase.from('bingo_playlists')
-    .select('*, bingo_playlist_songs(count), staff_profiles(name)')
+    .select('*, bingo_playlist_songs(count), staff_profiles!bingo_playlists_created_by_fkey(name)')
+    .is('archived_at', null)
     .order('title');
   if (error) { toast('Error loading playlists: ' + error.message, true); return; }
   bingoPlaylists = (data || []).map((p) => Object.assign({}, p, {
@@ -201,6 +202,7 @@ async function loadBingoPlaylistsTab() {
   renderBingoSpotifyRequired();
   renderBingoPlaylistList();
   renderBingoEditSongs();
+  loadBingoArchivedPlaylists();
 }
 
 let bingoSongLibrary = [];
@@ -365,15 +367,76 @@ async function saveBingoPlaylist() {
   if (n) await syncBingoPlaylist(id);
 }
 
+// "Delete" archives (migration_029): the Spotify copy is removed from
+// the brewery account first, then the playlist is hidden but kept, so
+// it can be restored from the Archived list.
 async function deleteBingoPlaylist(id) {
   const pl = bingoPlaylists.find((p) => p.id === id);
-  if (!pl || !confirm('Delete the playlist "' + pl.title + '"? Past games that used it keep their copy of its songs. Its Spotify copy stays in the Spotify account.')) return;
-  const { error } = await window.supabase.from('bingo_playlists').delete().eq('id', id);
+  if (!pl || !confirm('Delete "' + pl.title + '"?\n\nIt\'s removed from the app and from the brewery\'s Spotify account. An archived copy is kept (songs included) and can be restored from the Archived list below.')) return;
+
+  if (pl.spotify_playlist_id) {
+    if (!bingoSpotify.connected) {
+      if (!confirm('Spotify isn\'t connected, so the Spotify copy of "' + pl.title + '" can\'t be removed right now — delete it in Spotify by hand. Archive it here anyway?')) return;
+    } else {
+      try {
+        await bingoApi('spotify-sync-playlist', { playlist_id: id, action: 'remove' });
+      } catch (e) {
+        if (!confirm('Couldn\'t remove the Spotify copy: ' + e.message + '\n\nArchive it here anyway? (The Spotify copy would need deleting in Spotify by hand.)')) return;
+      }
+    }
+  }
+
+  const { error } = await window.supabase.rpc('set_bingo_playlist_archived', { p_id: id, p_archived: true });
   if (error) { toast(error.message, true); return; }
-  logAudit('delete_bingo_playlist', 'bingo_playlists', id, { title: pl.title });
-  toast('Playlist deleted');
+  logAudit('archive_bingo_playlist', 'bingo_playlists', id, { title: pl.title });
+  toast('"' + pl.title + '" deleted — an archived copy was kept');
   if (bingoEditPlaylistId === id) resetBingoPlaylistForm();
   await loadBingoPlaylistsTab();
+}
+
+let bingoArchivedPlaylists = [];
+async function loadBingoArchivedPlaylists() {
+  const el = document.getElementById('bingo-pl-archived');
+  const { data, error } = await window.supabase.from('bingo_playlists')
+    .select('id, title, created_by, archived_at, last_used_on, times_used, bingo_playlist_songs(count), archiver:staff_profiles!bingo_playlists_archived_by_fkey(name)')
+    .not('archived_at', 'is', null)
+    .order('archived_at', { ascending: false });
+  bingoArchivedPlaylists = data || [];
+  if (error || !data || !data.length) { el.innerHTML = ''; return; }
+  el.innerHTML = '<details style="margin-top:16px;"><summary style="font-size:12px;color:var(--sub);cursor:pointer;">Archived playlists (' + data.length + ')</summary>'
+    + '<div class="table-wrap" style="margin-top:8px;"><table><thead><tr><th>Playlist</th><th>Songs</th><th>Last Used</th><th>Deleted</th><th></th></tr></thead><tbody>'
+    + data.map((p) => '<tr><td style="font-weight:500;">' + escHtml(p.title) + '</td>'
+      + '<td>' + ((p.bingo_playlist_songs && p.bingo_playlist_songs[0] && p.bingo_playlist_songs[0].count) || 0) + '</td>'
+      + '<td style="font-size:12px;">' + bingoFmtDate(p.last_used_on) + '</td>'
+      + '<td style="font-size:11px;color:var(--sub);">' + bingoFmtDate(toDateStr(new Date(p.archived_at))) + (p.archiver ? '<br>' + escHtml(p.archiver.name) : '') + '</td>'
+      + '<td style="white-space:nowrap;"><button class="btn btn-secondary btn-sm" onclick="restoreBingoPlaylist(\'' + p.id + '\')">Restore</button>'
+      + (bingoIsAdmin() ? ' <button class="btn btn-danger btn-sm" onclick="purgeBingoPlaylist(\'' + p.id + '\')">Delete Forever</button>' : '')
+      + '</td></tr>').join('')
+    + '</tbody></table></div></details>';
+}
+
+async function restoreBingoPlaylist(id) {
+  const { error } = await window.supabase.rpc('set_bingo_playlist_archived', { p_id: id, p_archived: false });
+  if (error) { toast(error.message, true); return; }
+  logAudit('restore_bingo_playlist', 'bingo_playlists', id, {});
+  toast('Playlist restored');
+  await loadBingoPlaylistsTab();
+  // Give it a fresh Spotify copy (the old one was removed on delete).
+  const pl = bingoPlaylists.find((p) => p.id === id);
+  if (bingoSpotify.connected && pl && pl.song_count) await syncBingoPlaylist(id);
+}
+
+// Admin only (RLS). Songs stay in the Song Bank; past games keep their copy.
+async function purgeBingoPlaylist(id) {
+  const pl = bingoArchivedPlaylists.find((p) => p.id === id);
+  if (!pl) return;
+  const title = pl.title;
+  if (!confirm('Permanently delete "' + title + '"? This can\'t be undone. Its songs stay in the Song Bank and past games keep their copy.')) return;
+  const { error } = await window.supabase.from('bingo_playlists').delete().eq('id', id);
+  if (error) { toast(error.message, true); return; }
+  logAudit('delete_bingo_playlist', 'bingo_playlists', id, { title });
+  toast('Playlist permanently deleted');
+  await loadBingoArchivedPlaylists();
 }
 
 // ── SPOTIFY ───────────────────────────────────────
@@ -1041,25 +1104,50 @@ function bingoOutputButtons(gameId) {
 async function loadBingoHistory() {
   const el = document.getElementById('bingo-history-list');
   const { data, error } = await window.supabase.from('bingo_games')
-    .select('id, event_date, printed_on, sheet_count, cooldown_overridden, staff_profiles(name), bingo_game_rounds(round_no, playlist_title, pattern_name)')
+    .select('id, event_date, printed_on, sheet_count, cooldown_overridden, staff_profiles(name), bingo_game_rounds(round_no, playlist_title, pattern_name), bingo_game_topoffs(from_sheet, to_sheet, printed_at)')
     .order('printed_at', { ascending: false }).limit(100);
   if (error) { el.innerHTML = '<div class="loading">Error: ' + escHtml(error.message) + '</div>'; return; }
   if (!data || !data.length) { el.innerHTML = '<div class="loading">No games printed yet.</div>'; return; }
   el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Game Night</th><th>Round 1</th><th>Round 2</th><th>Round 3</th><th>Sheets</th><th>Printed</th><th></th></tr></thead><tbody>'
     + data.map((g) => {
       const rounds = (g.bingo_game_rounds || []).sort((a, b) => a.round_no - b.round_no);
+      const topoffs = (g.bingo_game_topoffs || []).sort((a, b) => a.from_sheet - b.from_sheet);
+      const original = topoffs.length ? topoffs[0].from_sheet - 1 : g.sheet_count;
       return '<tr><td style="font-weight:500;">' + bingoFmtDate(g.event_date)
         + (g.cooldown_overridden ? '<br><span class="badge badge-amber">90-day override</span>' : '') + '</td>'
         + rounds.map((r) => '<td>' + escHtml(r.playlist_title) + '<div style="font-size:11px;color:var(--sub);">' + escHtml(r.pattern_name) + '</div></td>').join('')
-        + '<td>' + g.sheet_count + '</td>'
+        + '<td style="white-space:nowrap;">' + g.sheet_count
+        + (topoffs.length ? '<div style="font-size:11px;color:var(--sub);">' + original + ' original</div>'
+          + topoffs.map((t) => '<div style="font-size:11px;"><a href="#" style="color:var(--teal);" title="Reprint just this batch" onclick="openBingoCardSheets(\'' + g.id + '\',' + t.from_sheet + ',' + t.to_sheet + ');return false;">+'
+            + (t.to_sheet - t.from_sheet + 1) + ' (sheets ' + t.from_sheet + '–' + t.to_sheet + ')</a></div>').join('') : '')
+        + '</td>'
         + '<td style="font-size:12px;">' + bingoFmtDate(g.printed_on) + '<div style="font-size:11px;color:var(--sub);">' + escHtml(g.staff_profiles ? g.staff_profiles.name : '') + '</div></td>'
         + '<td>' + bingoOutputButtons(g.id)
-        + (bingoIsAdmin() ? '<button class="btn btn-danger btn-sm" style="margin-top:6px;" onclick="deleteBingoGame(\'' + g.id + '\', \'' + g.event_date + '\')">Delete</button>' : '')
-        + '</td></tr>';
+        + '<div style="display:flex;gap:8px;margin-top:6px;"><button class="btn btn-secondary btn-sm" onclick="topOffBingoGame(\'' + g.id + '\', ' + g.sheet_count + ')">Top Off</button>'
+        + (bingoIsAdmin() ? '<button class="btn btn-danger btn-sm" onclick="deleteBingoGame(\'' + g.id + '\', \'' + g.event_date + '\')">Delete</button>' : '')
+        + '</div></td></tr>';
     }).join('')
     + '</tbody></table></div>'
     + '<div style="font-size:11px;color:var(--muted);margin-top:8px;">Reopening a past game reprints the exact same cards and doesn\'t count as another use.'
+    + ' Top Off prints extra sheets for the same game — every new card is different from every card already printed for it.'
     + (bingoIsAdmin() ? ' Deleting a game undoes its use: counts go back down and its playlists return to their previous last-used date.' : '') + '</div>';
+}
+
+// Extra sheets for a game already printed (migration_029). New sheets
+// continue the numbering and only they are opened for printing.
+async function topOffBingoGame(gameId, currentSheets) {
+  const max = 200 - currentSheets;
+  if (max < 1) { toast('This game already has the maximum of 200 sheets', true); return; }
+  const raw = prompt('How many extra sheets? (This game has ' + currentSheets + '; up to ' + max + ' more.)', '10');
+  if (raw === null) return;
+  const extra = parseInt(raw, 10);
+  if (!(extra >= 1 && extra <= max)) { toast('Enter a number from 1 to ' + max, true); return; }
+  const { data: fromSheet, error } = await window.supabase.rpc('top_off_bingo_game', { p_game_id: gameId, p_extra: extra });
+  if (error) { toast(error.message, true); return; }
+  logAudit('top_off_bingo_game', 'bingo_games', gameId, { from_sheet: fromSheet, to_sheet: fromSheet + extra - 1 });
+  toast('Added sheets ' + fromSheet + '–' + (fromSheet + extra - 1));
+  await loadBingoHistory();
+  await openBingoCardSheets(gameId, fromSheet, fromSheet + extra - 1);
 }
 
 async function deleteBingoGame(gameId, eventDate) {
@@ -1182,11 +1270,15 @@ function bingoInfoQuadrant(g, sheetLabel) {
 }
 
 // g = bingoLoadGame() result, or bingoBuildPreviewGame() (g.preview).
-function bingoCardSheetsHtml(g) {
+// fromSheet/toSheet limit it to one batch (a top-off).
+function bingoCardSheetsHtml(g, fromSheet, toSheet) {
   const bySheet = {};
   g.cards.forEach((c) => { (bySheet[c.sheet_no] = bySheet[c.sheet_no] || {})[c.round_no] = c; });
   const round = (n) => g.rounds.find((r) => r.round_no === n);
-  const pages = Object.keys(bySheet).map(Number).sort((a, b) => a - b).map((s) => {
+  const ranged = !!fromSheet;
+  const sheetNos = Object.keys(bySheet).map(Number).sort((a, b) => a - b)
+    .filter((s) => !ranged || (s >= fromSheet && s <= toSheet));
+  const pages = sheetNos.map((s) => {
     const label = g.preview ? 'PREVIEW' : String(s).padStart(2, '0');
     return '<div class="page">'
       + bingoCardQuadrant(round(1), bySheet[s][1], label)
@@ -1197,16 +1289,17 @@ function bingoCardSheetsHtml(g) {
   }).join('');
   const note = g.preview
     ? 'PREVIEW — ' + BINGO_PREVIEW_SHEETS + ' sample sheets, nothing saved. The real print has ' + g.game.sheet_count + ' sheets with fresh shuffles.'
-    : g.game.sheet_count + ' sheets · print single-sided, Letter, no margins';
+    : (ranged ? 'Top-off: sheets ' + fromSheet + '–' + toSheet + ' (' + sheetNos.length + ')' : g.game.sheet_count + ' sheets')
+      + ' · print single-sided, Letter, no margins';
   return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>' + (g.preview ? 'PREVIEW — ' : '') + 'Music Bingo Cards — ' + escHtml(bingoFmtDate(g.game.event_date)) + '</title>'
     + FONT_LINK + '<style>' + BINGO_SHEET_CSS + '</style></head><body>'
     + '<div class="toolbar"><span>' + note + '</span>' + (g.preview ? '' : '<button onclick="window.print()">Print / Save PDF</button>') + '</div>'
     + pages + '</body></html>';
 }
 
-async function openBingoCardSheets(gameId) {
+async function openBingoCardSheets(gameId, fromSheet, toSheet) {
   const g = await bingoLoadGame(gameId);
-  if (g) openHtml(bingoCardSheetsHtml(g));
+  if (g) openHtml(bingoCardSheetsHtml(g, fromSheet, toSheet));
 }
 
 // ── OUTPUT: TV slideshow (16:9 pages → PDF) ───────

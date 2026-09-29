@@ -1,6 +1,6 @@
 // api/spotify-sync-playlist.js
 // Vercel serverless function (Node runtime, no dependencies).
-// Any staff. Makes the brewery's Spotify account hold an exact copy of
+// Any staff. Default action: makes the brewery's Spotify account hold an exact copy of
 // one bingo playlist: creates a private "LVBC Bingo · <title>" playlist
 // the first time (or again if someone deleted it in Spotify), then
 // renames it and replaces its tracks on every sync.
@@ -24,10 +24,34 @@ export default async function handler(req, res) {
   const playlistId = String((req.body || {}).playlist_id || '');
   if (!/^[0-9a-f-]{36}$/i.test(playlistId)) return res.status(400).json({ error: 'Missing playlist_id' });
 
+  // action "remove": take the playlist out of the brewery's Spotify
+  // account ahead of archiving it (migration_029). Spotify has no hard
+  // delete — removing it from the library is what "Delete" does in the
+  // Spotify app too. Folded into this route rather than a new one to
+  // stay under the Vercel Hobby plan's function limit.
+  if ((req.body || {}).action === 'remove') {
+    try {
+      const rows = await db('bingo_playlists?select=id,spotify_playlist_id&id=eq.' + playlistId);
+      if (!rows || !rows.length) return res.status(404).json({ error: 'Playlist not found' });
+      const spotifyId = rows[0].spotify_playlist_id;
+      if (spotifyId) {
+        await spotifyApi('DELETE', '/me/library?' + new URLSearchParams({ uris: 'spotify:playlist:' + spotifyId }).toString(), undefined, { allowStatus: [404] });
+        await db('bingo_playlists?id=eq.' + playlistId, {
+          method: 'PATCH',
+          body: { spotify_playlist_id: null, spotify_synced_at: null, spotify_dirty: true },
+        });
+      }
+      return res.status(200).json({ removed: !!spotifyId });
+    } catch (e) {
+      return res.status(502).json({ error: e.message });
+    }
+  }
+
   try {
-    const rows = await db('bingo_playlists?select=id,title,spotify_playlist_id,bingo_playlist_songs(position,bingo_songs(id,title,artist,spotify_track_id))&id=eq.' + playlistId);
+    const rows = await db('bingo_playlists?select=id,title,archived_at,spotify_playlist_id,bingo_playlist_songs(position,bingo_songs(id,title,artist,spotify_track_id))&id=eq.' + playlistId);
     if (!rows || !rows.length) return res.status(404).json({ error: 'Playlist not found' });
     const pl = rows[0];
+    if (pl.archived_at) return res.status(409).json({ error: '"' + pl.title + '" is archived — restore it before syncing.' });
     const songs = (pl.bingo_playlist_songs || []).sort((a, b) => a.position - b.position).map((r) => r.bingo_songs);
 
     const unlinked = songs.filter((s) => !s.spotify_track_id);
