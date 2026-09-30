@@ -458,7 +458,14 @@ function cancelWineEdit() {
 
 async function saveWine() {
   const name = document.getElementById('wn-name').value.trim();
-  if (!name) { wineAlert('Name required', true); return; }
+  const group = document.getElementById('wn-group').value;
+  const missing = [];
+  if (!name) missing.push('Name');
+  if (!document.getElementById('wn-cat').value) missing.push('Category');
+  if (!group) missing.push('Display Group');
+  if (group === 'Wine by the Bottle' && parseCurrency('wn-pbottle') == null) missing.push('Bottle Price');
+  else if (group && group !== 'Wine by the Bottle' && parseCurrency('wn-pglass') == null && parseCurrency('wn-pbottle') == null) missing.push('a Glass/Per Unit or Bottle Price');
+  if (missing.length) { wineAlert('Required: ' + missing.join(', '), true); return; }
   const payload = {
     name,
     winery: document.getElementById('wn-winery').value.trim() || null,
@@ -945,17 +952,17 @@ function wineNameBlock(w) {
   html += '</div>';
   return html;
 }
+// A by-the-glass wine with both prices gets the GLASS + BOTTLE layout; one with a single price is a can.
+function isGlassAndBottle(w) { return !!(w.price_glass && w.price_bottle); }
 function wineFullRow(w) {
   const nb = wineNameBlock(w);
-  const badges = w.badge || [];
-  const gp = fmtP(w.price_glass), bp = fmtP(w.price_bottle);
-  const isGlassBottle = badges.some((b) => b.toLowerCase() === 'glass+bottle');
+  const gp = fmtP(w.price_glass), bp = fmtP(w.price_bottle), unitP = gp || bp;
   if (w.display_group === 'Wine by the Bottle') return '<div class="row-bottle">' + nb + '<span class="badge badge-bottle">BOTTLE</span><div class="bottle-price">' + bp + '</div></div>';
   if (w.display_group === 'Wine by the Glass') {
-    if (isGlassBottle) return '<div class="row-glass">' + nb + '<div class="glass-badges"><span class="badge badge-glass">GLASS</span><span class="badge badge-bottle">BOTTLE</span></div>' + '<div class="glass-prices"><div class="gp-line">' + gp + '</div><div class="gp-line">' + bp + '</div></div></div>';
-    return '<div class="row-can">' + nb + '<span class="badge badge-can">CAN</span><div class="bottle-price">' + bp + '</div></div>';
+    if (isGlassAndBottle(w)) return '<div class="row-glass">' + nb + '<div class="glass-badges"><span class="badge badge-glass">GLASS</span><span class="badge badge-bottle">BOTTLE</span></div>' + '<div class="glass-prices"><div class="gp-line">' + gp + '</div><div class="gp-line">' + bp + '</div></div></div>';
+    return '<div class="row-can">' + nb + '<span class="badge badge-can">CAN</span><div class="bottle-price">' + unitP + '</div></div>';
   }
-  if (w.display_group === 'N/A Beer') return '<div class="na-beer-block"><div class="row-na-beer">' + '<div class="name-wrap"><span class="inline-name">' + escHtml(w.name) + '</span>' + (w.type ? '&nbsp;&nbsp;<span class="inline-type">' + escHtml(w.type) + '</span>' : '') + '</div><span class="badge badge-can">CAN</span>' + '<div class="na-price">' + bp + '</div></div>' + (w.description ? '<div class="na-beer-desc">' + escHtml(w.description) + '</div>' : '') + '</div>';
+  if (w.display_group === 'N/A Beer') return '<div class="na-beer-block"><div class="row-na-beer">' + '<div class="name-wrap"><span class="inline-name">' + escHtml(w.name) + '</span>' + (w.type ? '&nbsp;&nbsp;<span class="inline-type">' + escHtml(w.type) + '</span>' : '') + '</div><span class="badge badge-can">CAN</span>' + '<div class="na-price">' + unitP + '</div></div>' + (w.description ? '<div class="na-beer-desc">' + escHtml(w.description) + '</div>' : '') + '</div>';
   return null;
 }
 function wineOptRow(w) {
@@ -1002,21 +1009,21 @@ function wineHalfInner(rows) {
     html += '<div class="section-label">' + escHtml(grp) + '</div>';
     groups[grp].forEach((w) => {
       const badges = w.badge || [];
-      const isGB = badges.some((b) => b.toLowerCase() === 'glass+bottle');
+      const isGB = isGlassAndBottle(w);
       const isCan = badges.some((b) => b.toLowerCase() === 'can');
-      const gp = fmtP(w.price_glass), bp = fmtP(w.price_bottle);
+      const gp = fmtP(w.price_glass), bp = fmtP(w.price_bottle), unitP = gp || bp;
       if (grp === 'Wine by the Bottle') {
         html += '<div class="wine-entry"><div class="wine-row">' + '<div class="wine-left"><span class="wine-name">' + escHtml(w.name) + '</span>' + (w.type ? '<span class="wine-sep">·</span><span class="wine-type">' + escHtml(w.type) + '</span>' : '') + '</div><div class="wine-right"><div class="wine-right-line">' + '<span class="wine-badge-text">Bottle</span><span class="wine-price">' + bp + '</span>' + '</div></div></div>' + (w.description ? '<div class="wine-desc">' + escHtml(w.description) + '</div>' : '') + '</div>';
       } else if (grp === 'Wine by the Glass') {
         if (isGB) {
           html += '<div class="wine-entry"><div class="wine-row">' + '<div class="wine-left"><span class="wine-name">' + escHtml(w.name) + '</span>' + (w.type ? '<span class="wine-sep">·</span><span class="wine-type">' + escHtml(w.type) + '</span>' : '') + '</div><div class="wine-right">' + '<div class="wine-right-line"><span class="wine-badge-text">Glass</span><span class="wine-price">' + gp + '</span></div>' + '<div class="wine-right-line"><span class="wine-badge-text">Bottle</span><span class="wine-price">' + bp + '</span></div>' + '</div></div>' + (w.description ? '<div class="wine-desc">' + escHtml(w.description) + '</div>' : '') + '</div>';
         } else {
-          html += '<div class="wine-entry"><div class="wine-row">' + '<div class="wine-left"><span class="wine-name">' + escHtml(w.name) + '</span>' + (w.type ? '<span class="wine-sep">·</span><span class="wine-type">' + escHtml(w.type) + '</span>' : '') + '</div><div class="wine-right"><div class="wine-right-line">' + '<span class="wine-badge-text">Can</span><span class="wine-price">' + bp + '</span>' + '</div></div></div>' + (w.description ? '<div class="wine-desc">' + escHtml(w.description) + '</div>' : '') + '</div>';
+          html += '<div class="wine-entry"><div class="wine-row">' + '<div class="wine-left"><span class="wine-name">' + escHtml(w.name) + '</span>' + (w.type ? '<span class="wine-sep">·</span><span class="wine-type">' + escHtml(w.type) + '</span>' : '') + '</div><div class="wine-right"><div class="wine-right-line">' + '<span class="wine-badge-text">Can</span><span class="wine-price">' + unitP + '</span>' + '</div></div></div>' + (w.description ? '<div class="wine-desc">' + escHtml(w.description) + '</div>' : '') + '</div>';
         }
       } else if (grp === 'N/A Beer') {
-        html += '<div class="na-beer-entry"><div class="na-beer-row">' + '<div class="wine-left"><span class="wine-name">' + escHtml(w.name) + '</span>' + (w.type ? '<span class="wine-sep">·</span><span class="wine-type">' + escHtml(w.type) + '</span>' : '') + '</div><div class="wine-right"><div class="wine-right-line">' + '<span class="wine-badge-text">Can</span><span class="wine-price">' + bp + '</span>' + '</div></div></div>' + (w.description ? '<div class="na-beer-desc">' + escHtml(w.description) + '</div>' : '') + '</div>';
+        html += '<div class="na-beer-entry"><div class="na-beer-row">' + '<div class="wine-left"><span class="wine-name">' + escHtml(w.name) + '</span>' + (w.type ? '<span class="wine-sep">·</span><span class="wine-type">' + escHtml(w.type) + '</span>' : '') + '</div><div class="wine-right"><div class="wine-right-line">' + '<span class="wine-badge-text">Can</span><span class="wine-price">' + unitP + '</span>' + '</div></div></div>' + (w.description ? '<div class="na-beer-desc">' + escHtml(w.description) + '</div>' : '') + '</div>';
       } else {
-        const price = gp || bp;
+        const price = unitP;
         const badgeText = isCan ? 'Can' : (badges.some((b) => b.toLowerCase() === 'bottle') ? 'Bottle' : '');
         html += '<div class="na-item"><div class="na-left">' + '<span class="na-name">' + escHtml(w.name) + '</span>' + (w.description ? '<span class="na-sub">' + escHtml(w.description) + '</span>' : '') + '</div><div class="wine-right"><div class="wine-right-line">' + (badgeText ? '<span class="wine-badge-text">' + badgeText + '</span>' : '<span style="width:36px;display:inline-block"></span>') + '<span class="wine-price">' + escHtml(price) + '</span>' + '</div></div></div>';
       }
