@@ -117,9 +117,11 @@ async function loadSchedule() {
     document.getElementById(id).disabled = !admin;
   });
 
-  // Admins land on the Metrics dashboard first — My Shifts stays the
-  // landing tab for everyone else, since that's all they can see.
-  const landingTab = admin ? 'metrics' : 'myshifts';
+  // Site admins (portal role, not just scheduling permission) land on
+  // the Metrics dashboard first — everyone else, including
+  // non-admin schedulers, still lands on My Shifts.
+  const isSiteAdmin = !!(window.currentStaff && window.currentStaff.role === 'admin');
+  const landingTab = isSiteAdmin ? 'metrics' : 'myshifts';
   setScheduleTab(landingTab, document.getElementById('scheduletab-btn-' + landingTab));
 }
 

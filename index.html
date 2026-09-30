@@ -111,11 +111,11 @@
       <!-- SCHEDULE SCREEN -->
       <div class="screen" id="screen-schedule">
         <div class="sub-tabs no-print">
+          <button class="sub-tab" id="scheduletab-btn-metrics" onclick="setScheduleTab('metrics', this)">Metrics</button>
           <button class="sub-tab active" id="scheduletab-btn-myshifts" onclick="setScheduleTab('myshifts', this)">My Shifts</button>
           <button class="sub-tab" id="scheduletab-btn-calendar" onclick="setScheduleTab('calendar', this)">Calendar</button>
           <button class="sub-tab" id="scheduletab-btn-bulk" onclick="setScheduleTab('bulk', this)">Scheduling</button>
           <button class="sub-tab" id="scheduletab-btn-events" onclick="setScheduleTab('events', this)">Events</button>
-          <button class="sub-tab" id="scheduletab-btn-metrics" onclick="setScheduleTab('metrics', this)">Metrics</button>
           <button class="sub-tab" id="scheduletab-btn-settings" onclick="setScheduleTab('settings', this)">Settings</button>
         </div>
 
@@ -342,9 +342,14 @@
         <div class="sub-sec" id="scheduletab-metrics">
           <div class="menu-col-header">
             <div style="display:flex;align-items:center;gap:14px;">
-              <button class="btn btn-secondary btn-sm" onclick="metricsMonth(-1)">&larr;</button>
-              <div class="section-label" style="margin:0;font-size:16px;letter-spacing:1px;" id="metrics-month-label">Month</div>
-              <button class="btn btn-secondary btn-sm" onclick="metricsMonth(1)">&rarr;</button>
+              <button class="btn btn-secondary btn-sm" onclick="metricsNav(-1)">&larr;</button>
+              <div class="section-label" style="margin:0;font-size:16px;letter-spacing:1px;" id="metrics-period-label">Period</div>
+              <button class="btn btn-secondary btn-sm" onclick="metricsNav(1)">&rarr;</button>
+            </div>
+            <div style="display:flex;gap:6px;">
+              <button class="tap-toggle-btn active" id="metrics-mode-month" onclick="setMetricsMode('month')">This Month</button>
+              <button class="tap-toggle-btn" id="metrics-mode-quarter" onclick="setMetricsMode('quarter')">This Quarter</button>
+              <button class="tap-toggle-btn" id="metrics-mode-year" onclick="setMetricsMode('year')">Year to Date</button>
             </div>
           </div>
           <div id="metrics-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:24px;"></div>
