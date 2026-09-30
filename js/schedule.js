@@ -962,12 +962,12 @@ function closeClearScheduleModal() {
 
 function onClearScheduleInput() {
   const val = document.getElementById('clear-schedule-confirm-input').value;
-  document.getElementById('btn-confirm-clear-schedule').disabled = val !== CLEAR_SCHEDULE_PHRASE;
+  document.getElementById('btn-confirm-clear-schedule').disabled = val.trim().toLowerCase() !== CLEAR_SCHEDULE_PHRASE.toLowerCase();
 }
 
 async function confirmClearSchedule() {
   if (!canSchedule()) return;
-  if (document.getElementById('clear-schedule-confirm-input').value !== CLEAR_SCHEDULE_PHRASE) return;
+  if (document.getElementById('clear-schedule-confirm-input').value.trim().toLowerCase() !== CLEAR_SCHEDULE_PHRASE.toLowerCase()) return;
   const monthStart = toDateStr(new Date(scheduleCursor.getFullYear(), scheduleCursor.getMonth(), 1));
   const monthEnd = toDateStr(new Date(scheduleCursor.getFullYear(), scheduleCursor.getMonth() + 1, 0));
   const { data, error } = await window.supabase.from('shifts').delete().gte('shift_date', monthStart).lte('shift_date', monthEnd).select('id');
