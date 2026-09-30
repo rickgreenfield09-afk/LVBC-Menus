@@ -98,12 +98,12 @@ async function loadSchedule() {
   await loadStaffAndSettings();
 
   const admin = canSchedule();
-  ['calendar', 'bulk', 'events', 'settings'].forEach((t) => {
+  ['calendar', 'bulk', 'events', 'settings', 'metrics'].forEach((t) => {
     document.getElementById('scheduletab-btn-' + t).style.display = admin ? '' : 'none';
   });
   document.getElementById('btn-save-day-settings').style.display = admin ? '' : 'none';
   document.getElementById('btn-save-schedule-settings').style.display = admin ? '' : 'none';
-  document.getElementById('btn-clear-schedule').style.display = admin ? '' : 'none';
+  document.getElementById('schedule-admin-actions').style.display = admin ? 'flex' : 'none';
   ['set-timeout', 'set-tpl-coverage', 'set-tpl-trade', 'set-tpl-sent'].forEach((id) => {
     document.getElementById(id).disabled = !admin;
   });
@@ -120,6 +120,7 @@ function setScheduleTab(tab, btn) {
   if (tab === 'calendar') loadScheduleRange();
   if (tab === 'bulk') { populateBulkSelectors(); loadBulkShiftList(); }
   if (tab === 'events') loadEventsList();
+  if (tab === 'metrics') loadMetrics();
   if (tab === 'settings') { renderDaySettingsRows(); populateScheduleSettingsForm(); }
 }
 
@@ -868,6 +869,65 @@ async function saveScheduleSettings() {
   scheduleSettings = payload;
   statusEl.textContent = 'Saved';
   setTimeout(() => { statusEl.textContent = ''; }, 2000);
+}
+
+// ── DUPLICATE PREVIOUS MONTH ──────────────────────────────
+// Copies last month's shifts onto the currently-viewed month, mapping
+// each shift to the same weekday + "which occurrence of that weekday"
+// (e.g. the 2nd Tuesday -> the 2nd Tuesday) since most bartenders work
+// a fixed weekly pattern. If the target month doesn't have that many
+// occurrences of the weekday, it falls back one week earlier rather
+// than dropping the shift. Slots the target month already has
+// (same date/staff/role/period) are skipped, so it's safe to re-run.
+async function duplicatePreviousMonth() {
+  if (!canSchedule()) return;
+  const targetYear = scheduleCursor.getFullYear();
+  const targetMonth = scheduleCursor.getMonth();
+  const prevCursor = new Date(targetYear, targetMonth - 1, 1);
+  const prevYear = prevCursor.getFullYear();
+  const prevMonth = prevCursor.getMonth();
+  const monthLabel = scheduleCursor.toLocaleString('default', { month: 'long', year: 'numeric' });
+  const prevLabel = prevCursor.toLocaleString('default', { month: 'long', year: 'numeric' });
+
+  if (!confirm('Copy ' + prevLabel + '’s shift assignments into ' + monthLabel + '? Slots that already have someone assigned won’t be touched.')) return;
+
+  const prevStart = toDateStr(new Date(prevYear, prevMonth, 1));
+  const prevEnd = toDateStr(new Date(prevYear, prevMonth + 1, 0));
+  const { data: prevShifts, error } = await window.supabase.from('shifts').select('*').gte('shift_date', prevStart).lte('shift_date', prevEnd);
+  if (error) { toast('Error: ' + error.message, true); return; }
+  if (!prevShifts || !prevShifts.length) { toast('No shifts found in ' + prevLabel, true); return; }
+
+  const targetStart = toDateStr(new Date(targetYear, targetMonth, 1));
+  const targetEnd = toDateStr(new Date(targetYear, targetMonth + 1, 0));
+  const { data: existingTarget, error: exErr } = await window.supabase.from('shifts').select('shift_date,staff_id,role,period').gte('shift_date', targetStart).lte('shift_date', targetEnd);
+  if (exErr) { toast('Error: ' + exErr.message, true); return; }
+  const existingKeys = new Set((existingTarget || []).map((s) => s.shift_date + '|' + s.staff_id + '|' + s.role + '|' + (s.period || '')));
+
+  const daysInTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+  const targetFirstDow = new Date(targetYear, targetMonth, 1).getDay();
+  const seenKeys = new Set();
+  const toInsert = [];
+  prevShifts.forEach((s) => {
+    const srcDate = new Date(s.shift_date + 'T00:00:00');
+    const dow = srcDate.getDay();
+    const occurrence = Math.floor((srcDate.getDate() - 1) / 7) + 1;
+    let day = 1 + ((dow - targetFirstDow + 7) % 7) + (occurrence - 1) * 7;
+    if (day > daysInTargetMonth) day -= 7;
+    if (day < 1) return;
+    const targetDateStr = targetYear + '-' + String(targetMonth + 1).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+    const key = targetDateStr + '|' + s.staff_id + '|' + s.role + '|' + (s.period || '');
+    if (existingKeys.has(key) || seenKeys.has(key)) return;
+    seenKeys.add(key);
+    toInsert.push({ shift_date: targetDateStr, staff_id: s.staff_id, role: s.role, period: s.period, start_time: s.start_time, end_time: s.end_time, notes: s.notes });
+  });
+
+  if (!toInsert.length) { toast('Nothing new to copy — those slots are already filled', true); return; }
+
+  const { data: inserted, error: insErr } = await window.supabase.from('shifts').insert(toInsert).select();
+  if (insErr) { toast('Error: ' + insErr.message, true); return; }
+  logAudit('duplicate_month', 'shifts', null, { from: prevLabel, to: monthLabel, count: toInsert.length });
+  toast('Copied ' + toInsert.length + ' shift(s) from ' + prevLabel);
+  loadScheduleRange();
 }
 
 // ── CLEAR SCHEDULE ────────────────────────────────────────

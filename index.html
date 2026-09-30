@@ -115,6 +115,7 @@
           <button class="sub-tab" id="scheduletab-btn-calendar" onclick="setScheduleTab('calendar', this)">Calendar</button>
           <button class="sub-tab" id="scheduletab-btn-bulk" onclick="setScheduleTab('bulk', this)">Scheduling</button>
           <button class="sub-tab" id="scheduletab-btn-events" onclick="setScheduleTab('events', this)">Events</button>
+          <button class="sub-tab" id="scheduletab-btn-metrics" onclick="setScheduleTab('metrics', this)">Metrics</button>
           <button class="sub-tab" id="scheduletab-btn-settings" onclick="setScheduleTab('settings', this)">Settings</button>
         </div>
 
@@ -172,7 +173,10 @@
               <button class="btn btn-secondary btn-sm" onclick="scheduleShiftPeriod(1)">&rarr;</button>
               <button class="btn btn-secondary btn-sm" onclick="scheduleGoToday()">Today</button>
             </div>
-            <button class="btn btn-danger btn-sm" id="btn-clear-schedule" style="display:none;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);" onclick="openClearScheduleModal()">Clear Schedule</button>
+            <div id="schedule-admin-actions" style="display:none;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);gap:8px;">
+              <button class="btn btn-secondary btn-sm" id="btn-duplicate-month" onclick="duplicatePreviousMonth()">Duplicate Last Month</button>
+              <button class="btn btn-danger btn-sm" id="btn-clear-schedule" onclick="openClearScheduleModal()">Clear Schedule</button>
+            </div>
             <div style="display:flex;gap:6px;">
               <button class="tap-toggle-btn active" id="cal-view-month" onclick="setScheduleView('month')">Month</button>
               <button class="tap-toggle-btn" id="cal-view-week" onclick="setScheduleView('week')">Week</button>
@@ -329,6 +333,20 @@
               <div id="events-list"><div class="loading">Loading...</div></div>
             </div>
           </div>
+        </div>
+
+        <!-- METRICS -->
+        <div class="sub-sec" id="scheduletab-metrics">
+          <div class="menu-col-header">
+            <div style="display:flex;align-items:center;gap:14px;">
+              <button class="btn btn-secondary btn-sm" onclick="metricsMonth(-1)">&larr;</button>
+              <div class="section-label" style="margin:0;font-size:16px;letter-spacing:1px;" id="metrics-month-label">Month</div>
+              <button class="btn btn-secondary btn-sm" onclick="metricsMonth(1)">&rarr;</button>
+            </div>
+          </div>
+          <div id="metrics-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:24px;"></div>
+          <div class="section-label">Staff Breakdown</div>
+          <div id="metrics-body"><div class="loading">Loading...</div></div>
         </div>
 
         <!-- SETTINGS -->
@@ -1181,6 +1199,7 @@
   <script src="js/recurring.js"></script>
   <script src="js/myshifts.js"></script>
   <script src="js/events.js"></script>
+  <script src="js/metrics.js"></script>
   <script src="js/bingo.js"></script>
 </body>
 </html>
