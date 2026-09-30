@@ -406,6 +406,11 @@ create table shifts (
   -- row (MOD is a day-level assignment, not tied to a specific period).
   period text check (period in ('morning','evening')),
   notes text,
+  -- Set when a staffer self-claims a shift that was posted with no
+  -- staff_id (see migration_032) — stays stamped even after staff_id
+  -- is filled in, so "was this originally open" survives the claim.
+  claimed_by uuid references staff_profiles(id) on delete set null,
+  claimed_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -1361,6 +1366,12 @@ create policy "staff write uthere" on lvbc_u_there for all using (is_staff()) wi
 create policy "staff read shifts" on shifts for select using (is_staff());
 create policy "schedulers write shifts" on shifts for all
   using (can_schedule()) with check (can_schedule());
+
+-- Any staffer can claim a shift that's currently open, but only onto
+-- themselves — see migration_032.
+create policy "staff claim open shifts" on shifts for update
+  using (is_staff() and staff_id is null)
+  with check (staff_id = auth.uid() and claimed_by = auth.uid());
 
 create policy "staff read shift_day_settings" on shift_day_settings for select using (is_staff());
 create policy "schedulers write shift_day_settings" on shift_day_settings for all

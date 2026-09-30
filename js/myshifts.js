@@ -38,7 +38,45 @@ async function loadMyShifts() {
   renderOneOffBlackoutList();
   renderBlackoutDatePicker();
   await loadMyShiftsMonth();
+  await loadOpenShiftsList();
   await loadCoverageRequestsList();
+}
+
+// ── OPEN SHIFTS (never assigned, anyone can claim) ────────
+async function loadOpenShiftsList() {
+  const el = document.getElementById('open-shifts-list');
+  el.innerHTML = '<div class="loading">Loading...</div>';
+  const todayStr = toDateStr(new Date());
+  const { data, error } = await window.supabase.from('shifts').select('*').is('staff_id', null).gte('shift_date', todayStr).order('shift_date');
+  if (error) { el.innerHTML = '<div class="loading">Error: ' + escHtml(error.message) + '</div>'; return; }
+  renderOpenShiftsList(data || []);
+}
+
+function renderOpenShiftsList(shifts) {
+  const el = document.getElementById('open-shifts-list');
+  if (!shifts.length) { el.innerHTML = '<div class="loading">No open shifts right now</div>'; return; }
+  el.innerHTML = shifts.map((s) => {
+    const d = new Date(s.shift_date + 'T00:00:00');
+    const setting = scheduleDaySettings.find((x) => x.day_of_week === d.getDay()) || {};
+    const label = s.role === 'manager' ? 'Manager on Duty' : shiftSlotLabel(setting, s.period);
+    return '<div class="shift-row"><div><div class="shift-row-name">' + d.toLocaleDateString('default', { weekday: 'short', month: 'short', day: 'numeric' }) + ' · ' + escHtml(label) + '</div>'
+      + '<div class="shift-row-meta">' + (s.start_time ? fmtTime(s.start_time) + (s.end_time ? '–' + fmtTime(s.end_time) : '') : '') + '</div></div>'
+      + '<button class="btn btn-sm btn-primary" onclick="claimOpenShift(\'' + s.id + '\')">Claim This Shift</button></div>';
+  }).join('');
+}
+
+// Filters the update to rows still unassigned (staff_id is null) so
+// two people clicking "Claim" on the same shift can't both win it.
+async function claimOpenShift(shiftId) {
+  const now = new Date().toISOString();
+  const { data, error } = await window.supabase.from('shifts')
+    .update({ staff_id: window.currentStaff.id, claimed_by: window.currentStaff.id, claimed_at: now })
+    .eq('id', shiftId).is('staff_id', null).select();
+  if (error) { toast('Error: ' + error.message, true); return; }
+  if (!data || !data.length) { toast('Someone already claimed that shift', true); loadOpenShiftsList(); return; }
+  toast('Shift claimed — it\'s yours now');
+  loadOpenShiftsList();
+  loadMyShiftsMonth();
 }
 
 // ── COVERAGE REQUESTS (open, from any staffer) ────────────

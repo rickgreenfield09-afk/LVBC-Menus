@@ -31,6 +31,12 @@ function staffName(id) {
   return s ? s.name : 'Unassigned';
 }
 
+// A shift with no staff_id is "open" — posted by a scheduler with no
+// one picked, for any staffer to claim on My Shifts (see migration_032).
+function shiftDisplayName(s) {
+  return s.staff_id ? staffName(s.staff_id) : 'Open';
+}
+
 function fmtTime(t) {
   if (!t) return '';
   const [h, m] = t.split(':');
@@ -87,10 +93,13 @@ function shiftSlotLabel(setting, period) {
 // slot and everyone else for a bartender slot — keyed off the
 // person's actual job (staff_profiles.position), not their portal
 // permission role (see migration_017).
-function populateStaffSelect(selectEl, roleFilter) {
+function populateStaffSelect(selectEl, roleFilter, allowOpen) {
   const list = scheduleStaff.filter((s) => (roleFilter === 'manager' ? s.position === 'manager' : s.position !== 'manager'));
   const prev = selectEl.value;
-  selectEl.innerHTML = '<option value="" disabled selected>Select staff member</option>' + list.map((s) => '<option value="' + s.id + '">' + escHtml(s.name) + '</option>').join('');
+  const firstOption = allowOpen
+    ? '<option value="">Leave shift open (unassigned)</option>'
+    : '<option value="" disabled selected>Select staff member</option>';
+  selectEl.innerHTML = firstOption + list.map((s) => '<option value="' + s.id + '">' + escHtml(s.name) + '</option>').join('');
   if (list.some((s) => s.id === prev)) selectEl.value = prev;
 }
 
@@ -108,7 +117,10 @@ async function loadSchedule() {
     document.getElementById(id).disabled = !admin;
   });
 
-  setScheduleTab('myshifts', document.getElementById('scheduletab-btn-myshifts'));
+  // Admins land on the Metrics dashboard first — My Shifts stays the
+  // landing tab for everyone else, since that's all they can see.
+  const landingTab = admin ? 'metrics' : 'myshifts';
+  setScheduleTab(landingTab, document.getElementById('scheduletab-btn-' + landingTab));
 }
 
 function setScheduleTab(tab, btn) {
@@ -241,7 +253,7 @@ function dayCellHtml(dateObj, extraClass) {
 
   let html = '<div class="' + cls + '" onclick="openShiftModal(\'' + dateStr + '\')">';
   html += '<div class="cal-day-num">' + dateObj.getDate() + '</div>';
-  dayLevelMods.forEach((m) => { html += '<div class="cal-mod-pill">MOD: ' + escHtml(staffName(m.staff_id)) + '</div>'; });
+  dayLevelMods.forEach((m) => { html += '<div class="cal-mod-pill' + (m.staff_id ? '' : ' open') + '">MOD: ' + escHtml(shiftDisplayName(m)) + '</div>'; });
   html += '<div class="cal-day-split">';
   halves.forEach((period) => {
     const prefix = period === 'morning' ? 'AM' : 'PM';
@@ -263,10 +275,10 @@ function dayCellHtml(dateObj, extraClass) {
       if (o.event_type === 'vfw' && o.staff_id) html += '<div class="cal-pill-emp">' + prefix + '-' + escHtml(staffName(o.staff_id)) + '</div>';
     });
     dayShifts.filter((s) => s.role === 'manager' && s.period === period).forEach((s) => {
-      html += '<div class="cal-mod-pill">' + prefix + '-MOD: ' + escHtml(staffName(s.staff_id)) + '</div>';
+      html += '<div class="cal-mod-pill' + (s.staff_id ? '' : ' open') + '">' + prefix + '-MOD: ' + escHtml(shiftDisplayName(s)) + '</div>';
     });
     dayShifts.filter((s) => s.role === 'bartender' && s.period === period).forEach((s) => {
-      html += '<div class="cal-pill-emp">' + prefix + '-' + escHtml(staffName(s.staff_id)) + '</div>';
+      html += '<div class="cal-pill-emp' + (s.staff_id ? '' : ' open') + '">' + prefix + '-' + escHtml(shiftDisplayName(s)) + '</div>';
     });
     html += '</div>';
   });
@@ -430,7 +442,7 @@ function onShiftModalRoleChange() {
   const dow = new Date(scheduleActiveDate + 'T00:00:00').getDay();
   const setting = scheduleDaySettings.find((s) => s.day_of_week === dow) || {};
   const { role, period } = parsePosition(document.getElementById('sm-role').value || 'bartender:morning');
-  populateStaffSelect(document.getElementById('sm-staff'), role);
+  populateStaffSelect(document.getElementById('sm-staff'), role, true);
   const start = period === 'morning' ? setting.morning_start : setting.evening_start;
   const end = period === 'morning' ? setting.morning_end : setting.evening_end;
   document.getElementById('sm-start').value = (start || '').slice(0, 5);
@@ -455,7 +467,7 @@ function renderShiftModalList() {
     const periodTag = s.period ? (s.period === 'morning' ? ' (AM)' : ' (PM)') : '';
     const label = s.role === 'manager' ? 'Manager on Duty' + periodTag : shiftSlotLabel(setting, s.period);
     return '<div class="shift-row">'
-      + '<div><div class="shift-row-name">' + escHtml(staffName(s.staff_id)) + (s.role === 'manager' ? ' <span class="badge badge-amber">MOD' + periodTag + '</span>' : '') + '</div>'
+      + '<div><div class="shift-row-name">' + escHtml(shiftDisplayName(s)) + (s.role === 'manager' ? ' <span class="badge badge-amber">MOD' + periodTag + '</span>' : '') + (!s.staff_id ? ' <span class="badge badge-teal">Open</span>' : '') + '</div>'
       + '<div class="shift-row-meta">' + label + (s.start_time ? ' · ' + fmtTime(s.start_time) + (s.end_time ? '–' + fmtTime(s.end_time) : '') : '') + (s.notes ? ' · ' + escHtml(s.notes) : '') + '</div></div>'
       + (editing ? '<button class="btn btn-sm btn-danger" onclick="deleteShift(\'' + s.id + '\')">Remove</button>' : '')
       + '</div>';
@@ -464,8 +476,7 @@ function renderShiftModalList() {
 
 async function addShift() {
   if (!canEditInModal()) return;
-  const staffId = document.getElementById('sm-staff').value;
-  if (!staffId) { toast('Select a staff member', true); return; }
+  const staffId = document.getElementById('sm-staff').value || null;
   const { role, period } = parsePosition(document.getElementById('sm-role').value);
   const payload = {
     shift_date: scheduleActiveDate,
@@ -482,7 +493,7 @@ async function addShift() {
   renderShiftModalList();
   renderScheduleCalendar();
   logAudit('add_shift', 'shifts', data.id, { shift_date: data.shift_date, staff_id: data.staff_id, role, period });
-  toast('Shift added');
+  toast(staffId ? 'Shift added' : 'Open shift posted');
 }
 
 async function deleteShift(id) {
