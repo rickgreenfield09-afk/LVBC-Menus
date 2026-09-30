@@ -27,6 +27,8 @@ create table staff_profiles (
   email text,
   -- self-service profile photo — see migration_019.
   photo_url text,
+  -- gets the Music Bingo materials email on print — see migration_031.
+  receives_bingo_materials boolean not null default false,
   created_at timestamptz not null default now()
 );
 
@@ -52,6 +54,7 @@ begin
     new.position := old.position;
     new.can_schedule := old.can_schedule;
     new.email := old.email;
+    new.receives_bingo_materials := old.receives_bingo_materials;
   end if;
   return new;
 end;
@@ -757,7 +760,11 @@ create table bingo_games (
   -- [{date, time, name}] as printed on the sheet (event week) and the
   -- slideshow's between-rounds slide (next 2 weeks)
   sheet_events jsonb not null default '[]'::jsonb,
-  slide_events jsonb not null default '[]'::jsonb
+  slide_events jsonb not null default '[]'::jsonb,
+  -- last materials email (migration_031)
+  materials_emailed_at timestamptz,
+  materials_emailed_to text[],
+  materials_email_error text
 );
 
 create table bingo_game_rounds (

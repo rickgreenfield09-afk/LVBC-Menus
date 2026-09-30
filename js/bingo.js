@@ -1090,13 +1090,51 @@ async function printBingoGame() {
     toast('Game saved — open the card sheets and slideshow on the right');
     document.getElementById('bingo-game-output').innerHTML = '<div style="font-weight:500;margin-bottom:4px;">Game for ' + escHtml(bingoFmtDate(eventDate)) + ' is ready.</div>'
       + '<div style="font-size:12px;color:var(--sub);margin-bottom:14px;">' + sheets + ' sheets · ' + pls.map((p) => escHtml(p.title)).join(' · ') + '</div>'
-      + bingoOutputButtons(gameId);
+      + bingoOutputButtons(gameId)
+      + '<div id="bingo-email-status" style="font-size:12px;margin-top:12px;"></div>';
     await bingoLoadPlaylists();
     document.getElementById('bingo-game-rounds').innerHTML = '';
     renderBingoRounds();
+    // Runs in the background; its status shows under the buttons.
+    emailBingoGameMaterials(gameId, 'bingo-email-status');
   } finally {
     btn.disabled = false; btn.textContent = 'Print Game';
   }
+}
+
+// Emails PDFs of the card sheets, slideshow and call sheet to everyone
+// set to receive Music Bingo materials (api/email-bingo-game.js,
+// migration_031). The pages are rendered here with the same code that
+// opens them for printing, so the PDFs match exactly.
+async function emailBingoGameMaterials(gameId, statusElId) {
+  const status = (html, color) => {
+    const el = statusElId && document.getElementById(statusElId);
+    if (el) el.innerHTML = '<span style="color:' + (color || 'var(--sub)') + ';">' + html + '</span>';
+  };
+  status('Emailing PDFs of the cards, slideshow and call sheet… (this can take up to a minute)');
+  try {
+    const g = await bingoLoadGame(gameId);
+    if (!g) throw new Error('Could not load the game');
+    const cards = bingoCardSheetsHtml(g);
+    const slideshow = bingoSlideshowHtml(g);
+    const callsheet = bingoCallSheetHtml(await bingoAttachClips(g));
+    const r = await bingoApi('email-bingo-game', { game_id: gameId, files: { cards, slideshow, callsheet } });
+    if (r.skipped) { status('&#9888; Not emailed: ' + escHtml(r.reason), 'var(--amber)'); toast(r.reason, true); return r; }
+    status('&#10003; Emailed to ' + r.sent_to.map((s) => escHtml(s.replace(/\s*<.*>$/, ''))).join(', '), 'var(--teal)');
+    toast('Game materials emailed to ' + r.sent_to.length + ' ' + (r.sent_to.length === 1 ? 'person' : 'people'));
+    return r;
+  } catch (e) {
+    status('&#9888; Email failed: ' + escHtml(e.message) + ' — use Email Again on the History tab.', 'var(--red)');
+    toast('Emailing the game materials failed: ' + e.message, true);
+    return null;
+  }
+}
+
+async function emailBingoGameAgain(gameId) {
+  const btn = document.getElementById('bingo-email-btn-' + gameId);
+  if (btn) { btn.disabled = true; btn.textContent = 'Emailing…'; }
+  await emailBingoGameMaterials(gameId, 'bingo-email-hist-' + gameId);
+  await loadBingoHistory();
 }
 
 function bingoOutputButtons(gameId) {
@@ -1110,7 +1148,7 @@ function bingoOutputButtons(gameId) {
 async function loadBingoHistory() {
   const el = document.getElementById('bingo-history-list');
   const { data, error } = await window.supabase.from('bingo_games')
-    .select('id, event_date, printed_on, sheet_count, cooldown_overridden, staff_profiles(name), bingo_game_rounds(round_no, playlist_title, pattern_name), bingo_game_topoffs(from_sheet, to_sheet, printed_at)')
+    .select('id, event_date, printed_on, sheet_count, cooldown_overridden, materials_emailed_at, materials_emailed_to, materials_email_error, staff_profiles(name), bingo_game_rounds(round_no, playlist_title, pattern_name), bingo_game_topoffs(from_sheet, to_sheet, printed_at)')
     .order('printed_at', { ascending: false }).limit(100);
   if (error) { el.innerHTML = '<div class="loading">Error: ' + escHtml(error.message) + '</div>'; return; }
   if (!data || !data.length) { el.innerHTML = '<div class="loading">No games printed yet.</div>'; return; }
@@ -1127,9 +1165,11 @@ async function loadBingoHistory() {
           + topoffs.map((t) => '<div style="font-size:11px;"><a href="#" style="color:var(--teal);" title="Reprint just this batch" onclick="openBingoCardSheets(\'' + g.id + '\',' + t.from_sheet + ',' + t.to_sheet + ');return false;">+'
             + (t.to_sheet - t.from_sheet + 1) + ' (sheets ' + t.from_sheet + '–' + t.to_sheet + ')</a></div>').join('') : '')
         + '</td>'
-        + '<td style="font-size:12px;">' + bingoFmtDate(g.printed_on) + '<div style="font-size:11px;color:var(--sub);">' + escHtml(g.staff_profiles ? g.staff_profiles.name : '') + '</div></td>'
+        + '<td style="font-size:12px;">' + bingoFmtDate(g.printed_on) + '<div style="font-size:11px;color:var(--sub);">' + escHtml(g.staff_profiles ? g.staff_profiles.name : '') + '</div>'
+        + '<div id="bingo-email-hist-' + g.id + '" style="font-size:11px;margin-top:4px;">' + bingoEmailStatusHtml(g) + '</div></td>'
         + '<td>' + bingoOutputButtons(g.id)
         + '<div style="display:flex;gap:8px;margin-top:6px;"><button class="btn btn-secondary btn-sm" onclick="topOffBingoGame(\'' + g.id + '\', ' + g.sheet_count + ')">Top Off</button>'
+        + '<button class="btn btn-secondary btn-sm" id="bingo-email-btn-' + g.id + '" onclick="emailBingoGameAgain(\'' + g.id + '\')">' + (g.materials_emailed_at ? 'Email Again' : 'Email') + '</button>'
         + (bingoIsAdmin() ? '<button class="btn btn-danger btn-sm" onclick="deleteBingoGame(\'' + g.id + '\', \'' + g.event_date + '\')">Delete</button>' : '')
         + '</div></td></tr>';
     }).join('')
@@ -1137,6 +1177,16 @@ async function loadBingoHistory() {
     + '<div style="font-size:11px;color:var(--muted);margin-top:8px;">Reopening a past game reprints the exact same cards and doesn\'t count as another use.'
     + ' Top Off prints extra sheets for the same game — every new card is different from every card already printed for it.'
     + (bingoIsAdmin() ? ' Deleting a game undoes its use: counts go back down and its playlists return to their previous last-used date.' : '') + '</div>';
+}
+
+function bingoEmailStatusHtml(g) {
+  // A success clears the error, so an error here is always the latest attempt.
+  if (g.materials_email_error) return '<span style="color:var(--red);" title="' + escHtml(g.materials_email_error) + '">&#9888; Last email failed (hover for why)</span>';
+  if (g.materials_emailed_at) {
+    const who = (g.materials_emailed_to || []).map((e) => escHtml(e.split('@')[0])).join(', ');
+    return '<span style="color:var(--teal);">&#10003; Emailed ' + escHtml(bingoFmtDate(toDateStr(new Date(g.materials_emailed_at)), { month: 'short', day: 'numeric' })) + (who ? ' to ' + who : '') + '</span>';
+  }
+  return '<span style="color:var(--muted);">Not emailed</span>';
 }
 
 // Extra sheets for a game already printed (migration_029). New sheets

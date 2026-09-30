@@ -1,0 +1,8 @@
+{
+  "functions": {
+    "api/email-bingo-game.js": {
+      "maxDuration": 120,
+      "includeFiles": "node_modules/@sparticuz/chromium/bin/**"
+    }
+  }
+}

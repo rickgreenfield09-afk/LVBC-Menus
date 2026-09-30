@@ -42,7 +42,8 @@ function renderStaffRoster() {
     return '<tr style="cursor:pointer' + (sel ? ';background:rgba(42,184,166,0.06)' : '') + '" onclick="pickStaff(\'' + s.id + '\')">'
       + '<td style="font-weight:500' + (sel ? ';color:var(--teal)' : '') + '">' + escHtml(s.name) + '</td>'
       + '<td style="font-size:12px;color:var(--sub)">' + escHtml(s.email || '')
-      + (staffHasLogin(s) ? '' : (s.email ? ' ' : '') + '<span style="font-size:11px;color:var(--red)">No login</span>') + '</td>'
+      + (staffHasLogin(s) ? '' : (s.email ? ' ' : '') + '<span style="font-size:11px;color:var(--red)">No login</span>')
+      + (s.receives_bingo_materials ? ' <span class="badge badge-purple" title="Gets the Music Bingo materials email">Bingo emails</span>' : '') + '</td>'
       + '<td style="font-size:12px;color:var(--sub)">' + (POSITION_LABELS[s.position] || '') + '</td>'
       + '<td>' + roleBadge + '</td>'
       + '<td style="font-size:12px;color:var(--sub)">' + (s.can_schedule ? 'Yes' : 'No') + '</td>'
@@ -68,6 +69,9 @@ function loadStaffIntoForm(s) {
   document.getElementById('staff-role').value = s.role || 'user';
   document.getElementById('staff-position').value = s.position || 'bartender';
   document.getElementById('staff-can-schedule').checked = !!s.can_schedule;
+  // Only offered when editing — a new invite has no profile to flag yet.
+  document.getElementById('staff-bingo-email-group').style.display = '';
+  document.getElementById('staff-bingo-email').checked = !!s.receives_bingo_materials;
   document.getElementById('btn-save-staff').textContent = 'Save Changes';
   document.getElementById('staff-form-hint').textContent = staffHasLogin(s)
     ? 'Changing the email changes the address they sign in with.'
@@ -85,6 +89,8 @@ function cancelStaffEdit() {
   document.getElementById('staff-role').value = 'user';
   document.getElementById('staff-position').value = 'bartender';
   document.getElementById('staff-can-schedule').checked = false;
+  document.getElementById('staff-bingo-email-group').style.display = 'none';
+  document.getElementById('staff-bingo-email').checked = false;
   document.getElementById('btn-save-staff').textContent = 'Send Invite';
   document.getElementById('staff-form-hint').textContent = "They'll get an email to set their own password and sign in.";
   clearStaffAlert();
@@ -122,7 +128,9 @@ async function saveStaff() {
   btn.disabled = true;
 
   if (staffEditMode) {
-    const { error } = await window.supabase.from('staff_profiles').update({ name, role, position, can_schedule: canSchedule }).eq('id', selStaff);
+    const receivesBingo = document.getElementById('staff-bingo-email').checked;
+    if (receivesBingo && !email) { btn.disabled = false; staffAlert('Add an email address to send them Music Bingo materials.', true); return; }
+    const { error } = await window.supabase.from('staff_profiles').update({ name, role, position, can_schedule: canSchedule, receives_bingo_materials: receivesBingo }).eq('id', selStaff);
     if (error) { btn.disabled = false; staffAlert(error.message, true); return; }
     const s = staffRoster.find((x) => x.id === selStaff);
     const emailChanged = email && email.toLowerCase() !== ((s && s.email) || '').toLowerCase();
