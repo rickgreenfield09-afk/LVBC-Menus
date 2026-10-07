@@ -879,6 +879,64 @@ create or replace function record_merch_count(
         source = 'app';
 $$ language sql;
 
+-- ---------- ASSIGNMENTS (see migration_037 for the full rationale) ----------
+-- Responsibilities that belong to a shift, not a person: inventory
+-- counts, cleaning, opening, closing. frequency is daily / weekly /
+-- quarterly / adhoc; a completion is one row per task per occurrence
+-- (due_key = the date, YYYY-Qn, or 'adhoc').
+create table assignment_tasks (
+  id uuid primary key default gen_random_uuid(),
+  title text not null check (length(trim(title)) > 0),
+  category text not null check (category in ('inventory','cleaning','opening','closing')),
+  instructions text,
+  frequency text not null check (frequency in ('daily','weekly','quarterly','adhoc')),
+  period text not null check (period in ('morning','evening')),
+  day_of_week int check (day_of_week between 0 and 6), -- 0=Sun...6=Sat
+  due_date date,
+  is_active boolean not null default true,
+  created_by uuid references staff_profiles(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint assignment_tasks_shape check (
+    (frequency = 'daily' and day_of_week is null and due_date is null) or
+    (frequency = 'weekly' and day_of_week is not null and due_date is null) or
+    (frequency = 'quarterly' and due_date is null) or
+    (frequency = 'adhoc' and due_date is not null and day_of_week is null)
+  )
+);
+
+create trigger assignment_tasks_set_updated_at
+  before update on assignment_tasks
+  for each row execute function set_updated_at();
+
+create table assignment_task_targets (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references assignment_tasks(id) on delete cascade,
+  item_id uuid references inventory_items(id) on delete cascade,
+  merch_style_id uuid references inventory_merch_styles(id) on delete cascade,
+  -- where to count the merch style; null for percent items
+  location_id uuid references inventory_locations(id) on delete cascade,
+  constraint assignment_task_targets_shape check (
+    (item_id is not null and merch_style_id is null and location_id is null) or
+    (item_id is null and merch_style_id is not null and location_id is not null)
+  ),
+  constraint assignment_task_targets_uq unique nulls not distinct (task_id, item_id, merch_style_id, location_id)
+);
+
+create index assignment_task_targets_task_idx on assignment_task_targets (task_id);
+
+create table assignment_completions (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references assignment_tasks(id) on delete cascade,
+  due_key text not null,
+  completed_on date not null default current_date,
+  completed_at timestamptz not null default now(),
+  completed_by uuid references staff_profiles(id) on delete set null,
+  unique (task_id, due_key)
+);
+
+create index assignment_completions_date_idx on assignment_completions (completed_on);
+
 -- ---------- MUSIC BINGO (see migration_025 for the full rationale) ----------
 -- ---------- SONG LIBRARY ----------
 create table bingo_songs (
@@ -1543,6 +1601,9 @@ alter table inventory_merch_counts enable row level security;
 alter table inventory_merch_styles enable row level security;
 alter table inventory_merch_stock enable row level security;
 alter table inventory_locations enable row level security;
+alter table assignment_tasks enable row level security;
+alter table assignment_task_targets enable row level security;
+alter table assignment_completions enable row level security;
 
 -- staff_profiles: staff can read the roster; only admins manage roles;
 -- anyone can update their OWN row (name/photo only — see the trigger
@@ -1693,6 +1754,22 @@ create policy "staff update inventory photos" on storage.objects for update
   with check (bucket_id = 'assets' and (storage.foldername(name))[1] = 'inventory' and is_staff());
 create policy "staff delete inventory photos" on storage.objects for delete
   using (bucket_id = 'assets' and (storage.foldername(name))[1] = 'inventory' and is_staff());
+
+create policy "staff read assignment_tasks" on assignment_tasks for select using (is_staff());
+create policy "schedulers write assignment_tasks" on assignment_tasks for all
+  using (can_schedule()) with check (can_schedule());
+
+create policy "staff read assignment_task_targets" on assignment_task_targets for select using (is_staff());
+create policy "schedulers write assignment_task_targets" on assignment_task_targets for all
+  using (can_schedule()) with check (can_schedule());
+
+-- Any staffer can check a task off as themselves and undo their own
+-- check; schedulers can also mark or clear on anyone's behalf.
+create policy "staff read assignment_completions" on assignment_completions for select using (is_staff());
+create policy "staff complete assignments" on assignment_completions for insert
+  with check (is_staff() and (completed_by = auth.uid() or can_schedule()));
+create policy "undo own or scheduler" on assignment_completions for delete
+  using (completed_by = auth.uid() or can_schedule());
 
 -- Staff-only, both read and write: PII / financial-equivalent (points) data
 create policy "staff only members" on members for all using (is_staff()) with check (is_staff());

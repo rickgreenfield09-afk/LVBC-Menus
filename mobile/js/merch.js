@@ -23,7 +23,7 @@
 // escHtml(), toDateStr(), readJson(), writeJson() (core.js),
 // mInvCountedToday(), renderInvSyncStatus(), mLocationPath(),
 // mLocationsFlat(), mPhotoHtml(), mOpenSheet(), mCloseSheet(),
-// mInvFilter (inventory.js)
+// mInvFilter (inventory.js), mTasksRefresh() (tasks.js)
 
 const M_MERCH_TYPE_LABELS = { shirt: 'Shirts', tank: 'Tanks', long_sleeve: 'Long Sleeves', sweatshirt: 'Sweatshirts', outerwear: 'Outerwear', hat: 'Hats', visor: 'Visors', drinkware: 'Drinkware', accessory: 'Accessories', other: 'Other' };
 const M_MERCH_DATA_KEY = 'lvbc-mobile-merch-data';
@@ -47,7 +47,7 @@ async function loadMerchCount() {
     window.supabase.from('inventory_merch_products').select('id,name,product_type,style_number').eq('status', 'active').order('name'),
     window.supabase.from('inventory_merch_styles').select('id,product_id,color,design,photo_url').eq('status', 'active'),
     window.supabase.from('inventory_merch_variants').select('id,style_id,size,size_sort,unit_count,needs_verification,last_checked_at').order('size_sort'),
-    window.supabase.from('inventory_merch_stock').select('variant_id,location_id,unit_count'),
+    window.supabase.from('inventory_merch_stock').select('variant_id,location_id,unit_count,last_checked_at'),
   ]);
   const failed = res.find((r) => r.error);
   if (failed) {
@@ -79,7 +79,7 @@ function mMerchApply(variantId, locKey, n, at) {
   const v = mMerchVariants.find((x) => x.id === variantId);
   if (!v) return;
   const row = mMerchStock.find((r) => r.variant_id === variantId && (r.location_id || M_MERCH_UNSPLIT) === locKey);
-  if (row) row.unit_count = n; else mMerchStock.push({ variant_id: variantId, location_id: locKey || null, unit_count: n });
+  if (row) { row.unit_count = n; row.last_checked_at = at; } else mMerchStock.push({ variant_id: variantId, location_id: locKey || null, unit_count: n, last_checked_at: at });
   if (locKey !== M_MERCH_UNSPLIT) mMerchStock = mMerchStock.filter((r) => !(r.variant_id === variantId && !r.location_id));
   v.unit_count = mMerchStock.filter((r) => r.variant_id === variantId).reduce((a, r) => a + r.unit_count, 0);
   v.last_checked_at = at;
@@ -87,6 +87,10 @@ function mMerchApply(variantId, locKey, n, at) {
 
 function mMerchStyleLabel(s) { return [s.color, s.design].filter(Boolean).join(' · '); }
 function mMerchVariantsFor(styleId) { return mMerchVariants.filter((v) => v.style_id === styleId).sort((a, b) => a.size_sort - b.size_sort); }
+// Whether this size has ever been counted at this location.
+function mMerchHasStockRow(variantId, locKey) {
+  return mMerchStock.some((r) => r.variant_id === variantId && (r.location_id || M_MERCH_UNSPLIT) === locKey);
+}
 function mMerchStockAt(variantId, locKey) {
   const row = mMerchStock.find((r) => r.variant_id === variantId && (r.location_id || M_MERCH_UNSPLIT) === locKey);
   return row ? row.unit_count : 0;
@@ -133,11 +137,12 @@ function renderMerchCount() {
 }
 
 // ── EDIT ONE STYLE ───────────────────────────────
-function openMerchEdit(styleId) {
+// presetLocKey is passed by the Tasks screen, where the assignment already says which location to count.
+function openMerchEdit(styleId, presetLocKey) {
   const located = mMerchStyleLocKeys(styleId).filter((k) => k !== M_MERCH_UNSPLIT);
   // Start at a location it's already kept in, in tree order; otherwise make the person choose.
   const start = mLocationsFlat().map((l) => l.id).find((id) => located.includes(id));
-  mMerchDraft = { styleId, locKey: start || (mLocationsFlat().length ? null : M_MERCH_UNSPLIT), byLoc: {} };
+  mMerchDraft = { styleId, locKey: presetLocKey || start || (mLocationsFlat().length ? null : M_MERCH_UNSPLIT), byLoc: {} };
   renderMerchEdit();
 }
 
@@ -172,7 +177,7 @@ function renderMerchEdit() {
     }
     html += '<label class="admin-label m-sheet-label">Units at ' + escHtml(locKey ? mLocationPath(locKey) : 'no location') + '</label><div class="m-merch-sizes">'
       + variants.map((v) => '<label class="m-merch-size' + (v.needs_verification ? ' flagged' : '') + '"><span>' + escHtml(v.size || 'Qty') + '</span>'
-        + '<input type="number" inputmode="numeric" pattern="[0-9]*" min="0" step="1" value="' + (draft[v.id] != null ? draft[v.id] : mMerchStockAt(v.id, locKey)) + '" onfocus="this.select()" oninput="setMerchDraft(\'' + v.id + '\',this.value)"></label>').join('')
+        + '<input type="number" inputmode="numeric" pattern="[0-9]*" min="0" step="1" placeholder="?" value="' + (draft[v.id] != null ? draft[v.id] : mMerchHasStockRow(v.id, locKey) ? mMerchStockAt(v.id, locKey) : '') + '" onfocus="this.select()" oninput="setMerchDraft(\'' + v.id + '\',this.value)"></label>').join('')
       + '</div>';
   }
   html += '</div><div class="m-sheet-actions"><button class="btn btn-secondary" onclick="closeMerchEdit()">Cancel</button>'
@@ -186,7 +191,8 @@ function setMerchDraft(variantId, value) { mMerchDraft.byLoc[mMerchDraft.locKey]
 
 // Save records every size at the location on screen — unchanged ones
 // too, since confirming them is the count — plus any size that was
-// edited at another location before switching.
+// edited at another location before switching. A size that has never
+// been counted at that location has to be typed in first.
 function saveMerchEdit() {
   const { styleId, locKey, byLoc } = mMerchDraft;
   const variants = mMerchVariantsFor(styleId);
@@ -195,6 +201,8 @@ function saveMerchEdit() {
     for (const v of variants) {
       const raw = byLoc[k][v.id];
       if (raw == null && k !== locKey) continue;
+      // A size never counted here starts blank, not 0 — saving a 0 nobody typed would wipe its old un-located number.
+      if ((raw == null || raw === '') && !mMerchHasStockRow(v.id, k)) { toast('Enter a count for every size — 0 if there are none here', true); return; }
       const n = raw == null ? mMerchStockAt(v.id, k) : parseInt(raw, 10);
       if (isNaN(n) || n < 0) { toast('Enter a whole number, 0 or more, for every size', true); return; }
       entries.push({ variant_id: v.id, location_id: k || null, n });
@@ -210,7 +218,8 @@ function saveMerchEdit() {
   writeJson(M_MERCH_QUEUE_KEY, queue);
   mMerchSaveCache();
   closeMerchEdit();
-  renderMerchCount();
+  if (mInvFilter === 'merch') renderMerchCount();
+  mTasksRefresh();
   toast('Saved');
   mMerchFlush();
 }

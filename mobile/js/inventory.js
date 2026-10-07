@@ -20,7 +20,8 @@
 // it sends the next time the phone is online. "Counted today" is
 // derived from last_checked_at, never stored separately.
 // Depends on: window.supabase, window.currentStaff, toast(),
-// escHtml(), toDateStr(), readJson(), writeJson() (core.js)
+// escHtml(), toDateStr(), readJson(), writeJson() (core.js),
+// mTasksRefresh() (tasks.js)
 
 const M_INV_CATEGORY_LABELS = { consumables: 'Consumables', snacks: 'Snacks', coffee: 'Coffee', wine: 'Wine', merchandise: 'Merchandise' };
 const M_INV_ITEMS_KEY = 'lvbc-mobile-inv-items';
@@ -198,7 +199,8 @@ function saveItemEdit() {
   writeJson(M_INV_QUEUE_KEY, queue);
   writeJson(M_INV_ITEMS_KEY, mInvItems);
   mCloseSheet();
-  renderInvList();
+  if (mInvFilter !== 'merch') renderInvList();
+  mTasksRefresh();
   toast('Saved');
 
   clearTimeout(mInvFlushTimer);

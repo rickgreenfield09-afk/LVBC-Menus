@@ -63,6 +63,15 @@
         <div class="card" id="m-open-shifts"><div class="loading">Loading...</div></div>
       </div>
 
+      <!-- TASKS (this shift's responsibilities) -->
+      <div class="screen" id="screen-tasks">
+        <div class="m-inv-summary">
+          <div class="card-title" style="margin:0;">This Shift</div>
+          <div class="m-inv-sync" id="m-tasks-progress" style="color:var(--teal);"></div>
+        </div>
+        <div id="m-tasks"><div class="loading">Loading...</div></div>
+      </div>
+
       <!-- INVENTORY COUNT -->
       <div class="screen" id="screen-inventory">
         <div class="m-inv-summary">
@@ -82,6 +91,7 @@
 
     <nav class="m-tabbar">
       <button class="nav-btn active" onclick="showTab('schedule', this)">Schedule</button>
+      <button class="nav-btn" onclick="showTab('tasks', this)">Tasks</button>
       <button class="nav-btn" onclick="showTab('inventory', this)">Inventory</button>
     </nav>
   </div>
@@ -91,5 +101,6 @@
   <script src="/mobile/js/schedule.js"></script>
   <script src="/mobile/js/inventory.js"></script>
   <script src="/mobile/js/merch.js"></script>
+  <script src="/mobile/js/tasks.js"></script>
 </body>
 </html>
