@@ -94,7 +94,7 @@ async function loadTasks() {
   const today = toDateStr(new Date());
   const quarterStart = today.slice(0, 5) + String(Math.floor((+today.slice(5, 7) - 1) / 3) * 3 + 1).padStart(2, '0') + '-01';
   const [tasks, targets, completions, shifts, next] = await Promise.all([
-    window.supabase.from('assignment_tasks').select('*').eq('is_active', true).order('title'),
+    window.supabase.from('assignment_tasks').select('*').eq('is_active', true).order('sort_order').order('title'),
     window.supabase.from('assignment_task_targets').select('*'),
     window.supabase.from('assignment_completions').select('*').or('due_key.eq.adhoc,completed_on.gte.' + quarterStart),
     window.supabase.from('shifts').select('shift_date,period,staff_id,role,staff:staff_id(name)').eq('shift_date', today).eq('role', 'bartender'),

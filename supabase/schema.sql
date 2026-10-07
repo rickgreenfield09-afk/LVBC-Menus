@@ -894,6 +894,8 @@ create table assignment_tasks (
   day_of_week int check (day_of_week between 0 and 6), -- 0=Sun...6=Sat
   due_date date,
   is_active boolean not null default true,
+  -- order within a category's list (migration_039); ties fall back to title
+  sort_order int not null default 0,
   -- a "special assignment": an ad hoc task handed to one employee (migration_038)
   assigned_staff_id uuid references staff_profiles(id) on delete set null,
   created_by uuid references staff_profiles(id) on delete set null,

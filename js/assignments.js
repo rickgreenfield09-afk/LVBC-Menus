@@ -107,7 +107,7 @@ function asgTasksOnShift(dateStr, slot) {
 async function loadAssignments() {
   if (!scheduleDaySettings.length) await loadStaffAndSettings();
   const [tasks, targets, items, styles] = await Promise.all([
-    window.supabase.from('assignment_tasks').select('*').order('title'),
+    window.supabase.from('assignment_tasks').select('*').order('sort_order').order('title'),
     window.supabase.from('assignment_task_targets').select('*'),
     window.supabase.from('inventory_items').select('id,name,category').order('name'),
     window.supabase.from('inventory_merch_styles').select('id,color,design,inventory_merch_products(name)').eq('status', 'active'),
@@ -192,7 +192,7 @@ function renderAssignmentsPlan() {
 function renderAssignmentsDuties() {
   const column = (cat) => {
     const tasks = asgTasks.filter((t) => t.category === cat)
-      .sort((a, b) => (a.frequency === 'daily' ? -1 : a.day_of_week) - (b.frequency === 'daily' ? -1 : b.day_of_week) || a.title.localeCompare(b.title));
+      .sort((a, b) => (a.frequency === 'daily' ? -1 : a.day_of_week) - (b.frequency === 'daily' ? -1 : b.day_of_week) || a.sort_order - b.sort_order || a.title.localeCompare(b.title));
     return '<div class="grid2-col"><div class="menu-col-header"><div><div class="section-label" style="margin:0;">' + ASG_CATEGORIES[cat] + '</div><div class="asg-task-meta">' + ASG_DUTY_NOTE[cat] + '</div></div>'
       + '<button class="btn btn-sm btn-secondary" onclick="openAssignmentForm(null,\'' + cat + '\')">+ Add</button></div><div class="card">'
       + (tasks.length ? tasks.map((t) => asgTaskChipHtml(t, t.frequency === 'daily' ? 'every open day' : ASG_DAYS[t.day_of_week] + 's')).join('') : '<div class="loading">Nothing listed yet</div>')
@@ -312,7 +312,9 @@ async function saveAssignmentTask() {
   if (d.frequency === 'adhoc' && !payload.due_date) { toast('Pick a due date', true); return; }
   const { data: saved, error } = asgEditId
     ? await window.supabase.from('assignment_tasks').update(payload).eq('id', asgEditId).select().single()
-    : await window.supabase.from('assignment_tasks').insert(Object.assign({ created_by: window.currentStaff.id }, payload)).select().single();
+    // A new task goes to the end of its type's list (migration_039).
+    : await window.supabase.from('assignment_tasks').insert(Object.assign({ created_by: window.currentStaff.id,
+      sort_order: Math.max(0, ...asgTasks.filter((t) => t.category === payload.category).map((t) => t.sort_order || 0)) + 1 }, payload)).select().single();
   if (error) { toast(error.message, true); return; }
 
   // Targets are replaced wholesale — simpler than diffing, and a task only has a handful.
