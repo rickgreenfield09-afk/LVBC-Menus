@@ -56,6 +56,9 @@
         <div class="section-label" style="margin-top:0;">My Upcoming Shifts</div>
         <div class="card" id="m-my-shifts"><div class="loading">Loading...</div></div>
 
+        <div class="section-label">Coverage Requests</div>
+        <div class="card" id="m-coverage-requests"><div class="loading">Loading...</div></div>
+
         <div class="section-label">Open Shifts</div>
         <div class="card" id="m-open-shifts"><div class="loading">Loading...</div></div>
       </div>
@@ -72,18 +75,11 @@
         <div class="m-chips" id="m-inv-chips"></div>
         <div id="m-inv-list"><div class="loading">Loading...</div></div>
       </div>
-
-      <!-- TIME OFF -->
-      <div class="screen" id="screen-timeoff">
-        <div class="section-label" style="margin-top:0;">Time Off</div>
-        <div class="card" id="m-timeoff"></div>
-      </div>
     </main>
 
     <nav class="m-tabbar">
       <button class="nav-btn active" onclick="showTab('schedule', this)">Schedule</button>
       <button class="nav-btn" onclick="showTab('inventory', this)">Inventory</button>
-      <button class="nav-btn" onclick="showTab('timeoff', this)">Time Off</button>
     </nav>
   </div>
 
@@ -91,6 +87,5 @@
   <script src="/mobile/js/core.js"></script>
   <script src="/mobile/js/schedule.js"></script>
   <script src="/mobile/js/inventory.js"></script>
-  <script src="/mobile/js/timeoff.js"></script>
 </body>
 </html>

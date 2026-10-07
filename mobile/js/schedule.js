@@ -1,13 +1,21 @@
 // schedule.js (mobile)
 // Screen: #screen-schedule — the light version of My Shifts
 // (js/myshifts.js): the signed-in staffer's upcoming shifts as a list,
-// plus open shifts anyone can claim. Building or editing the schedule
-// stays on the desktop panel.
+// asking for coverage on one of them, covering someone else's request,
+// and claiming open shifts. Building or editing the schedule stays on
+// the desktop panel.
+//
+// Covering a request only marks it claimed (migration_015) — it does
+// not move the shift. A scheduler still reassigns it on the desktop
+// panel, same as when a request is claimed there.
 // Depends on: window.supabase, window.currentStaff, toast(),
 // escHtml(), toDateStr(), fmtTime() (core.js)
 
 let mDaySettings = [];
 let mMyStaffIds = [];
+let mMyShifts = [];
+let mMyShiftRequests = [];
+let mCoverFormShiftId = null;
 
 // Same rule as js/schedule.js — a "morning" slot that starts at noon
 // or later (Sunday) reads as Afternoon.
@@ -37,29 +45,126 @@ async function loadSchedule() {
     mDaySettings = data || [];
   }
   mMyStaffIds = await resolveMyStaffIds();
-  await Promise.all([loadMyUpcomingShifts(), loadOpenShifts()]);
+  await Promise.all([loadMyUpcomingShifts(), loadCoverageRequests(), loadOpenShifts()]);
 }
 
-function shiftRowHtml(s, actionHtml) {
+function shiftRowHtml(s, actionHtml, metaExtraHtml) {
   const d = new Date(s.shift_date + 'T00:00:00');
   const setting = mDaySettings.find((x) => x.day_of_week === d.getDay()) || {};
   const label = s.role === 'manager' ? 'Manager on Duty' : shiftSlotLabel(setting, s.period);
   const isToday = s.shift_date === toDateStr(new Date());
+  const time = s.start_time ? fmtTime(s.start_time) + (s.end_time ? '–' + fmtTime(s.end_time) : '') : '';
   return '<div class="shift-row"><div>'
     + '<div class="shift-row-name">' + d.toLocaleDateString('default', { weekday: 'short', month: 'short', day: 'numeric' }) + ' · ' + escHtml(label)
     + (isToday ? ' <span class="badge badge-teal">Today</span>' : '') + '</div>'
-    + '<div class="shift-row-meta">' + (s.start_time ? fmtTime(s.start_time) + (s.end_time ? '–' + fmtTime(s.end_time) : '') : '') + '</div>'
+    + '<div class="shift-row-meta">' + [time, metaExtraHtml].filter(Boolean).join(' · ') + '</div>'
     + '</div>' + (actionHtml || '') + '</div>';
 }
 
-// ── MY UPCOMING SHIFTS ────────────────────────────────────
+// ── MY UPCOMING SHIFTS (+ asking for coverage) ────────────
 async function loadMyUpcomingShifts() {
   const el = document.getElementById('m-my-shifts');
   const { data, error } = await window.supabase.from('shifts').select('*')
     .in('staff_id', mMyStaffIds).gte('shift_date', toDateStr(new Date())).order('shift_date').order('start_time');
   if (error) { el.innerHTML = '<div class="loading">Error: ' + escHtml(error.message) + '</div>'; return; }
-  if (!data || !data.length) { el.innerHTML = '<div class="loading">No upcoming shifts</div>'; return; }
-  el.innerHTML = data.map((s) => shiftRowHtml(s)).join('');
+  mMyShifts = data || [];
+
+  mMyShiftRequests = [];
+  if (mMyShifts.length) {
+    const { data: reqs } = await window.supabase.from('coverage_requests').select('*, claimer:claimed_by(name)')
+      .in('shift_id', mMyShifts.map((s) => s.id)).in('status', ['open', 'claimed']);
+    mMyShiftRequests = reqs || [];
+  }
+  renderMyUpcomingShifts();
+}
+
+function renderMyUpcomingShifts() {
+  const el = document.getElementById('m-my-shifts');
+  if (!mMyShifts.length) { el.innerHTML = '<div class="loading">No upcoming shifts</div>'; return; }
+  el.innerHTML = mMyShifts.map((s) => {
+    const req = mMyShiftRequests.find((r) => r.shift_id === s.id);
+    if (req && req.status === 'claimed') {
+      return shiftRowHtml(s, '', '<span style="color:var(--teal);">Covered by ' + escHtml((req.claimer && req.claimer.name) || 'someone') + '</span>');
+    }
+    if (req) {
+      return shiftRowHtml(s, '<button class="btn btn-sm btn-danger" onclick="cancelCoverageRequest(\'' + req.id + '\')">Cancel Request</button>',
+        '<span style="color:var(--amber);">Coverage requested</span>');
+    }
+    if (mCoverFormShiftId === s.id) {
+      return shiftRowHtml(s) + '<div class="m-cover-form">'
+        + '<input class="admin-input" type="text" id="m-cover-note" maxlength="200" placeholder="Note for the team (optional)">'
+        + '<div class="m-cover-form-btns"><button class="btn btn-secondary" onclick="toggleCoverForm(null)">Cancel</button>'
+        + '<button class="btn btn-primary" onclick="submitCoverageRequest(\'' + s.id + '\')">Send Request</button></div></div>';
+    }
+    return shiftRowHtml(s, '<button class="btn btn-sm btn-secondary" onclick="toggleCoverForm(\'' + s.id + '\')">Need Coverage</button>');
+  }).join('');
+}
+
+function toggleCoverForm(shiftId) {
+  mCoverFormShiftId = shiftId;
+  renderMyUpcomingShifts();
+}
+
+async function submitCoverageRequest(shiftId) {
+  const note = document.getElementById('m-cover-note').value.trim();
+  const { error } = await window.supabase.from('coverage_requests')
+    .insert({ shift_id: shiftId, requested_by: window.currentStaff.id, note: note || null });
+  if (error) { toast('Error: ' + error.message, true); return; }
+  toast('Coverage requested');
+  mCoverFormShiftId = null;
+  loadMyUpcomingShifts();
+}
+
+async function cancelCoverageRequest(requestId) {
+  const { error } = await window.supabase.from('coverage_requests').delete().eq('id', requestId);
+  if (error) { toast('Error: ' + error.message, true); return; }
+  toast('Request cancelled');
+  loadMyUpcomingShifts();
+}
+
+// ── COVERAGE REQUESTS (open, from other staff) ────────────
+async function loadCoverageRequests() {
+  const el = document.getElementById('m-coverage-requests');
+  const { data, error } = await window.supabase.from('coverage_requests')
+    .select('*, shifts(shift_date, role, period, start_time, end_time), requester:requested_by(name)').eq('status', 'open');
+  if (error) { el.innerHTML = '<div class="loading">Error: ' + escHtml(error.message) + '</div>'; return; }
+
+  // Your own requests show on the shift itself, above.
+  const todayStr = toDateStr(new Date());
+  const rows = (data || []).filter((r) => r.shifts && r.shifts.shift_date >= todayStr && !mMyStaffIds.includes(r.requested_by))
+    .sort((a, b) => a.shifts.shift_date.localeCompare(b.shifts.shift_date));
+  if (!rows.length) { el.innerHTML = '<div class="loading">No one needs coverage right now</div>'; return; }
+  el.innerHTML = rows.map((r) => shiftRowHtml(r.shifts,
+    '<button class="btn btn-sm btn-primary" onclick="claimCoverageRequest(\'' + r.id + '\')">I\'ll Cover</button>',
+    escHtml((r.requester && r.requester.name) || 'Staff') + (r.note ? ' · ' + escHtml(r.note) : ''))).join('');
+}
+
+// Filters the update to requests still open so two people tapping
+// "I'll Cover" on the same request can't both win it.
+async function claimCoverageRequest(requestId) {
+  if (!confirm('Cover this shift? The team will be told you\'ve picked it up.')) return;
+  const { data, error } = await window.supabase.from('coverage_requests')
+    .update({ status: 'claimed', claimed_by: window.currentStaff.id, claimed_at: new Date().toISOString() })
+    .eq('id', requestId).eq('status', 'open').select();
+  if (error) { toast('Error: ' + error.message, true); return; }
+  if (!data || !data.length) { toast('Someone already covered that shift', true); loadCoverageRequests(); return; }
+  toast('You\'re covering it — a manager will update the schedule');
+  loadCoverageRequests();
+  notifyCoverageClaimed(requestId);
+}
+
+// Best-effort — email is optional (needs RESEND_API_KEY in Vercel) and
+// should never block the claim itself if it fails.
+async function notifyCoverageClaimed(requestId) {
+  try {
+    const { data: { session } } = await window.supabase.auth.getSession();
+    if (!session) return;
+    await fetch('/api/notify-coverage-claimed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token },
+      body: JSON.stringify({ requestId }),
+    });
+  } catch (e) { /* best-effort, never block the UI on this */ }
 }
 
 // ── OPEN SHIFTS (never assigned, anyone can claim) ────────

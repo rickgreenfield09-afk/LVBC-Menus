@@ -18,8 +18,8 @@
 
 window.currentStaff = null;
 const M_PROFILE_KEY = 'lvbc-mobile-profile';
-const M_TAB_TITLES = { schedule: 'Schedule', inventory: 'Inventory', timeoff: 'Time Off' };
-const M_TAB_LOADERS = { schedule: () => loadSchedule(), inventory: () => loadInventoryCount(), timeoff: () => loadTimeOff() };
+const M_TAB_TITLES = { schedule: 'Schedule', inventory: 'Inventory' };
+const M_TAB_LOADERS = { schedule: () => loadSchedule(), inventory: () => loadInventoryCount() };
 
 // ── AUTH ─────────────────────────────────────────────────
 async function checkSession() {

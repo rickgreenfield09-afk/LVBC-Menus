@@ -41,6 +41,10 @@
   .shift-row-name{font-size:14px;}
   .shift-row-meta{font-size:12px;margin-top:2px;}
 
+  .shift-row .btn{flex-shrink:0;}
+  .m-cover-form{padding:4px 0 14px;border-bottom:1px solid var(--border);}
+  .m-cover-form-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;}
+
   /* ── INVENTORY COUNT ── */
   .m-inv-summary{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:14px;}
   .m-inv-sync{font-size:11px;font-family:'DM Mono',monospace;color:var(--amber);text-align:right;}
