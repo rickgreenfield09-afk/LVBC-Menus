@@ -1168,8 +1168,9 @@ async function loadBingoHistory() {
         + '<td style="font-size:12px;">' + bingoFmtDate(g.printed_on) + '<div style="font-size:11px;color:var(--sub);">' + escHtml(g.staff_profiles ? g.staff_profiles.name : '') + '</div>'
         + '<div id="bingo-email-hist-' + g.id + '" style="font-size:11px;margin-top:4px;">' + bingoEmailStatusHtml(g) + '</div></td>'
         + '<td>' + bingoOutputButtons(g.id)
-        + '<div style="display:flex;gap:8px;margin-top:6px;"><button class="btn btn-secondary btn-sm" onclick="topOffBingoGame(\'' + g.id + '\', ' + g.sheet_count + ')">Top Off</button>'
+        + '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;"><button class="btn btn-secondary btn-sm" onclick="topOffBingoGame(\'' + g.id + '\', ' + g.sheet_count + ')">Top Off</button>'
         + '<button class="btn btn-secondary btn-sm" id="bingo-email-btn-' + g.id + '" onclick="emailBingoGameAgain(\'' + g.id + '\')">' + (g.materials_emailed_at ? 'Email Again' : 'Email') + '</button>'
+        + (bingoIsAdmin() ? '<button class="btn btn-secondary btn-sm" id="bingo-refresh-slides-' + g.id + '" title="Re-pull the next two weeks of events from the calendar into this game\'s TV slideshow" onclick="refreshBingoSlideshow(\'' + g.id + '\', \'' + g.event_date + '\')">Refresh Slideshow</button>' : '')
         + (bingoIsAdmin() ? '<button class="btn btn-danger btn-sm" onclick="deleteBingoGame(\'' + g.id + '\', \'' + g.event_date + '\')">Delete</button>' : '')
         + '</div></td></tr>';
     }).join('')
@@ -1177,6 +1178,25 @@ async function loadBingoHistory() {
     + '<div style="font-size:11px;color:var(--muted);margin-top:8px;">Reopening a past game reprints the exact same cards and doesn\'t count as another use.'
     + ' Top Off prints extra sheets for the same game — every new card is different from every card already printed for it.'
     + (bingoIsAdmin() ? ' Deleting a game undoes its use: counts go back down and its playlists return to their previous last-used date.' : '') + '</div>';
+}
+
+// Admin only (migration_033). Re-pulls the two weeks after game night
+// from the Events calendar as it stands now and saves them as this
+// game's slideshow events — for when an event was corrected after the
+// cards were printed. Nothing printed changes.
+async function refreshBingoSlideshow(gameId, eventDate) {
+  const btn = document.getElementById('bingo-refresh-slides-' + gameId);
+  if (btn) { btn.disabled = true; btn.textContent = 'Refreshing…'; }
+  try {
+    const events = await bingoFetchEvents(bingoAddDays(eventDate, 1), bingoAddDays(eventDate, 14));
+    const { error } = await window.supabase.rpc('set_bingo_game_slide_events', { p_game_id: gameId, p_events: events });
+    if (error) { toast(error.message, true); return; }
+    logAudit('refresh_bingo_slideshow', 'bingo_games', gameId, { events: events.length });
+    toast('Slideshow updated with ' + events.length + ' event' + (events.length === 1 ? '' : 's') + ' from the calendar');
+    await openBingoSlideshow(gameId);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Refresh Slideshow'; }
+  }
 }
 
 function bingoEmailStatusHtml(g) {
