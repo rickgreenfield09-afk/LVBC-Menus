@@ -109,3 +109,18 @@
   .m-task-target{display:flex;align-items:center;gap:12px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);}
   .m-task-target .m-thumb{width:44px;height:44px;}
   .m-task-target-name{font-weight:500;font-size:14px;}
+
+  /* ── OFF-SITE EVENT CHECKLIST ── */
+  .m-off-line{padding:12px 0;border-bottom:1px solid var(--border);}
+  .m-off-line-top{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+  .m-off-line-top .m-task-target-name{flex:1;min-width:0;}
+  .m-off-qty{width:56px;height:40px;background:var(--void);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'DM Mono',monospace;font-size:16px;text-align:center;outline:none;}
+  .m-off-qty:focus{border-color:var(--teal);}
+  .m-off-remove{width:40px;height:40px;background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;}
+  .m-off-ticks{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .m-off-tick{display:flex;align-items:center;justify-content:center;gap:8px;height:44px;border-radius:8px;border:1px solid var(--border);background:var(--raised);color:var(--sub);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;touch-action:manipulation;}
+  .m-off-tick span{width:20px;height:20px;border-radius:5px;border:2px solid var(--muted);display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1;}
+  .m-off-tick.on{background:rgba(42,184,166,0.12);border-color:rgba(42,184,166,0.35);color:var(--teal);}
+  .m-off-tick.on span{background:var(--teal);border-color:var(--teal);color:var(--void);}
+  .m-off-add{display:flex;gap:8px;margin-top:16px;}
+  .m-off-add .admin-input{flex:1;}

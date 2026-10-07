@@ -887,16 +887,21 @@ $$ language sql;
 create table assignment_tasks (
   id uuid primary key default gen_random_uuid(),
   title text not null check (length(trim(title)) > 0),
-  category text not null check (category in ('inventory','cleaning','opening','closing')),
+  category text not null check (category in ('inventory','cleaning','maintenance','opening','turnover','closing')),
   instructions text,
   frequency text not null check (frequency in ('daily','weekly','quarterly','adhoc')),
   period text not null check (period in ('morning','evening')),
   day_of_week int check (day_of_week between 0 and 6), -- 0=Sun...6=Sat
   due_date date,
   is_active boolean not null default true,
+  -- a "special assignment": an ad hoc task handed to one employee (migration_038)
+  assigned_staff_id uuid references staff_profiles(id) on delete set null,
   created_by uuid references staff_profiles(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
+  constraint assignment_tasks_special check (assigned_staff_id is null or frequency = 'adhoc'),
+  -- turnover belongs to the AM bartender
+  constraint assignment_tasks_turnover_am check (category <> 'turnover' or period = 'morning'),
   constraint assignment_tasks_shape check (
     (frequency = 'daily' and day_of_week is null and due_date is null) or
     (frequency = 'weekly' and day_of_week is not null and due_date is null) or
@@ -932,10 +937,74 @@ create table assignment_completions (
   completed_on date not null default current_date,
   completed_at timestamptz not null default now(),
   completed_by uuid references staff_profiles(id) on delete set null,
+  -- who the work counts for; differs from completed_by when a manager
+  -- ticks it on behalf of the person on the shift (migration_038)
+  credited_to uuid references staff_profiles(id) on delete set null,
   unique (task_id, due_key)
 );
 
 create index assignment_completions_date_idx on assignment_completions (completed_on);
+create index assignment_completions_credit_idx on assignment_completions (credited_to);
+
+-- ---------- OFF-SITE EVENTS (see migration_038 for the full rationale) ----------
+-- Events away from the brewery, planned as a bring-along checklist.
+-- Separate from the in-brewery `events` table. A checklist line belongs
+-- to a template OR an event; applying a template copies its lines.
+create table offsite_events (
+  id uuid primary key default gen_random_uuid(),
+  name text not null check (length(trim(name)) > 0),
+  venue text,
+  start_date date not null,
+  end_date date not null,
+  notes text,
+  created_by uuid references staff_profiles(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint offsite_events_dates check (end_date >= start_date)
+);
+
+create trigger offsite_events_set_updated_at
+  before update on offsite_events
+  for each row execute function set_updated_at();
+
+create table offsite_event_staff (
+  event_id uuid not null references offsite_events(id) on delete cascade,
+  staff_id uuid not null references staff_profiles(id) on delete cascade,
+  primary key (event_id, staff_id)
+);
+
+create table offsite_checklist_templates (
+  id uuid primary key default gen_random_uuid(),
+  name text not null check (length(trim(name)) > 0),
+  created_at timestamptz not null default now()
+);
+
+create unique index offsite_checklist_templates_name_uq on offsite_checklist_templates (lower(trim(name)));
+
+create table offsite_checklist_items (
+  id uuid primary key default gen_random_uuid(),
+  template_id uuid references offsite_checklist_templates(id) on delete cascade,
+  event_id uuid references offsite_events(id) on delete cascade,
+  label text not null check (length(trim(label)) > 0),
+  quantity int not null default 1 check (quantity > 0),
+  sort_order int not null default 0,
+  packed_at timestamptz,
+  packed_by uuid references staff_profiles(id) on delete set null,
+  returned_at timestamptz,
+  returned_by uuid references staff_profiles(id) on delete set null,
+  created_at timestamptz not null default now(),
+  constraint offsite_checklist_items_owner check ((template_id is null) <> (event_id is null)),
+  -- a template line is never ticked
+  constraint offsite_checklist_items_template_unticked check (template_id is null or (packed_at is null and returned_at is null))
+);
+
+create index offsite_checklist_items_event_idx on offsite_checklist_items (event_id);
+create index offsite_checklist_items_template_idx on offsite_checklist_items (template_id);
+
+create or replace function is_offsite_event_staff(p_event_id uuid)
+returns boolean as $$
+  select exists (select 1 from offsite_event_staff where event_id = p_event_id and staff_id = auth.uid());
+$$ language sql security definer stable;
 
 -- ---------- MUSIC BINGO (see migration_025 for the full rationale) ----------
 -- ---------- SONG LIBRARY ----------
@@ -1604,6 +1673,10 @@ alter table inventory_locations enable row level security;
 alter table assignment_tasks enable row level security;
 alter table assignment_task_targets enable row level security;
 alter table assignment_completions enable row level security;
+alter table offsite_events enable row level security;
+alter table offsite_event_staff enable row level security;
+alter table offsite_checklist_templates enable row level security;
+alter table offsite_checklist_items enable row level security;
 
 -- staff_profiles: staff can read the roster; only admins manage roles;
 -- anyone can update their OWN row (name/photo only — see the trigger
@@ -1770,6 +1843,25 @@ create policy "staff complete assignments" on assignment_completions for insert
   with check (is_staff() and (completed_by = auth.uid() or can_schedule()));
 create policy "undo own or scheduler" on assignment_completions for delete
   using (completed_by = auth.uid() or can_schedule());
+
+create policy "staff read offsite_events" on offsite_events for select using (is_staff());
+create policy "schedulers write offsite_events" on offsite_events for all
+  using (can_schedule()) with check (can_schedule());
+
+create policy "staff read offsite_event_staff" on offsite_event_staff for select using (is_staff());
+create policy "schedulers write offsite_event_staff" on offsite_event_staff for all
+  using (can_schedule()) with check (can_schedule());
+
+create policy "staff read offsite_checklist_templates" on offsite_checklist_templates for select using (is_staff());
+create policy "schedulers write offsite_checklist_templates" on offsite_checklist_templates for all
+  using (can_schedule()) with check (can_schedule());
+
+create policy "staff read offsite_checklist_items" on offsite_checklist_items for select using (is_staff());
+create policy "schedulers write offsite_checklist_items" on offsite_checklist_items for all
+  using (can_schedule()) with check (can_schedule());
+create policy "event staff write their checklist" on offsite_checklist_items for all
+  using (event_id is not null and is_offsite_event_staff(event_id))
+  with check (event_id is not null and is_offsite_event_staff(event_id));
 
 -- Staff-only, both read and write: PII / financial-equivalent (points) data
 create policy "staff only members" on members for all using (is_staff()) with check (is_staff());

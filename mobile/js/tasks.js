@@ -1,42 +1,51 @@
 // tasks.js (mobile)
-// Screen: #screen-tasks — what the shift you're scheduled on today is
-// responsible for: inventory counts, cleaning, opening and closing
-// (migration_037). The plan itself is built on the desktop Assignments
-// screen (js/assignments.js); here you only do the work and check it
-// off.
+// Screen: #screen-tasks — what you're responsible for today: the
+// tasks on the shift you're scheduled for, any special assignments
+// given to you by name, and the checklists of off-site events you're
+// working (mobile/js/offsite.js). The plan is built on the desktop
+// Assignments screen (js/assignments.js, migration_037 + 038); here
+// you only do the work and check it off.
 //
-// Tasks belong to a shift, not a person, so this shows the tasks for
-// whichever of today's shifts you hold. A day with a single shift
-// (Sunday) gives that shift both the AM and PM tasks. If you aren't on
-// today, it previews your next shift read-only; schedulers and admins
-// who aren't on see all of today's shifts.
+// Shift tasks belong to a shift, not a person, so this shows the tasks
+// for whichever of today's shifts you hold. If you aren't on today, it
+// previews your next shift read-only; schedulers and admins who aren't
+// on see all of today's shifts.
 //
-// Which tasks a shift gets:
-//   daily      every open day
-//   weekly     on its weekday
-//   quarterly  offered on every matching shift until someone does it
-//              that quarter
-//   ad hoc     from its due date until done
+// Whose a task is:
+//   opening    the AM bartender
+//   turnover   the AM bartender, before handing off to the PM shift
+//   closing    the closing (PM) bartender
+//   the rest   the AM or PM bartender, whichever the task names
+// A day with a single shift (Sunday) gives that shift both periods'
+// tasks and has no turnover.
 //
-// A cleaning / opening / closing task is checked off by hand. An
-// inventory task lists what to count; each Count button opens the same
-// edit sheet as the Inventory tab, and the task completes itself once
-// every one has been counted today.
+// How often: daily (every open day), weekly (its weekday), quarterly
+// (offered on every matching shift until someone does it that
+// quarter), ad hoc (from its due date until done).
+//
+// A plain task is checked off by hand. An inventory task lists what to
+// count; each Count button opens the same edit sheet as the Inventory
+// tab, and the task completes itself once every one has been counted
+// today.
+//
+// Credit goes to the person on the shift. If a manager who isn't on
+// the shift ticks a task here, the scheduled bartender is credited.
 // Depends on: window.supabase, window.currentStaff, toast(),
 // escHtml(), toDateStr() (core.js), mDaySettings, mMyStaffIds,
 // resolveMyStaffIds(), shiftSlotLabel() (schedule.js), mInvItems,
 // mInvCountedToday(), mLocationPath(), mPhotoHtml(), openItemEdit(),
 // loadInventoryCount() (inventory.js), mMerchProducts, mMerchStyles,
 // mMerchVariantsFor(), mMerchStock, mMerchStyleLabel(), openMerchEdit(),
-// loadMerchCount() (merch.js)
+// loadMerchCount() (merch.js), loadOffsiteMine() (offsite.js)
 
-const M_TASK_CATEGORIES = { opening: 'Opening', inventory: 'Inventory', cleaning: 'Cleaning', closing: 'Closing' };
-const M_TASK_BADGE = { inventory: 'badge-teal', cleaning: 'badge-purple', opening: 'badge-amber', closing: 'badge-muted' };
+// In the order a shift meets them.
+const M_TASK_CATEGORIES = { opening: 'Opening', inventory: 'Inventory', cleaning: 'Cleaning', maintenance: 'Maintenance', turnover: 'Turnover', closing: 'Closing' };
+const M_TASK_BADGE = { inventory: 'badge-teal', cleaning: 'badge-purple', maintenance: 'badge-purple', opening: 'badge-amber', turnover: 'badge-amber', closing: 'badge-amber' };
 
 let mTasks = [];
 let mTaskTargets = [];
 let mTaskCompletions = [];
-let mTaskView = null;            // { dateStr, slots: [{ period, covers, who }], preview, note }
+let mTaskView = null;            // { dateStr, slots: [{ period, covers, shifts }], preview, note }
 let mTaskAutoDone = new Set();   // inventory tasks already auto-completed this session
 
 function mTaskQuarterKey(dateStr) { return dateStr.slice(0, 4) + '-Q' + (Math.floor((+dateStr.slice(5, 7) - 1) / 3) + 1); }
@@ -56,12 +65,15 @@ function mTaskSlots(dow) {
   return periods.length === 1 ? [{ period: periods[0], covers: ['morning', 'evening'] }] : periods.map((p) => ({ period: p, covers: [p] }));
 }
 
-// A quarterly or ad hoc task that was finished on an earlier day drops
-// off; one finished today stays, ticked, so it can still be undone.
+// Shift-bound tasks for one shift. Special assignments (named to a
+// person) are listed separately. A quarterly or ad hoc task that was
+// finished on an earlier day drops off; one finished today stays,
+// ticked, so it can still be undone.
 function mTasksFor(dateStr, covers) {
   const dow = new Date(dateStr + 'T00:00:00').getDay();
   return mTasks.filter((t) => {
-    if (!covers.includes(t.period)) return false;
+    if (t.assigned_staff_id || !covers.includes(t.period)) return false;
+    if (t.category === 'turnover' && covers.length > 1) return false;
     if (t.frequency === 'daily') return true;
     if (t.frequency === 'weekly') return t.day_of_week === dow;
     if (t.frequency === 'quarterly' && t.day_of_week != null && t.day_of_week !== dow) return false;
@@ -90,6 +102,7 @@ async function loadTasks() {
     // The count buttons need the inventory records behind them.
     loadInventoryCount(), loadMerchCount(),
   ]);
+  loadOffsiteMine();
   const failed = [tasks, targets, completions, shifts].find((r) => r.error);
   if (failed) { el.innerHTML = '<div class="loading">Could not load tasks: ' + escHtml(failed.error.message) + '</div>'; return; }
   mTasks = tasks.data;
@@ -136,59 +149,80 @@ function mTaskTargetInfo(t) {
 }
 
 // ── RENDER ───────────────────────────────────────
+// creditId is who the task counts for: you if you're on that shift,
+// otherwise whoever is.
+function mTaskCardHtml(t, dateStr, creditId, preview, tag) {
+  const targets = mTaskTargets.filter((x) => x.task_id === t.id).map(mTaskTargetInfo).filter(Boolean);
+  const c = mTaskCompletion(t, dateStr);
+  const counted = targets.filter((x) => x.done).length;
+  // An inventory task with a count list finishes itself; everything else is a manual check.
+  const auto = targets.length > 0;
+  if (auto && !c && !preview && counted === targets.length && !mTaskAutoDone.has(t.id + dateStr)) { mTaskAutoDone.add(t.id + dateStr); completeTask(t.id, creditId, true); }
+  return '<div class="m-item m-task' + (c ? ' counted' : '') + '"><div class="m-task-head">'
+    + (preview ? '' : auto
+      ? '<div class="m-task-check' + (c ? ' on' : '') + '" aria-label="' + (c ? 'Done' : counted + ' of ' + targets.length + ' counted') + '">' + (c ? '&#10003;' : counted + '/' + targets.length) + '</div>'
+      : '<button class="m-task-check' + (c ? ' on' : '') + '" aria-label="' + (c ? 'Mark not done' : 'Mark done') + '" onclick="' + (c ? 'undoTask(\'' + c.id + '\')' : 'completeTask(\'' + t.id + '\',\'' + (creditId || '') + '\')') + '">' + (c ? '&#10003;' : '') + '</button>')
+    + '<div class="m-rec-body"><div class="m-item-name">' + escHtml(t.title) + '</div>'
+    + '<div class="m-item-sub"><span class="badge ' + M_TASK_BADGE[t.category] + '">' + M_TASK_CATEGORIES[t.category] + '</span>' + (tag ? ' <span class="badge badge-muted">' + escHtml(tag) + '</span>' : '') + '</div>'
+    + (t.instructions ? '<div class="m-task-notes">' + escHtml(t.instructions) + '</div>' : '') + '</div></div>'
+    + targets.map((x) => '<div class="m-task-target">' + mPhotoHtml(x.photo, x.name)
+      + '<div class="m-rec-body"><div class="m-task-target-name">' + escHtml(x.name) + '</div>' + (x.sub ? '<div class="m-item-sub">' + escHtml(x.sub) + '</div>' : '')
+      + '<div class="m-item-sub">' + (x.done ? '<span class="m-rec-done">&#10003; counted today</span> · ' : '') + escHtml(x.level) + '</div></div>'
+      + (preview ? '' : '<button class="btn btn-sm ' + (x.done ? 'btn-secondary' : 'btn-primary') + '" onclick="' + x.open + '">' + (x.done ? 'Recount' : 'Count') + '</button>') + '</div>').join('')
+    + '</div>';
+}
+
 function renderTasks() {
   const el = document.getElementById('m-tasks');
   const { dateStr, slots, preview, note } = mTaskView;
+  const today = toDateStr(new Date());
   const d = new Date(dateStr + 'T00:00:00');
   const setting = mDaySettings.find((x) => x.day_of_week === d.getDay()) || {};
   let html = note ? '<div class="m-sheet-note" style="margin:0 0 16px;">' + escHtml(note) + '</div>' : '';
   let total = 0, doneCount = 0;
+  const tally = (t, on) => { total++; if (mTaskCompletion(t, on)) doneCount++; };
+
+  // Special assignments are yours whatever shift you're on, so they come first.
+  const special = mTasks.filter((t) => mMyStaffIds.includes(t.assigned_staff_id)).filter((t) => { const c = mTaskCompletion(t, today); return !c || c.completed_on === today; })
+    .sort((a, b) => a.due_date.localeCompare(b.due_date));
+  if (special.length) {
+    html += '<div class="section-label" style="margin-top:0;">Assigned to you</div>';
+    special.forEach((t) => {
+      tally(t, today);
+      html += mTaskCardHtml(t, today, t.assigned_staff_id, false,
+        t.due_date < today ? 'Overdue' : t.due_date === today ? 'Due today' : 'Due ' + new Date(t.due_date + 'T00:00:00').toLocaleDateString('default', { month: 'short', day: 'numeric' }));
+    });
+    html += '<div style="height:12px;"></div>';
+  }
 
   slots.forEach((slot) => {
     const tasks = mTasksFor(dateStr, slot.covers);
     const who = [...new Set(slot.shifts.map((x) => (x.staff ? x.staff.name : 'Open shift')))];
-    html += '<div class="section-label" style="margin-top:0;">' + (dateStr === toDateStr(new Date()) ? 'Today' : d.toLocaleDateString('default', { weekday: 'long', month: 'short', day: 'numeric' }))
+    const mineHere = slot.shifts.find((x) => mMyStaffIds.includes(x.staff_id));
+    const onShift = mineHere || slot.shifts.find((x) => x.staff_id);
+    const creditId = onShift ? onShift.staff_id : null;
+    html += '<div class="section-label" style="margin-top:0;">' + (dateStr === today ? 'Today' : d.toLocaleDateString('default', { weekday: 'long', month: 'short', day: 'numeric' }))
       + ' · ' + escHtml(shiftSlotLabel(setting, slot.period)) + ' shift' + (who.length ? ' · ' + escHtml(who.join(', ')) : '') + '</div>';
     if (!tasks.length) { html += '<div class="card" style="margin-bottom:20px;"><div class="loading">Nothing assigned to this shift.</div></div>'; return; }
-
     Object.keys(M_TASK_CATEGORIES).forEach((cat) => {
       tasks.filter((t) => t.category === cat).forEach((t) => {
-        const targets = mTaskTargets.filter((x) => x.task_id === t.id).map(mTaskTargetInfo).filter(Boolean);
-        const c = mTaskCompletion(t, dateStr);
-        const counted = targets.filter((x) => x.done).length;
-        total++;
-        if (c) doneCount++;
-        // An inventory task with a count list finishes itself; everything else is a manual check.
-        const auto = targets.length > 0;
-        if (auto && !c && !preview && counted === targets.length && !mTaskAutoDone.has(t.id + dateStr)) { mTaskAutoDone.add(t.id + dateStr); completeTask(t.id, true); }
-        const tag = t.frequency === 'quarterly' ? 'Quarterly' : t.frequency === 'adhoc' ? (t.due_date < dateStr ? 'Overdue' : 'One-off') : '';
-        html += '<div class="m-item m-task' + (c ? ' counted' : '') + '"><div class="m-task-head">'
-          + (preview ? '' : auto
-            ? '<div class="m-task-check' + (c ? ' on' : '') + '" aria-label="' + (c ? 'Done' : counted + ' of ' + targets.length + ' counted') + '">' + (c ? '&#10003;' : counted + '/' + targets.length) + '</div>'
-            : '<button class="m-task-check' + (c ? ' on' : '') + '" aria-label="' + (c ? 'Mark not done' : 'Mark done') + '" onclick="' + (c ? 'undoTask(\'' + c.id + '\')' : 'completeTask(\'' + t.id + '\')') + '">' + (c ? '&#10003;' : '') + '</button>')
-          + '<div class="m-rec-body"><div class="m-item-name">' + escHtml(t.title) + '</div>'
-          + '<div class="m-item-sub"><span class="badge ' + M_TASK_BADGE[cat] + '">' + M_TASK_CATEGORIES[cat] + '</span>' + (tag ? ' <span class="badge badge-muted">' + tag + '</span>' : '') + '</div>'
-          + (t.instructions ? '<div class="m-task-notes">' + escHtml(t.instructions) + '</div>' : '') + '</div></div>'
-          + targets.map((x) => '<div class="m-task-target">' + mPhotoHtml(x.photo, x.name)
-            + '<div class="m-rec-body"><div class="m-task-target-name">' + escHtml(x.name) + '</div>' + (x.sub ? '<div class="m-item-sub">' + escHtml(x.sub) + '</div>' : '')
-            + '<div class="m-item-sub">' + (x.done ? '<span class="m-rec-done">&#10003; counted today</span> · ' : '') + escHtml(x.level) + '</div></div>'
-            + (preview ? '' : '<button class="btn btn-sm ' + (x.done ? 'btn-secondary' : 'btn-primary') + '" onclick="' + x.open + '">' + (x.done ? 'Recount' : 'Count') + '</button>') + '</div>').join('')
-          + '</div>';
+        if (!preview) tally(t, dateStr);
+        html += mTaskCardHtml(t, dateStr, creditId, preview, t.frequency === 'quarterly' ? 'Quarterly' : t.frequency === 'adhoc' ? (t.due_date < dateStr ? 'Overdue' : 'One-off') : '');
       });
     });
     html += '<div style="height:12px;"></div>';
   });
 
-  document.getElementById('m-tasks-progress').textContent = preview || !total ? '' : doneCount + ' / ' + total + ' done';
+  document.getElementById('m-tasks-progress').textContent = total ? doneCount + ' / ' + total + ' done' : '';
   el.innerHTML = html || '<div class="loading">Nothing to show.</div>';
 }
 
 // ── CHECK OFF ────────────────────────────────────
-async function completeTask(taskId, silent) {
+async function completeTask(taskId, creditId, silent) {
   const task = mTasks.find((t) => t.id === taskId);
-  const dateStr = mTaskView.dateStr;
+  const dateStr = task.assigned_staff_id ? toDateStr(new Date()) : mTaskView.dateStr;
   const { data, error } = await window.supabase.from('assignment_completions')
-    .insert({ task_id: taskId, due_key: mTaskDueKey(task, dateStr), completed_on: dateStr, completed_by: window.currentStaff.id }).select().single();
+    .insert({ task_id: taskId, due_key: mTaskDueKey(task, dateStr), completed_on: dateStr, completed_by: window.currentStaff.id, credited_to: creditId || window.currentStaff.id }).select().single();
   if (error) {
     mTaskAutoDone.delete(taskId + dateStr);
     // 23505 = someone else on the shift already checked it off

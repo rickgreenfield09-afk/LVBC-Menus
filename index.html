@@ -526,11 +526,14 @@
         </div>
       </div>
 
-      <!-- ASSIGNMENTS SCREEN (js/assignments.js) -->
+      <!-- ASSIGNMENTS SCREEN (js/assignments.js; the Events page is js/offsite.js) -->
       <div class="screen" id="screen-assignments">
         <div class="sub-tabs">
-          <button class="sub-tab active" id="asg-view-week" onclick="setAssignmentsView('week')">This Week</button>
-          <button class="sub-tab" id="asg-view-plan" onclick="setAssignmentsView('plan')">Plan</button>
+          <button class="sub-tab active" id="asg-view-dashboard" onclick="setAssignmentsView('dashboard')">Dashboard</button>
+          <button class="sub-tab" id="asg-view-inventory" onclick="setAssignmentsView('inventory')">Inventory</button>
+          <button class="sub-tab" id="asg-view-cleaning" onclick="setAssignmentsView('cleaning')">Cleaning &amp; Maintenance</button>
+          <button class="sub-tab" id="asg-view-duties" onclick="setAssignmentsView('duties')">Shift Duties</button>
+          <button class="sub-tab" id="asg-view-events" onclick="setAssignmentsView('events')">Events</button>
         </div>
         <div id="asg-body"><div class="loading">Loading...</div></div>
       </div>
@@ -1229,6 +1232,7 @@
   <script src="js/events.js"></script>
   <script src="js/metrics.js"></script>
   <script src="js/assignments.js"></script>
+  <script src="js/offsite.js"></script>
   <script src="js/bingo.js"></script>
 </body>
 </html>

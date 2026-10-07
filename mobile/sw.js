@@ -16,6 +16,7 @@ const SHELL = [
   '/mobile/js/inventory.js',
   '/mobile/js/merch.js',
   '/mobile/js/tasks.js',
+  '/mobile/js/offsite.js',
   '/style.css',
   '/config.js',
 ];

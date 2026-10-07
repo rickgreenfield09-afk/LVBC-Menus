@@ -415,6 +415,18 @@
   .asg-status.done{color:var(--teal);}
   .asg-status.missed{color:var(--red);}
   .asg-status.open{color:var(--amber);}
+  .asg-task.selected{background:rgba(42,184,166,0.08);}
+  .asg-link{cursor:pointer;}
+  .asg-link:hover{color:var(--teal);}
+  .off-detail{margin-bottom:12px;}
+  .off-detail .form-input{width:100%;}
+  .off-list{margin-bottom:4px;}
+  .off-list td{padding:6px 12px;}
+  .off-list tr:hover td{background:none;}
+  .off-input{width:100%;background:transparent;border:1px solid transparent;border-radius:6px;padding:6px 8px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;}
+  .off-input:hover{border-color:var(--border);}
+  .off-input:focus{border-color:var(--teal);background:var(--void);}
+  .off-tick{width:18px;height:18px;accent-color:var(--teal);cursor:pointer;}
   .asg-form-card{margin-bottom:16px;}
   .asg-form-card .form-input,.asg-form-card .form-select{width:100%;}
   .asg-targets{margin-bottom:10px;}
