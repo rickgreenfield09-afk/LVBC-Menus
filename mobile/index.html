@@ -12,7 +12,7 @@
 <link rel="apple-touch-icon" href="/mobile/icons/icon-180.png">
 <link rel="icon" type="image/png" href="/mobile/icons/icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-<!-- Shared with the desktop staff panel: colour tokens, buttons, badges, cards. -->
+<!-- Shared with the desktop staff panel: color tokens, buttons, badges, cards. -->
 <link rel="stylesheet" href="/style.css">
 <link rel="stylesheet" href="/mobile/mobile.css">
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
@@ -76,6 +76,9 @@
         <div id="m-inv-list"><div class="loading">Loading...</div></div>
       </div>
     </main>
+
+    <!-- Full-screen editor for one inventory record; filled by inventory.js / merch.js -->
+    <div id="m-sheet" class="m-sheet" style="display:none;"></div>
 
     <nav class="m-tabbar">
       <button class="nav-btn active" onclick="showTab('schedule', this)">Schedule</button>

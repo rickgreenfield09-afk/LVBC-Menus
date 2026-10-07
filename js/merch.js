@@ -1,41 +1,58 @@
 // merch.js
-// Inventory > Merchandise sub-tab. Merch is counted in actual units per
-// colour / design / size variant (migration_034), not the rough percent
-// the other inventory categories use, so it has its own screen:
+// Inventory > Merchandise sub-tab. Merch is counted in actual units,
+// not the rough percent the other inventory categories use, and is
+// shaped product > style > variant (migration_034 + 036):
 //
-//   Stock   one card per product, a colour/design × size grid of unit
-//           counts you can type straight into.
+//   product   the thing you'd reorder ("Bronco Blonde T-Shirt")
+//   style     one color + design of it ("Blue / No Front Pocket") —
+//             the unit that carries a photo and gets retired
+//   variant   one size of a style
+//
+//   Stock   one card per product: a row per style per location it is
+//           kept in, a column per size, unit counts you type into.
 //   Trends  levels over time from the count log, plus estimated units
 //           sold / restocked per product.
 //
-// inventory_merch_counts is the source of truth. Typing a number here
-// never updates a variant directly — it upserts today's count row and
-// the database trigger carries it onto the variant, so the "on hand"
-// number can't drift from the history.
+// Merch lives in more than one place (sold from the Taproom, backstock
+// in the Break room), so a count is always for a variant AT a location
+// and a variant's total is the sum across locations. Stock imported
+// from the old spreadsheet has no location yet ("Not split by
+// location"); the first count of a size at a real location replaces
+// that size's unsplit number rather than adding to it.
+//
+// inventory_merch_counts is the source of truth. Nothing here writes a
+// variant's or a location's number directly — it calls
+// record_merch_count() and the database triggers carry the count onto
+// the stock row and the variant, so "on hand" can't drift from history.
 //
 // "Sold" and "restocked" are estimates read off the counts: any drop
 // between two counts is treated as sold, any rise as restocked. A
 // miscount therefore inflates both.
 // Depends on: window.supabase, window.currentStaff, toast(),
-// escHtml() (menu.js), toDateStr() (schedule.js)
+// escHtml() (menu.js), toDateStr() (schedule.js),
+// invLoadLocations/invLocationPath/invLocationsFlat/invPhotoThumbHtml/
+// invPickPhoto/invUploadPhoto (locations.js)
 
 const MERCH_TYPE_LABELS = { shirt: 'Shirts', tank: 'Tanks', long_sleeve: 'Long Sleeves', sweatshirt: 'Sweatshirts', outerwear: 'Outerwear', hat: 'Hats', visor: 'Visors', drinkware: 'Drinkware', accessory: 'Accessories', other: 'Other' };
 const MERCH_APPAREL_SIZES = ['X-Small', 'Small', 'Medium', 'Large', 'X-Large', 'XX-Large', '3X-Large'];
-// Chart series colours, assigned in this fixed order. Kept apart from
+// Chart series colors, assigned in this fixed order. Kept apart from
 // the app's teal/amber/red, which mean OK / low / critical elsewhere.
 const MERCH_SERIES_COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#9085e9'];
 const MERCH_OTHER_COLOR = '#8E92B0';
+const MERCH_UNSPLIT = ''; // location key for stock not yet split by location
 
 let merchProducts = [];
+let merchStyles = [];
 let merchVariants = [];
-let merchCounts = null; // loaded on first visit to Trends
-let merchGroups = {};   // gid -> { productId, color, design, variants } for the rows currently drawn
+let merchStock = [];
+let merchCounts = null;      // loaded on first visit to Trends
+let merchPendingLocs = {};   // styleId -> [locationId] rows added but not counted yet
 let merchView = 'stock';
 let merchStatusFilter = 'active';
 let merchTypeFilter = '';
 let merchSearch = '';
 let merchProductEditId = null;
-let merchVariantForm = null; // { productId, gid } while a colour/design form is open
+let merchStyleForm = null;   // { productId, styleId } while a color/design form is open
 let merchTrendScope = 'all';
 let merchTrendMonths = 12;
 let merchChart = null;
@@ -54,9 +71,12 @@ async function loadMerch() {
   const el = document.getElementById('inventorytab-merchandise');
   if (!el.dataset.built) { el.innerHTML = merchSkeletonHtml(); el.dataset.built = '1'; }
   try {
-    [merchProducts, merchVariants] = await Promise.all([
+    [merchProducts, merchStyles, merchVariants, merchStock] = await Promise.all([
       merchFetchAll('inventory_merch_products', '*', 'name'),
+      merchFetchAll('inventory_merch_styles', '*', 'created_at'),
       merchFetchAll('inventory_merch_variants', '*', 'size_sort'),
+      merchFetchAll('inventory_merch_stock', '*', 'variant_id'),
+      invLoadLocations(),
     ]);
   } catch (e) {
     document.getElementById('merch-list').innerHTML = '<div class="loading">Could not load merchandise: ' + escHtml(e.message) + '</div>';
@@ -76,7 +96,7 @@ function merchSkeletonHtml() {
 
     + '<div id="merch-stock">'
     + '<div class="lookup-toolbar" style="flex-wrap:wrap;">'
-    + '<input class="search-bar" style="min-width:200px;" type="search" placeholder="Search product, colour or design" oninput="setMerchSearch(this.value)">'
+    + '<input class="search-bar" style="min-width:200px;" type="search" placeholder="Search product, color or design" oninput="setMerchSearch(this.value)">'
     + '<select class="form-select" onchange="setMerchTypeFilter(this.value)"><option value="">All types</option>' + typeOptions + '</select>'
     + '<div class="badge-picker">' + pill('Status', 'active', 'Active', true) + pill('Status', 'retired', 'Retired', false) + pill('Status', 'verify', 'Needs Verification', false) + pill('Status', 'all', 'All', false) + '</div>'
     + '</div>'
@@ -116,136 +136,224 @@ function setMerchStatus(status) {
 function setMerchTypeFilter(type) { merchTypeFilter = type; renderMerchList(); }
 function setMerchSearch(text) { merchSearch = text.trim().toLowerCase(); renderMerchList(); }
 
-// ── STOCK ────────────────────────────────────────
-function merchGroupLabel(g) {
-  return [g.color, g.design].filter(Boolean).join(' · ') || 'One version';
+// ── LOOKUPS ──────────────────────────────────────
+function merchStyleLabel(s) { return [s.color, s.design].filter(Boolean).join(' · ') || 'One version'; }
+function merchStylesFor(productId) { return merchStyles.filter((s) => s.product_id === productId); }
+function merchVariantsFor(styleId) { return merchVariants.filter((v) => v.style_id === styleId).sort((a, b) => a.size_sort - b.size_sort); }
+function merchStockAt(variantId, locKey) { return merchStock.find((r) => r.variant_id === variantId && (r.location_id || MERCH_UNSPLIT) === locKey); }
+function merchProductTotal(productId) {
+  const styleIds = merchStylesFor(productId).map((s) => s.id);
+  return merchVariants.filter((v) => styleIds.includes(v.style_id)).reduce((a, v) => a + v.unit_count, 0);
+}
+function merchLocLabel(locKey) { return locKey === MERCH_UNSPLIT ? 'Not split by location' : invLocationPath(locKey); }
+
+// The location rows a style shows: everywhere it has stock, plus any
+// row added with "Count at..." that hasn't been counted yet. Unsplit
+// stock first, then locations in tree order.
+function merchStyleLocKeys(style) {
+  const variantIds = merchVariantsFor(style.id).map((v) => v.id);
+  const keys = new Set(merchStock.filter((r) => variantIds.includes(r.variant_id)).map((r) => r.location_id || MERCH_UNSPLIT));
+  (merchPendingLocs[style.id] || []).forEach((k) => keys.add(k));
+  if (!keys.size) keys.add(MERCH_UNSPLIT);
+  const order = [MERCH_UNSPLIT].concat(invLocationsFlat().map((l) => l.id));
+  return order.filter((k) => keys.has(k));
 }
 
-// A product's variants bucketed into colour/design rows, sizes in order.
-function merchGroupsFor(productId) {
-  const groups = [];
-  merchVariants.filter((v) => v.product_id === productId).forEach((v) => {
-    let g = groups.find((x) => x.color === v.color && x.design === v.design);
-    if (!g) { g = { productId, color: v.color, design: v.design, variants: [] }; groups.push(g); }
-    g.variants.push(v);
-  });
-  return groups;
-}
-
-function merchGroupMatches(g) {
-  if (merchStatusFilter === 'active' && !g.variants.some((v) => v.status === 'active')) return false;
-  if (merchStatusFilter === 'retired' && !g.variants.every((v) => v.status === 'retired')) return false;
-  if (merchStatusFilter === 'verify' && !g.variants.some((v) => v.needs_verification)) return false;
+function merchStyleMatches(s) {
+  if (merchStatusFilter === 'active' && s.status !== 'active') return false;
+  if (merchStatusFilter === 'retired' && s.status !== 'retired') return false;
+  if (merchStatusFilter === 'verify' && !merchVariantsFor(s.id).some((v) => v.needs_verification)) return false;
   return true;
 }
 
+// ── STOCK ────────────────────────────────────────
 function renderMerchList() {
   const el = document.getElementById('merch-list');
-  merchGroups = {};
-  let gidSeq = 0;
   const cards = [];
   merchProducts.forEach((p) => {
     if (merchTypeFilter && p.product_type !== merchTypeFilter) return;
-    const all = merchGroupsFor(p.id);
+    const all = merchStylesFor(p.id);
     const nameHit = !merchSearch || (p.name + ' ' + (p.style_number || '')).toLowerCase().includes(merchSearch);
-    const groups = all.filter(merchGroupMatches).filter((g) => nameHit || merchGroupLabel(g).toLowerCase().includes(merchSearch));
-    // A product with no variants yet has nothing to filter on — show it wherever a new product would belong.
+    const styles = all.filter(merchStyleMatches).filter((s) => nameHit || merchStyleLabel(s).toLowerCase().includes(merchSearch));
+    // A product with no styles yet has nothing to filter on — show it wherever a new product would belong.
     const emptyNew = !all.length && nameHit && (merchStatusFilter === 'all' || merchStatusFilter === p.status);
-    if (!groups.length && !emptyNew) return;
-    groups.forEach((g) => { g.gid = 'g' + (gidSeq++); merchGroups[g.gid] = g; });
-    cards.push(merchProductCardHtml(p, groups, all));
+    if (!styles.length && !emptyNew) return;
+    cards.push(merchProductCardHtml(p, styles));
   });
   el.innerHTML = cards.length ? cards.join('') : '<div class="loading">Nothing matches these filters.</div>';
 }
 
-function merchProductCardHtml(p, groups, allGroups) {
-  const total = allGroups.reduce((a, g) => a + g.variants.reduce((b, v) => b + v.unit_count, 0), 0);
+function merchProductCardHtml(p, styles) {
   const sizes = [];
-  groups.forEach((g) => g.variants.forEach((v) => { if (!sizes.some((s) => s.size === v.size)) sizes.push({ size: v.size, sort: v.size_sort }); }));
+  styles.forEach((s) => merchVariantsFor(s.id).forEach((v) => { if (!sizes.some((x) => x.size === v.size)) sizes.push({ size: v.size, sort: v.size_sort }); }));
   sizes.sort((a, b) => a.sort - b.sort || String(a.size).localeCompare(String(b.size)));
 
   let html = '<div class="card merch-card"><div class="merch-card-head"><div>'
     + '<div class="merch-name">' + escHtml(p.name) + (p.status === 'retired' ? ' <span class="badge badge-muted">Retired</span>' : '') + '</div>'
     + '<div class="merch-sub">' + escHtml(MERCH_TYPE_LABELS[p.product_type] || p.product_type) + (p.style_number ? ' · Style ' + escHtml(p.style_number) : '') + (p.notes ? ' · ' + escHtml(p.notes) : '') + '</div>'
     + '</div><div class="merch-card-actions">'
-    + '<div class="merch-total"><span id="merch-ptotal-' + p.id + '">' + total + '</span><small>on hand</small></div>'
-    + '<button class="btn btn-sm btn-secondary" onclick="openMerchVariantForm(\'' + p.id + '\',null)">+ Colour / Design</button>'
+    + '<div class="merch-total"><span id="merch-ptotal-' + p.id + '">' + merchProductTotal(p.id) + '</span><small>on hand</small></div>'
+    + '<button class="btn btn-sm btn-secondary" onclick="openMerchStyleForm(\'' + p.id + '\',null)">+ Color / Design</button>'
     + '<button class="btn btn-sm btn-secondary" onclick="openMerchProductForm(\'' + p.id + '\')">Edit</button>'
     + '<button class="btn btn-sm btn-secondary" onclick="showMerchTrendFor(\'' + p.id + '\')">Trend</button>'
     + '</div></div>';
 
-  if (merchVariantForm && merchVariantForm.productId === p.id) html += merchVariantFormHtml();
-  if (!groups.length) return html + '<div class="loading">No colours or sizes yet — add one above.</div></div>';
+  if (merchStyleForm && merchStyleForm.productId === p.id) html += merchStyleFormHtml();
+  if (!styles.length) return html + '<div class="loading">No colors or sizes yet — add one above.</div></div>';
 
-  html += '<div class="table-wrap merch-matrix"><table><thead><tr><th>Colour / Design</th>'
+  html += '<div class="table-wrap merch-matrix"><table><thead><tr><th></th><th>Color / Design</th><th>Location</th>'
     + sizes.map((s) => '<th class="merch-num">' + escHtml(s.size || 'Qty') + '</th>').join('') + '<th class="merch-num">Total</th><th></th></tr></thead><tbody>';
-  groups.forEach((g) => {
-    const retired = g.variants.every((v) => v.status === 'retired');
-    const flagged = g.variants.filter((v) => v.needs_verification);
-    html += '<tr' + (retired ? ' class="merch-retired"' : '') + '><td>' + escHtml(merchGroupLabel(g)) + (retired ? ' <span class="badge badge-muted">Retired</span>' : '')
-      + flagged.map((v) => '<div class="merch-verify">&#9888; Needs verification' + (v.size ? ' (' + escHtml(v.size) + ')' : '') + (v.verification_note ? ': ' + escHtml(v.verification_note) : '') + '</div>').join('') + '</td>';
-    sizes.forEach((s) => {
-      const v = g.variants.find((x) => x.size === s.size);
-      html += '<td class="merch-num">' + (v
-        ? '<input class="merch-cell' + (v.needs_verification ? ' flagged' : '') + '" type="number" min="0" step="1" value="' + v.unit_count + '" data-gid="' + g.gid + '" aria-label="' + escHtml(merchGroupLabel(g) + ' ' + (s.size || '')) + '" onchange="saveMerchCount(\'' + v.id + '\',this)">'
-        : '<span style="color:var(--muted);">—</span>') + '</td>';
-    });
-    html += '<td class="merch-num" id="merch-gtotal-' + g.gid + '">' + g.variants.reduce((a, v) => a + v.unit_count, 0) + '</td>'
-      + '<td style="white-space:nowrap;text-align:right;">'
-      + (flagged.length ? '<button class="btn btn-sm btn-success" onclick="verifyMerchGroup(\'' + g.gid + '\')">Mark Verified</button> ' : '')
-      + '<button class="btn btn-sm btn-secondary" onclick="openMerchVariantForm(\'' + p.id + '\',\'' + g.gid + '\')">Edit</button> '
-      + '<button class="btn btn-sm btn-secondary" onclick="setMerchGroupStatus(\'' + g.gid + '\',\'' + (retired ? 'active' : 'retired') + '\')">' + (retired ? 'Reactivate' : 'Retire') + '</button> '
-      + '<button class="btn btn-sm btn-danger" onclick="deleteMerchGroup(\'' + g.gid + '\')">Delete</button>'
-      + '</td></tr>';
-  });
+  styles.forEach((s) => { html += merchStyleRowsHtml(p, s, sizes); });
   return html + '</tbody></table></div></div>';
 }
 
-// One count per variant per day — typing a second number the same day
-// replaces the first rather than adding another history row.
-async function saveMerchCount(variantId, input) {
+function merchStyleRowsHtml(p, s, sizes) {
+  const variants = merchVariantsFor(s.id);
+  const locKeys = merchStyleLocKeys(s);
+  const located = locKeys.some((k) => k !== MERCH_UNSPLIT);
+  const retired = s.status === 'retired';
+  const flagged = variants.filter((v) => v.needs_verification);
+  const rowClass = retired ? 'merch-retired' : '';
+  const unusedLocs = invLocationsFlat().filter((l) => !locKeys.includes(l.id));
+  let html = '';
+
+  locKeys.forEach((locKey, i) => {
+    // Once a style is counted by location, what's left unsplit is only the sizes nobody has counted there yet — read-only.
+    const readOnly = locKey === MERCH_UNSPLIT && located;
+    html += '<tr class="' + rowClass + (i ? ' merch-loc-row' : ' merch-style-first') + '">';
+    if (i === 0) {
+      html += '<td rowspan="' + (locKeys.length + (locKeys.length > 1 ? 1 : 0)) + '" class="merch-photo-cell">'
+        + '<button class="merch-photo-btn" title="' + (s.photo_url ? 'Replace photo' : 'Add photo') + '" onclick="pickMerchStylePhoto(\'' + s.id + '\')">' + invPhotoThumbHtml(s.photo_url, p.name + ' ' + merchStyleLabel(s)) + '</button></td>'
+        + '<td rowspan="' + (locKeys.length + (locKeys.length > 1 ? 1 : 0)) + '">' + escHtml(merchStyleLabel(s)) + (retired ? ' <span class="badge badge-muted">Retired</span>' : '')
+        + flagged.map((v) => '<div class="merch-verify">&#9888; Needs verification' + (v.size ? ' (' + escHtml(v.size) + ')' : '') + (v.verification_note ? ': ' + escHtml(v.verification_note) : '') + '</div>').join('') + '</td>';
+    }
+    html += '<td class="merch-loc">' + escHtml(merchLocLabel(locKey))
+      + (locKey !== MERCH_UNSPLIT ? ' <button class="merch-link" onclick="removeMerchStyleLocation(\'' + s.id + '\',\'' + locKey + '\')">remove</button>' : '') + '</td>';
+    let rowTotal = 0;
+    sizes.forEach((sz) => {
+      const v = variants.find((x) => x.size === sz.size);
+      if (!v) { html += '<td class="merch-num"><span style="color:var(--muted);">—</span></td>'; return; }
+      const row = merchStockAt(v.id, locKey);
+      const n = row ? row.unit_count : 0;
+      rowTotal += n;
+      html += '<td class="merch-num"><input class="merch-cell' + (v.needs_verification ? ' flagged' : '') + '" type="number" min="0" step="1" value="' + n + '"' + (readOnly ? ' disabled' : '')
+        + ' id="merch-in-' + v.id + '-' + locKey + '" aria-label="' + escHtml(merchStyleLabel(s) + ' ' + (sz.size || '') + ' at ' + merchLocLabel(locKey)) + '"'
+        + ' onchange="saveMerchCount(\'' + v.id + '\',\'' + locKey + '\',this)"></td>';
+    });
+    html += '<td class="merch-num" id="merch-rt-' + s.id + '-' + locKey + '">' + rowTotal + '</td>';
+    if (i === 0) {
+      html += '<td rowspan="' + (locKeys.length + (locKeys.length > 1 ? 1 : 0)) + '" class="merch-row-actions">'
+        + (unusedLocs.length ? '<select class="form-select merch-count-at" aria-label="Count at another location" onchange="addMerchStyleLocation(\'' + s.id + '\',this.value)"><option value="">Count at…</option>'
+          + unusedLocs.map((l) => '<option value="' + l.id + '">' + escHtml(l.path) + '</option>').join('') + '</select>' : '')
+        + (flagged.length ? '<button class="btn btn-sm btn-success" onclick="verifyMerchStyle(\'' + s.id + '\')">Mark Verified</button>' : '')
+        + '<button class="btn btn-sm btn-secondary" onclick="openMerchStyleForm(\'' + p.id + '\',\'' + s.id + '\')">Edit</button>'
+        + '<button class="btn btn-sm btn-secondary" onclick="setMerchStyleStatus(\'' + s.id + '\',\'' + (retired ? 'active' : 'retired') + '\')">' + (retired ? 'Reactivate' : 'Retire') + '</button>'
+        + '<button class="btn btn-sm btn-danger" onclick="deleteMerchStyle(\'' + s.id + '\')">Delete</button></td>';
+    }
+    html += '</tr>';
+  });
+  if (locKeys.length > 1) {
+    html += '<tr class="merch-total-row ' + rowClass + '"><td class="merch-loc">All locations</td>'
+      + sizes.map((sz) => { const v = variants.find((x) => x.size === sz.size); return '<td class="merch-num"' + (v ? ' id="merch-vt-' + v.id + '"' : '') + '>' + (v ? v.unit_count : '') + '</td>'; }).join('')
+      + '<td class="merch-num" id="merch-st-' + s.id + '">' + variants.reduce((a, v) => a + v.unit_count, 0) + '</td></tr>';
+  }
+  return html;
+}
+
+// One count per variant per location per day — typing a second number
+// the same day replaces the first rather than adding a history row.
+async function saveMerchCount(variantId, locKey, input) {
   const v = merchVariants.find((x) => x.id === variantId);
+  const row = merchStockAt(variantId, locKey);
+  const before = row ? row.unit_count : 0;
   const n = parseInt(input.value, 10);
-  if (!v || isNaN(n) || n < 0) { input.value = v ? v.unit_count : 0; toast('Enter a whole number, 0 or more', true); return; }
-  const { error } = await window.supabase.from('inventory_merch_counts').upsert(
-    { variant_id: variantId, counted_on: toDateStr(new Date()), counted_at: new Date().toISOString(), unit_count: n, counted_by: window.currentStaff.id, source: 'app' },
-    { onConflict: 'variant_id,counted_on' });
-  if (error) { input.value = v.unit_count; toast(error.message, true); return; }
-  v.unit_count = n;
+  if (!v || isNaN(n) || n < 0) { input.value = before; toast('Enter a whole number, 0 or more', true); return; }
+  const { error } = await window.supabase.rpc('record_merch_count', {
+    p_variant_id: variantId, p_location_id: locKey || null, p_unit_count: n, p_counted_on: toDateStr(new Date()), p_counted_at: new Date().toISOString() });
+  if (error) { input.value = before; toast(error.message, true); return; }
   input.value = n;
   merchCounts = null;
-  const g = merchGroups[input.dataset.gid];
-  if (g) document.getElementById('merch-gtotal-' + g.gid).textContent = g.variants.reduce((a, x) => a + x.unit_count, 0);
-  document.getElementById('merch-ptotal-' + v.product_id).textContent = merchVariants.filter((x) => x.product_id === v.product_id).reduce((a, x) => a + x.unit_count, 0);
+
+  // Mirror what the database triggers just did, so the totals update without a reload (and without losing focus mid-row).
+  if (row) row.unit_count = n; else merchStock.push({ variant_id: variantId, location_id: locKey || null, unit_count: n });
+  if (locKey !== MERCH_UNSPLIT) {
+    merchStock = merchStock.filter((r) => !(r.variant_id === variantId && !r.location_id));
+    const stale = document.getElementById('merch-in-' + variantId + '-' + MERCH_UNSPLIT);
+    if (stale) stale.value = 0;
+  }
+  v.unit_count = merchStock.filter((r) => r.variant_id === variantId).reduce((a, r) => a + r.unit_count, 0);
+  const style = merchStyles.find((s) => s.id === v.style_id);
+  const variants = merchVariantsFor(style.id);
+  const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+  merchStyleLocKeys(style).forEach((k) => setText('merch-rt-' + style.id + '-' + k, variants.reduce((a, x) => a + ((merchStockAt(x.id, k) || {}).unit_count || 0), 0)));
+  setText('merch-vt-' + variantId, v.unit_count);
+  setText('merch-st-' + style.id, variants.reduce((a, x) => a + x.unit_count, 0));
+  setText('merch-ptotal-' + style.product_id, merchProductTotal(style.product_id));
   toast('Count saved');
 }
 
-// A product is retired exactly when every one of its variants is.
+function addMerchStyleLocation(styleId, locationId) {
+  if (!locationId) return;
+  (merchPendingLocs[styleId] = merchPendingLocs[styleId] || []).push(locationId);
+  renderMerchList();
+}
+
+// Taking a style out of a location is itself a count (zero), so the
+// history shows the stock leaving rather than just vanishing.
+async function removeMerchStyleLocation(styleId, locationId) {
+  const variantIds = merchVariantsFor(styleId).map((v) => v.id);
+  const rows = merchStock.filter((r) => variantIds.includes(r.variant_id) && r.location_id === locationId);
+  const units = rows.reduce((a, r) => a + r.unit_count, 0);
+  if (units && !confirm('Remove ' + invLocationPath(locationId) + ' from this style? Its ' + units + ' unit' + (units === 1 ? '' : 's') + ' there will be counted as 0.')) return;
+  for (const r of rows.filter((x) => x.unit_count > 0)) {
+    const { error } = await window.supabase.rpc('record_merch_count', {
+      p_variant_id: r.variant_id, p_location_id: locationId, p_unit_count: 0, p_counted_on: toDateStr(new Date()), p_counted_at: new Date().toISOString() });
+    if (error) { toast(error.message, true); return; }
+  }
+  if (rows.length) {
+    const { error } = await window.supabase.from('inventory_merch_stock').delete().in('variant_id', variantIds).eq('location_id', locationId);
+    if (error) { toast(error.message, true); return; }
+  }
+  merchPendingLocs[styleId] = (merchPendingLocs[styleId] || []).filter((k) => k !== locationId);
+  await loadMerch();
+}
+
+function pickMerchStylePhoto(styleId) {
+  invPickPhoto(async (file) => {
+    try {
+      const photo_url = await invUploadPhoto('merch/' + styleId, file);
+      const { error } = await window.supabase.from('inventory_merch_styles').update({ photo_url }).eq('id', styleId);
+      if (error) throw error;
+      merchStyles.find((s) => s.id === styleId).photo_url = photo_url;
+      toast('Photo saved');
+      renderMerchList();
+    } catch (e) { toast('Photo did not upload: ' + e.message, true); }
+  });
+}
+
+// A product is retired exactly when every one of its styles is.
 async function merchSyncProductStatus(productId) {
-  const vs = merchVariants.filter((v) => v.product_id === productId);
+  const styles = merchStylesFor(productId);
   const p = merchProducts.find((x) => x.id === productId);
-  if (!p || !vs.length) return;
-  const status = vs.every((v) => v.status === 'retired') ? 'retired' : 'active';
+  if (!p || !styles.length) return;
+  const status = styles.every((s) => s.status === 'retired') ? 'retired' : 'active';
   if (status === p.status) return;
   const { error } = await window.supabase.from('inventory_merch_products').update({ status }).eq('id', productId);
   if (!error) p.status = status;
 }
 
-async function setMerchGroupStatus(gid, status) {
-  const g = merchGroups[gid];
-  if (!g) return;
-  const { error } = await window.supabase.from('inventory_merch_variants').update({ status }).in('id', g.variants.map((v) => v.id));
+async function setMerchStyleStatus(styleId, status) {
+  const s = merchStyles.find((x) => x.id === styleId);
+  const { error } = await window.supabase.from('inventory_merch_styles').update({ status }).eq('id', styleId);
   if (error) { toast(error.message, true); return; }
-  g.variants.forEach((v) => { v.status = status; });
-  await merchSyncProductStatus(g.productId);
+  s.status = status;
+  await merchSyncProductStatus(s.product_id);
   toast(status === 'retired' ? 'Retired — its history is kept' : 'Reactivated');
   renderMerchList();
 }
 
-async function verifyMerchGroup(gid) {
-  const g = merchGroups[gid];
-  if (!g) return;
-  const flagged = g.variants.filter((v) => v.needs_verification);
+async function verifyMerchStyle(styleId) {
+  const flagged = merchVariantsFor(styleId).filter((v) => v.needs_verification);
   const { error } = await window.supabase.from('inventory_merch_variants').update({ needs_verification: false, verification_note: null }).in('id', flagged.map((v) => v.id));
   if (error) { toast(error.message, true); return; }
   flagged.forEach((v) => { v.needs_verification = false; v.verification_note = null; });
@@ -253,62 +361,58 @@ async function verifyMerchGroup(gid) {
   renderMerchList();
 }
 
-async function deleteMerchGroup(gid) {
-  const g = merchGroups[gid];
-  if (!g) return;
-  if (!confirm('Delete "' + merchGroupLabel(g) + '" and its entire count history? This can\'t be undone — use Retire to keep the history.')) return;
-  const ids = g.variants.map((v) => v.id);
-  const { error } = await window.supabase.from('inventory_merch_variants').delete().in('id', ids);
+async function deleteMerchStyle(styleId) {
+  const s = merchStyles.find((x) => x.id === styleId);
+  if (!confirm('Delete "' + merchStyleLabel(s) + '" and its entire count history? This can\'t be undone — use Retire to keep the history.')) return;
+  const { error } = await window.supabase.from('inventory_merch_styles').delete().eq('id', styleId);
   if (error) { toast(error.message, true); return; }
-  merchVariants = merchVariants.filter((v) => !ids.includes(v.id));
-  merchCounts = null;
-  await merchSyncProductStatus(g.productId);
   toast('Deleted');
-  renderMerchList();
+  await loadMerch();
+  await merchSyncProductStatus(s.product_id);
 }
 
-// ── COLOUR / DESIGN FORM (inline in the product card) ──
-function openMerchVariantForm(productId, gid) {
-  const g = gid ? merchGroups[gid] : null;
-  merchVariantForm = { productId, editing: g ? { ids: g.variants.map((v) => v.id), color: g.color, design: g.design } : null };
-  renderMerchList();
-}
-function closeMerchVariantForm() { merchVariantForm = null; renderMerchList(); }
+// ── COLOR / DESIGN FORM (inline in the product card) ──
+function openMerchStyleForm(productId, styleId) { merchStyleForm = { productId, styleId }; renderMerchList(); }
+function closeMerchStyleForm() { merchStyleForm = null; renderMerchList(); }
 
-function merchVariantFormHtml() {
-  const ed = merchVariantForm.editing;
+function merchStyleFormHtml() {
+  const ed = merchStyleForm.styleId ? merchStyles.find((s) => s.id === merchStyleForm.styleId) : null;
   return '<div class="merch-vform"><div class="form-row" style="grid-template-columns:1fr 1fr' + (ed ? '' : ' 1fr 1fr') + ';">'
-    + '<div class="form-group"><label class="form-label">Colour</label><input class="form-input" type="text" id="merch-v-color" value="' + escHtml(ed ? ed.color : '') + '" placeholder="optional"></div>'
+    + '<div class="form-group"><label class="form-label">Color</label><input class="form-input" type="text" id="merch-v-color" value="' + escHtml(ed ? ed.color : '') + '" placeholder="optional"></div>'
     + '<div class="form-group"><label class="form-label">Design / Logo</label><input class="form-input" type="text" id="merch-v-design" value="' + escHtml(ed ? ed.design : '') + '" placeholder="optional"></div>'
     + (ed ? '' : '<div class="form-group"><label class="form-label">Sizes</label><select class="form-select" id="merch-v-sizes" onchange="document.getElementById(\'merch-v-custom\').disabled = this.value !== \'custom\'">'
       + '<option value="apparel">X-Small to 3X-Large</option><option value="one">One size</option><option value="custom">Custom list</option></select></div>'
       + '<div class="form-group"><label class="form-label">Custom Sizes</label><input class="form-input" type="text" id="merch-v-custom" placeholder="e.g. 0.5 Liter, 1 Liter" disabled></div>')
     + '</div><div style="display:flex;gap:8px;">'
-    + '<button class="btn btn-sm btn-primary" onclick="saveMerchVariantForm()">' + (ed ? 'Save Changes' : 'Add') + '</button>'
-    + '<button class="btn btn-sm btn-secondary" onclick="closeMerchVariantForm()">Cancel</button></div></div>';
+    + '<button class="btn btn-sm btn-primary" onclick="saveMerchStyleForm()">' + (ed ? 'Save Changes' : 'Add') + '</button>'
+    + '<button class="btn btn-sm btn-secondary" onclick="closeMerchStyleForm()">Cancel</button></div></div>';
 }
 
-async function saveMerchVariantForm() {
-  const { productId, editing } = merchVariantForm;
+async function saveMerchStyleForm() {
+  const { productId, styleId } = merchStyleForm;
   const color = document.getElementById('merch-v-color').value.trim() || null;
   const design = document.getElementById('merch-v-design').value.trim() || null;
-  let error;
-  if (editing) {
-    ({ error } = await window.supabase.from('inventory_merch_variants').update({ color, design }).in('id', editing.ids));
+  // 23505 = unique_violation on (product, color, design)
+  const dupe = (error) => toast(error.code === '23505' ? 'That color / design already exists on this product' : error.message, true);
+  if (styleId) {
+    const { error } = await window.supabase.from('inventory_merch_styles').update({ color, design }).eq('id', styleId);
+    if (error) { dupe(error); return; }
   } else {
     const mode = document.getElementById('merch-v-sizes').value;
     let sizes = [null];
     if (mode === 'apparel') sizes = MERCH_APPAREL_SIZES;
     if (mode === 'custom') sizes = document.getElementById('merch-v-custom').value.split(',').map((s) => s.trim()).filter(Boolean);
     if (!sizes.length) { toast('List at least one size', true); return; }
-    ({ error } = await window.supabase.from('inventory_merch_variants').insert(sizes.map((size, i) => (
-      { product_id: productId, color, design, size, size_sort: size == null ? 0 : (MERCH_APPAREL_SIZES.indexOf(size) + 1 || i + 1) }))));
+    const { data: style, error } = await window.supabase.from('inventory_merch_styles').insert({ product_id: productId, color, design }).select().single();
+    if (error) { dupe(error); return; }
+    const { error: vErr } = await window.supabase.from('inventory_merch_variants').insert(sizes.map((size, i) => (
+      { style_id: style.id, size, size_sort: size == null ? 0 : (MERCH_APPAREL_SIZES.indexOf(size) + 1 || i + 1) })));
+    if (vErr) { toast(vErr.message, true); return; }
   }
-  // 23505 = unique_violation on (product, colour, design, size)
-  if (error) { toast(error.code === '23505' ? 'That colour / design already exists on this product' : error.message, true); return; }
-  merchVariantForm = null;
-  toast(editing ? 'Updated' : 'Added');
+  merchStyleForm = null;
+  toast(styleId ? 'Updated' : 'Added');
   await loadMerch();
+  await merchSyncProductStatus(productId);
 }
 
 // ── PRODUCT FORM ─────────────────────────────────
@@ -345,7 +449,7 @@ async function saveMerchProduct() {
     ? await window.supabase.from('inventory_merch_products').update(payload).eq('id', merchProductEditId)
     : await window.supabase.from('inventory_merch_products').insert(payload);
   if (error) { toast(error.message, true); return; }
-  toast(merchProductEditId ? 'Product updated' : 'Product added — now add its colours and sizes');
+  toast(merchProductEditId ? 'Product updated' : 'Product added — now add its colors and sizes');
   closeMerchProductForm();
   await loadMerch();
 }
@@ -353,7 +457,7 @@ async function saveMerchProduct() {
 async function deleteMerchProduct() {
   const p = merchProducts.find((x) => x.id === merchProductEditId);
   if (!p) return;
-  if (!confirm('Delete "' + p.name + '", every colour and size under it, and all of its count history? This can\'t be undone — retire its colours instead to keep the history.')) return;
+  if (!confirm('Delete "' + p.name + '", every color and size under it, and all of its count history? This can\'t be undone — retire its colors instead to keep the history.')) return;
   const { error } = await window.supabase.from('inventory_merch_products').delete().eq('id', p.id);
   if (error) { toast(error.message, true); return; }
   toast('Product deleted');
@@ -370,15 +474,18 @@ async function loadMerchTrends() {
   const el = document.getElementById('merch-trends');
   if (!merchCounts) {
     el.innerHTML = '<div class="loading">Loading count history...</div>';
-    try { merchCounts = await merchFetchAll('inventory_merch_counts', 'variant_id,counted_on,unit_count', 'counted_on'); }
+    try { merchCounts = await merchFetchAll('inventory_merch_counts', 'variant_id,location_id,counted_on,unit_count', 'counted_on'); }
     catch (e) { el.innerHTML = '<div class="loading">Could not load count history: ' + escHtml(e.message) + '</div>'; return; }
   }
   renderMerchTrends();
 }
 
-// Month-by-month level for every variant. A month with no count
-// carries the previous count forward; before a variant's first count
-// it is 0. Counts are bucketed by the month of the date they were taken.
+// Month-by-month level for every variant, summed across its locations.
+// Within one location a month with no count carries the previous count
+// forward. Counts with no location (the spreadsheet import) stand for
+// the whole variant until its first count at a real location, then
+// drop out — the same rule the stock table follows. Counts are
+// bucketed by the month of the date they were taken.
 function merchBuildHistory() {
   if (!merchCounts.length) return { months: [], levels: {} };
   const first = merchCounts[0].counted_on.slice(0, 7);
@@ -392,11 +499,24 @@ function merchBuildHistory() {
   }
   const idx = {};
   months.forEach((k, i) => { idx[k] = i; });
-  const levels = {};
+  const perLoc = {}; // variantId -> locKey -> sparse month array
   merchCounts.forEach((c) => { // ascending by date, so a later count in the same month wins
-    (levels[c.variant_id] = levels[c.variant_id] || new Array(months.length).fill(null))[idx[c.counted_on.slice(0, 7)]] = c.unit_count;
+    const byLoc = perLoc[c.variant_id] = perLoc[c.variant_id] || {};
+    const locKey = c.location_id || MERCH_UNSPLIT;
+    (byLoc[locKey] = byLoc[locKey] || new Array(months.length).fill(null))[idx[c.counted_on.slice(0, 7)]] = c.unit_count;
   });
-  Object.values(levels).forEach((arr) => { let prev = 0; for (let i = 0; i < arr.length; i++) { if (arr[i] == null) arr[i] = prev; else prev = arr[i]; } });
+  const levels = {};
+  Object.keys(perLoc).forEach((variantId) => {
+    const byLoc = perLoc[variantId];
+    let firstLocated = months.length;
+    Object.keys(byLoc).forEach((k) => { if (k !== MERCH_UNSPLIT) firstLocated = Math.min(firstLocated, byLoc[k].findIndex((n) => n != null)); });
+    const total = new Array(months.length).fill(0);
+    Object.keys(byLoc).forEach((k) => {
+      let prev = 0;
+      byLoc[k].forEach((n, i) => { if (n != null) prev = n; if (k !== MERCH_UNSPLIT || i < firstLocated) total[i] += prev; });
+    });
+    levels[variantId] = total;
+  });
   return { months, levels };
 }
 
@@ -428,21 +548,23 @@ function renderMerchTrends() {
 
   const product = merchProducts.find((p) => p.id === merchTrendScope);
   if (!product) merchTrendScope = 'all';
-  const scoped = merchVariants.filter((v) => !product || v.product_id === product.id);
+  const styleById = {}, productById = {};
+  merchStyles.forEach((s) => { styleById[s.id] = s; });
+  merchProducts.forEach((p) => { productById[p.id] = p; });
+  const scoped = merchVariants.filter((v) => !product || styleById[v.style_id].product_id === product.id);
   const to = months.length - 1;
   const from = merchTrendMonths ? Math.max(0, to - merchTrendMonths) : 0;
 
-  // Lines: by product type across everything, by colour/design within one product.
-  const productById = {};
-  merchProducts.forEach((p) => { productById[p.id] = p; });
+  // Lines: by product type across everything, by color/design within one product.
   const buckets = {};
   scoped.forEach((v) => {
     if (!levels[v.id]) return;
-    const key = product ? merchGroupLabel(v) : (MERCH_TYPE_LABELS[productById[v.product_id].product_type] || 'Other');
+    const style = styleById[v.style_id];
+    const key = product ? merchStyleLabel(style) : (MERCH_TYPE_LABELS[productById[style.product_id].product_type] || 'Other');
     const b = buckets[key] = buckets[key] || new Array(months.length).fill(0);
     levels[v.id].forEach((n, i) => { b[i] += n; });
   });
-  // Ranked by all-time peak (not the visible range) so a series keeps its colour when the range changes.
+  // Ranked by all-time peak (not the visible range) so a series keeps its color when the range changes.
   let series = Object.keys(buckets).map((name) => ({ name, values: buckets[name], peak: Math.max(...buckets[name]) })).sort((a, b) => b.peak - a.peak || a.name.localeCompare(b.name));
   if (series.length > MERCH_SERIES_COLORS.length) {
     const rest = series.slice(MERCH_SERIES_COLORS.length - 1);
@@ -471,22 +593,23 @@ function renderMerchTrends() {
     + tile('Est. Sold', total.sold, total.perMonth.toFixed(1) + ' per month')
     + tile('Restocked', total.restocked, rangeLabel)
     + '</div>'
-    + '<div class="card" style="margin-bottom:16px;"><div class="card-title">' + escHtml(product ? product.name + ' — units on hand by colour / design' : 'Units on hand by product type') + '</div>'
+    + '<div class="card" style="margin-bottom:16px;"><div class="card-title">' + escHtml(product ? product.name + ' — units on hand by color / design' : 'Units on hand by product type') + '</div>'
     + merchChartHtml(months, series, from, to) + '</div>';
 
   // Table view of the same period — one row per product, or per variant within a product.
   const rows = product
-    ? scoped.map((v) => ({ name: [merchGroupLabel(v), v.size].filter(Boolean).join(' · '), retired: v.status === 'retired', st: merchStats([v.id], levels, from, to) }))
-    : merchProducts.map((p) => ({ id: p.id, name: p.name + (p.style_number ? ' (' + p.style_number + ')' : ''), retired: p.status === 'retired', st: merchStats(merchVariants.filter((v) => v.product_id === p.id).map((v) => v.id), levels, from, to) }));
+    ? scoped.map((v) => ({ name: [merchStyleLabel(styleById[v.style_id]), v.size].filter(Boolean).join(' · '), retired: styleById[v.style_id].status === 'retired', st: merchStats([v.id], levels, from, to) }))
+    : merchProducts.map((p) => ({ id: p.id, name: p.name + (p.style_number ? ' (' + p.style_number + ')' : ''), retired: p.status === 'retired',
+      st: merchStats(merchVariants.filter((v) => styleById[v.style_id].product_id === p.id).map((v) => v.id), levels, from, to) }));
   rows.sort((a, b) => b.st.sold - a.st.sold || b.st.onHand - a.st.onHand);
-  html += '<div class="section-label">' + (product ? 'By colour, design and size' : 'By product') + ' · ' + rangeLabel + '</div>'
+  html += '<div class="section-label">' + (product ? 'By color, design and size' : 'By product') + ' · ' + rangeLabel + '</div>'
     + '<div class="table-wrap"><table><thead><tr><th>' + (product ? 'Variant' : 'Product') + '</th><th class="merch-num">On Hand</th><th class="merch-num">Change</th><th class="merch-num">Est. Sold</th><th class="merch-num">Restocked</th><th class="merch-num">Sold / Month</th><th class="merch-num">Months of Stock Left</th></tr></thead><tbody>'
     + rows.map((r) => '<tr' + (r.id ? ' style="cursor:pointer;" onclick="setMerchTrendScope(\'' + r.id + '\')"' : '') + (r.retired ? ' class="merch-retired"' : '') + '>'
       + '<td style="font-weight:500;">' + escHtml(r.name) + (r.retired ? ' <span class="badge badge-muted">Retired</span>' : '') + '</td>'
       + '<td class="merch-num">' + r.st.onHand + '</td><td class="merch-num">' + signed(r.st.change) + '</td><td class="merch-num">' + r.st.sold + '</td><td class="merch-num">' + r.st.restocked + '</td>'
       + '<td class="merch-num">' + r.st.perMonth.toFixed(1) + '</td><td class="merch-num">' + (r.st.monthsLeft == null ? '—' : r.st.monthsLeft.toFixed(1)) + '</td></tr>').join('')
     + '</tbody></table></div>'
-    + '<div class="card-sub" style="margin-top:10px;">Sold and restocked are estimates read from the counts: any drop between two counts is treated as sold, any rise as restocked, so a miscount inflates both. Months without a count carry the previous count forward.</div>';
+    + '<div class="card-sub" style="margin-top:10px;">Sold and restocked are estimates read from the counts: any drop between two counts is treated as sold, any rise as restocked, so a miscount inflates both. Months without a count carry the previous count forward. Levels are the total across all locations.</div>';
   el.innerHTML = html;
 }
 

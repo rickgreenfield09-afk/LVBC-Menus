@@ -534,6 +534,7 @@
           <button class="sub-tab" id="inventorytab-btn-coffee" onclick="setInventoryTab('coffee', this)">Coffee</button>
           <button class="sub-tab" id="inventorytab-btn-wine" onclick="setInventoryTab('wine', this)">Wine</button>
           <button class="sub-tab" id="inventorytab-btn-merchandise" onclick="setInventoryTab('merchandise', this)">Merchandise</button>
+          <button class="sub-tab" id="inventorytab-btn-locations" onclick="setInventoryTab('locations', this)">Locations</button>
           <button class="sub-tab" id="inventorytab-btn-vendors" onclick="setInventoryTab('vendors', this)">Vendors</button>
         </div>
 
@@ -554,6 +555,13 @@
         <div class="sub-sec" id="inventorytab-coffee"></div>
         <div class="sub-sec" id="inventorytab-wine"></div>
         <div class="sub-sec" id="inventorytab-merchandise"></div>
+
+        <!-- LOCATIONS (js/locations.js) -->
+        <div class="sub-sec" id="inventorytab-locations">
+          <div class="section-label" style="margin-top:0;">Locations</div>
+          <p class="card-sub" style="margin:0 0 16px;max-width:640px;">Three levels: a location, the sublocations inside it, and the exact spot an item sits &mdash; for example Break room &gt; Rack 1 &gt; Box 2.</p>
+          <div id="inv-locations-tree"><div class="loading">Loading...</div></div>
+        </div>
 
         <!-- VENDORS -->
         <div class="sub-sec" id="inventorytab-vendors">
@@ -1202,6 +1210,7 @@
   <script src="js/admin.js"></script>
   <script src="js/marketing.js"></script>
   <script src="js/inventory.js"></script>
+  <script src="js/locations.js"></script>
   <script src="js/merch.js"></script>
   <script src="js/menu.js"></script>
   <script src="js/schedule.js"></script>

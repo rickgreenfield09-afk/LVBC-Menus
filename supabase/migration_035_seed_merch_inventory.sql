@@ -6,19 +6,19 @@
 -- from 2024-01-17 to 2026-09-01. Requires migration 034.
 --
 -- What was changed on the way in:
---   * Each spreadsheet row became one variant, split into colour /
---     design / size — "Solid White (Black Logo)" is colour "Solid
+--   * Each spreadsheet row became one variant, split into color /
+--     design / size — "Solid White (Black Logo)" is color "Solid
 --     White", design "Black Logo"; "Orange Visor (white Logo)" is
---     product "Visor", colour "Orange", design "White Logo".
+--     product "Visor", color "Orange", design "White Logo".
 --   * Spelling fixed (Anniversary, Pigment, Rope Hat, Tie-Dye) and
---     capitalisation made consistent.
+--     capitalization made consistent.
 --   * The "June (2024)" column carried April's date (2024-04-30) a
 --     second time; it's imported as 2024-06-30.
 --   * A blank cell means "not counted that month" and is skipped —
 --     only real numbers (including 0) become count rows.
---   * A colour/design with zero units in every size at the last count
+--   * A color/design with zero units in every size at the last count
 --     (2026-09-01) is 'retired'; a product is retired when all of its
---     variants are. Sizes at zero under a colour that still has stock
+--     variants are. Sizes at zero under a color that still has stock
 --     stay active.
 --   * The rows described only as "LVBC" (style 1275) are the product
 --     named "Unknown" until the merch lead identifies them.
@@ -54,7 +54,7 @@ insert into inventory_merch_products (id, name, product_type, style_number, stat
   ('766e3caf-0eb6-4a02-80ad-d723d72227b2', 'Sweatshirt', 'sweatshirt', null, 'active', null),
   ('188c3566-e79f-44a6-8854-8045d3b40c67', 'Long Sleeve Shirt', 'long_sleeve', null, 'active', null),
   ('1bc96b69-2787-4688-886e-df38e244365d', 'Golf Towel', 'accessory', null, 'active', null),
-  ('303d0ebb-966a-498f-80ef-f77af5c65a5a', 'Unknown', 'other', '1275', 'active', 'Spreadsheet description was just "LVBC" (style 1275, colour "Colortoned Iced"). Merch lead to identify and rename.'),
+  ('303d0ebb-966a-498f-80ef-f77af5c65a5a', 'Unknown', 'other', '1275', 'active', 'Spreadsheet description was just "LVBC" (style 1275, color "Colortoned Iced"). Merch lead to identify and rename.'),
   ('23853785-c6fd-4580-814c-0b184bc037d1', 'Bubble Wands', 'accessory', null, 'active', null),
   ('eeb79ba8-962c-42f1-85cb-272c5175d8c5', 'Oktoberfest Flags', 'accessory', null, 'retired', null),
   ('22d38f8f-55f8-47fe-81b7-d722557444a9', 'Logo Hat Pins', 'accessory', null, 'active', null),

@@ -373,6 +373,30 @@
   .merch-vform .form-input,.merch-vform .form-select{width:100%;}
   .merch-vform .form-input:disabled{opacity:0.4;}
   #merch-product-form .form-input,#merch-product-form .form-select{width:100%;}
+  .merch-photo-cell{width:1%;vertical-align:top;}
+  .merch-photo-btn{background:none;border:none;padding:0;cursor:pointer;display:block;border-radius:6px;}
+  .merch-photo-btn:hover .inv-thumb{border-color:var(--teal);}
+  .merch-loc{font-size:12px;color:var(--sub);white-space:nowrap;}
+  .merch-link{background:none;border:none;color:var(--muted);font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;text-decoration:underline;padding:0;margin-left:6px;}
+  .merch-link:hover{color:var(--red);}
+  .merch-matrix tr.merch-loc-row td,.merch-matrix tr.merch-total-row td{border-top-style:dashed;}
+  .merch-total-row td{color:var(--sub);}
+  .merch-row-actions{vertical-align:top;text-align:right;white-space:nowrap;}
+  .merch-row-actions .btn{margin-left:4px;}
+  .merch-count-at{padding:5px 8px;font-size:12px;max-width:130px;vertical-align:middle;}
+  .merch-cell:disabled{opacity:0.45;}
+
+  /* ── INVENTORY PHOTOS + LOCATIONS ── */
+  .inv-thumb{width:48px;height:48px;border-radius:6px;object-fit:cover;border:1px solid var(--border);background:var(--raised);display:block;flex-shrink:0;}
+  .inv-thumb-empty{display:flex;align-items:center;justify-content:center;text-align:center;font-size:9px;font-family:'DM Mono',monospace;color:var(--muted);line-height:1.2;padding:2px;}
+  .loc-node{border-left:1px solid var(--border);margin-left:6px;padding-left:14px;}
+  .loc-node.loc-depth-0{border-left:none;margin-left:0;padding-left:0;}
+  .loc-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0;flex-wrap:wrap;}
+  .loc-name{font-weight:500;font-size:14px;}
+  .loc-depth-0 > .loc-row .loc-name{font-size:16px;font-weight:600;}
+  .loc-level{font-size:10px;font-family:'DM Mono',monospace;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-left:6px;}
+  .loc-actions{display:flex;gap:6px;}
+
   .merch-chart-wrap{position:relative;}
   .merch-chart-svg{display:block;width:100%;height:auto;}
   .merch-grid{stroke:var(--border);stroke-width:1;}

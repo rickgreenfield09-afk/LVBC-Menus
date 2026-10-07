@@ -13,7 +13,12 @@
 // (window.currentStaff.role === 'admin'), enforced again server-side
 // by RLS. Item levels and the order log are editable by any
 // staff.
-// Depends on: window.supabase, toast(), escHtml() (js/menu.js)
+// Each item can carry a photo and a location from the shared locations
+// tree (js/locations.js, migration_036). The older free-text location
+// stays alongside as a note until every item has been mapped.
+// Depends on: window.supabase, toast(), escHtml() (js/menu.js),
+// invLoadLocations/invLocationPath/invLocationOptions/invPhotoThumbHtml/
+// invPickPhoto/invUploadPhoto (js/locations.js)
 
 const INV_CATEGORY_LABELS = { consumables: 'Consumables', snacks: 'Snacks', coffee: 'Coffee', wine: 'Wine', merchandise: 'Merchandise' };
 // Merchandise keeps its label here (vendor items are still tagged with
@@ -27,6 +32,7 @@ let invVendorItemsCache = [];
 let invOpenOrdersCache = [];
 let invRefDataLoaded = false;
 let invItemEditId = { consumables: null, snacks: null, coffee: null, wine: null, merchandise: null };
+let invItemPhotoFile = {}; // category -> image chosen in the form, uploaded on save
 let invSelectedVendorId = null;
 let invVendorItemEditId = null;
 
@@ -42,6 +48,7 @@ function setInventoryTab(tab, btn) {
   if (tab === 'dashboard') loadInventoryDashboard();
   else if (INV_ITEM_CATEGORIES.includes(tab)) { ensureCategoryTemplateBuilt(tab); loadInventoryCategory(tab); }
   else if (tab === 'merchandise') loadMerch();
+  else if (tab === 'locations') loadInventoryLocations();
   else if (tab === 'vendors') loadInventoryVendors();
 }
 
@@ -145,7 +152,7 @@ function invOrderCellHtml(itemType, itemId, color, vendorItemId, cat) {
 
 // ── DASHBOARD ────────────────────────────────────
 async function loadInventoryDashboard() {
-  await invEnsureRefData();
+  await Promise.all([invEnsureRefData(), invLoadLocations()]);
   const { data: items } = await window.supabase.from('inventory_items').select('*');
   invItemsCache = items || [];
   await invLoadOpenOrders();
@@ -160,7 +167,7 @@ async function loadInventoryDashboard() {
   const needsAttention = [];
   invItemsCache.forEach((i) => {
     const color = invStatusColor(i.percent_remaining, i.low_threshold, i.critical_threshold);
-    if (color !== 'ok') needsAttention.push({ itemType: 'item', id: i.id, cat: i.category, name: i.name, location: i.location, valueLabel: i.percent_remaining + '%', color, vendorItemId: i.vendor_item_id, sortValue: i.percent_remaining });
+    if (color !== 'ok') needsAttention.push({ itemType: 'item', id: i.id, cat: i.category, name: i.name, location: invLocationPath(i.location_id) || i.location, valueLabel: i.percent_remaining + '%', color, vendorItemId: i.vendor_item_id, sortValue: i.percent_remaining });
   });
   needsAttention.sort((a, b) => (a.color === b.color ? a.sortValue - b.sortValue : (a.color === 'red' ? -1 : 1)));
 
@@ -185,9 +192,9 @@ async function loadInventoryDashboard() {
 // Merch has no low/critical thresholds, so its card shows units on
 // hand and anything flagged for verification instead of red/yellow.
 async function invDashMerchCardHtml() {
-  const { data, error } = await window.supabase.from('inventory_merch_variants').select('unit_count,status,needs_verification');
+  const { data, error } = await window.supabase.from('inventory_merch_variants').select('unit_count,needs_verification,inventory_merch_styles(status)');
   if (error) return '<div class="card"><div class="card-title">Merchandise</div><div class="card-value">—</div><div class="card-sub">Not available</div></div>';
-  const active = data.filter((v) => v.status === 'active');
+  const active = data.filter((v) => v.inventory_merch_styles.status === 'active');
   const flagged = data.filter((v) => v.needs_verification).length;
   return '<div class="card" style="cursor:pointer;" onclick="setInventoryTab(\'merchandise\', document.getElementById(\'inventorytab-btn-merchandise\'))"><div class="card-title">Merchandise</div>'
     + '<div class="card-value">' + data.reduce((a, v) => a + v.unit_count, 0) + '</div>'
@@ -220,12 +227,17 @@ function ensureCategoryTemplateBuilt(cat) {
     + '<div class="form-group"><label class="form-label">Subcategory</label><input class="form-input" style="width:100%;" type="text" id="inv-' + cat + '-subcategory" placeholder="optional"></div>'
     + '</div>'
     + '<div class="form-row">'
-    + '<div class="form-group"><label class="form-label">Location</label><input class="form-input" style="width:100%;" type="text" id="inv-' + cat + '-location" placeholder="optional"></div>'
+    + '<div class="form-group"><label class="form-label">Location</label><select class="form-select" style="width:100%;" id="inv-' + cat + '-location-id"></select></div>'
     + '<div class="form-group"><label class="form-label">% Remaining</label><input class="form-input" style="width:100%;" type="number" min="0" max="100" id="inv-' + cat + '-percent" value="100"></div>'
     + '</div>'
     + '<div class="form-row">'
     + '<div class="form-group"><label class="form-label">Yellow at / below %</label><input class="form-input" style="width:100%;" type="number" min="0" max="100" id="inv-' + cat + '-low" value="50"></div>'
     + '<div class="form-group"><label class="form-label">Red at / below %</label><input class="form-input" style="width:100%;" type="number" min="0" max="100" id="inv-' + cat + '-critical" value="25"></div>'
+    + '</div>'
+    + '<div class="form-row">'
+    + '<div class="form-group"><label class="form-label">Location Note</label><input class="form-input" style="width:100%;" type="text" id="inv-' + cat + '-location" placeholder="optional, e.g. top shelf"></div>'
+    + '<div class="form-group"><label class="form-label">Photo</label><div style="display:flex;align-items:center;gap:10px;"><span id="inv-' + cat + '-photo-preview">' + invPhotoThumbHtml(null) + '</span>'
+    + '<button class="btn btn-sm btn-secondary" type="button" onclick="pickItemPhoto(\'' + cat + '\')">Choose Photo</button></div></div>'
     + '</div>'
     + '<div class="form-group" style="margin-bottom:16px;"><label class="form-label">Vendor Item (for reorder)</label><select class="form-select" style="width:100%;" id="inv-' + cat + '-vendor-item"><option value="">None linked</option></select></div>'
     + '<div id="inv-' + cat + '-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:\'DM Mono\',monospace;"></div>'
@@ -238,13 +250,21 @@ function ensureCategoryTemplateBuilt(cat) {
   el.dataset.built = '1';
 }
 
+function pickItemPhoto(cat) {
+  invPickPhoto((file) => {
+    invItemPhotoFile[cat] = file;
+    document.getElementById('inv-' + cat + '-photo-preview').innerHTML = invPhotoThumbHtml(URL.createObjectURL(file));
+  });
+}
+
 async function loadInventoryCategory(cat) {
-  await invEnsureRefData();
+  await Promise.all([invEnsureRefData(), invLoadLocations()]);
   const { data, error } = await window.supabase.from('inventory_items').select('*');
   if (error) { toast(error.message, true); return; }
   invItemsCache = data || [];
   await invLoadOpenOrders();
   document.getElementById('inv-' + cat + '-vendor-item').innerHTML = invVendorItemOptions(null, cat);
+  if (!invItemEditId[cat]) document.getElementById('inv-' + cat + '-location-id').innerHTML = invLocationOptions(null);
   renderItemsTable(cat);
 }
 
@@ -254,15 +274,16 @@ function renderItemsTable(cat) {
   if (!rows.length) { el.innerHTML = '<div class="loading">No items yet — add one on the left.</div>'; return; }
   const trs = rows.map((i) => {
     const color = invStatusColor(i.percent_remaining, i.low_threshold, i.critical_threshold);
-    const sub = [i.subcategory, i.location].filter(Boolean).map(escHtml).join(' &middot; ');
+    const sub = [i.subcategory, invLocationPath(i.location_id), i.location].filter(Boolean).map(escHtml).join(' &middot; ');
     return '<tr>'
+      + '<td style="width:1%;">' + invPhotoThumbHtml(i.photo_url, i.name) + '</td>'
       + '<td style="font-weight:500;">' + escHtml(i.name) + (sub ? '<div style="font-size:11px;color:var(--sub);">' + sub + '</div>' : '') + '<div style="margin-top:2px;">' + invVendorItemLabel(i.vendor_item_id) + '</div></td>'
       + '<td style="white-space:nowrap;">' + invStatusBadge(color) + '<div style="margin-top:6px;"><input class="form-input" style="width:60px;padding:6px 8px;" type="number" min="0" max="100" id="inv-pct-' + i.id + '" value="' + i.percent_remaining + '"> % <button class="btn btn-sm btn-secondary" onclick="saveItemPercent(\'' + cat + '\',\'' + i.id + '\')">Save</button></div></td>'
       + '<td>' + invOrderCellHtml('item', i.id, color, i.vendor_item_id, cat) + '</td>'
       + '<td style="white-space:nowrap;"><button class="btn btn-sm btn-secondary" onclick="editItem(\'' + cat + '\',\'' + i.id + '\')">Edit</button> <button class="btn btn-sm btn-danger" onclick="deleteItem(\'' + cat + '\',\'' + i.id + '\')">Delete</button></td>'
       + '</tr>';
   }).join('');
-  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Level</th><th>Order</th><th></th></tr></thead><tbody>' + trs + '</tbody></table></div>';
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th></th><th>Item</th><th>Level</th><th>Order</th><th></th></tr></thead><tbody>' + trs + '</tbody></table></div>';
 }
 
 async function saveItemPercent(cat, id) {
@@ -283,6 +304,7 @@ async function saveItem(cat) {
     subcategory: invVal('inv-' + cat + '-subcategory') || null,
     name,
     location: invVal('inv-' + cat + '-location') || null,
+    location_id: invVal('inv-' + cat + '-location-id') || null,
     percent_remaining: invClampInt(invVal('inv-' + cat + '-percent'), 0, 100, 100),
     low_threshold: invClampInt(invVal('inv-' + cat + '-low'), 0, 100, 50),
     critical_threshold: invClampInt(invVal('inv-' + cat + '-critical'), 0, 100, 25),
@@ -291,10 +313,17 @@ async function saveItem(cat) {
     last_checked_by: window.currentStaff.id,
   };
   const editId = invItemEditId[cat];
-  const { error } = editId
-    ? await window.supabase.from('inventory_items').update(payload).eq('id', editId)
-    : await window.supabase.from('inventory_items').insert(payload);
+  const { data: saved, error } = editId
+    ? await window.supabase.from('inventory_items').update(payload).eq('id', editId).select().single()
+    : await window.supabase.from('inventory_items').insert(payload).select().single();
   if (error) { invAlert('inv-' + cat + '-alert', error.message, true); return; }
+  // The photo is keyed by the item's id, so a new item has to exist before it can be uploaded.
+  if (invItemPhotoFile[cat]) {
+    try {
+      const photo_url = await invUploadPhoto('items/' + saved.id, invItemPhotoFile[cat]);
+      await window.supabase.from('inventory_items').update({ photo_url }).eq('id', saved.id);
+    } catch (e) { toast('Saved, but the photo did not upload: ' + e.message, true); }
+  }
   toast(editId ? 'Item updated' : 'Item added');
   cancelItemEdit(cat);
   await loadInventoryCategory(cat);
@@ -307,6 +336,9 @@ function editItem(cat, id) {
   invSetVal('inv-' + cat + '-name', i.name);
   invSetVal('inv-' + cat + '-subcategory', i.subcategory || '');
   invSetVal('inv-' + cat + '-location', i.location || '');
+  document.getElementById('inv-' + cat + '-location-id').innerHTML = invLocationOptions(i.location_id);
+  invItemPhotoFile[cat] = null;
+  document.getElementById('inv-' + cat + '-photo-preview').innerHTML = invPhotoThumbHtml(i.photo_url, i.name);
   invSetVal('inv-' + cat + '-percent', i.percent_remaining);
   invSetVal('inv-' + cat + '-low', i.low_threshold);
   invSetVal('inv-' + cat + '-critical', i.critical_threshold);
@@ -322,6 +354,9 @@ function cancelItemEdit(cat) {
   invSetVal('inv-' + cat + '-name', '');
   invSetVal('inv-' + cat + '-subcategory', '');
   invSetVal('inv-' + cat + '-location', '');
+  document.getElementById('inv-' + cat + '-location-id').innerHTML = invLocationOptions(null);
+  invItemPhotoFile[cat] = null;
+  document.getElementById('inv-' + cat + '-photo-preview').innerHTML = invPhotoThumbHtml(null);
   invSetVal('inv-' + cat + '-percent', 100);
   invSetVal('inv-' + cat + '-low', 50);
   invSetVal('inv-' + cat + '-critical', 25);

@@ -2,13 +2,13 @@
 -- Migration 034 — Merchandise inventory (unit counts + history)
 -- ============================================================
 -- Merch doesn't fit inventory_items: it's counted in actual units, not
--- a rough percent, and one product fans out into colour / design /
+-- a rough percent, and one product fans out into color / design /
 -- size combinations. It gets its own three tables:
 --
 --   inventory_merch_products  the thing you'd reorder ("Next Level
 --                             Triblend Crew Tee"), with its vendor
 --                             style number.
---   inventory_merch_variants  one row per colour + design + size of a
+--   inventory_merch_variants  one row per color + design + size of a
 --                             product, holding the units on hand.
 --   inventory_merch_counts    every count ever taken, one row per
 --                             variant per day — the history the rest

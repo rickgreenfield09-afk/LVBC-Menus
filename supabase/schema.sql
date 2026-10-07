@@ -618,6 +618,42 @@ create table inventory_vendor_items (
 -- Covers the five percent-based categories in one table (shaped
 -- identically, distinguished by the category tag) — same pattern as
 -- beers using one table with a category column.
+-- Three levels deep: location > sublocation > spot ("Break room >
+-- Rack 1 > Box 2") — see migration_036. Ids are stable across renames.
+create table inventory_locations (
+  id uuid primary key default gen_random_uuid(),
+  parent_id uuid references inventory_locations(id) on delete cascade,
+  name text not null check (length(trim(name)) > 0),
+  sort_order int not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create unique index inventory_locations_sibling_name_uq on inventory_locations
+  (coalesce(parent_id, '00000000-0000-0000-0000-000000000000'::uuid), lower(trim(name)));
+
+create or replace function inventory_locations_check_depth()
+returns trigger as $$
+declare
+  depth int := 1;
+  cur uuid := new.parent_id;
+begin
+  while cur is not null loop
+    if cur = new.id then raise exception 'A location cannot sit inside itself'; end if;
+    depth := depth + 1;
+    if depth > 3 then raise exception 'Locations go three levels deep at most (location > sublocation > spot)'; end if;
+    select parent_id into cur from inventory_locations where id = cur;
+  end loop;
+  return new;
+end;
+$$ language plpgsql;
+
+create trigger inventory_locations_depth
+  before insert or update of parent_id on inventory_locations
+  for each row execute function inventory_locations_check_depth();
+
+insert into inventory_locations (name, sort_order) values
+  ('Taproom', 1), ('Brewhouse', 2), ('Break room', 3), ('Cleaning rack', 4);
+
 create table inventory_items (
   id uuid primary key default gen_random_uuid(),
   category text not null check (category in ('consumables','snacks','coffee','wine','merchandise')),
@@ -630,6 +666,9 @@ create table inventory_items (
   vendor_item_id uuid references inventory_vendor_items(id) on delete set null,
   -- wine/N/A rows link back to their menu item — see migration_024.
   wine_menu_id uuid references wine_menu(id) on delete set null,
+  -- see migration_036; the free-text location above stays as a note
+  location_id uuid references inventory_locations(id),
+  photo_url text,
   last_checked_at timestamptz,
   last_checked_by uuid references staff_profiles(id) on delete set null,
   created_at timestamptz not null default now(),
@@ -676,11 +715,15 @@ create trigger wine_menu_off_zeroes_inventory
   after update of status on wine_menu
   for each row execute function zero_inventory_when_menu_off();
 
--- ---------- MERCHANDISE INVENTORY (see migration_034 for the full rationale) ----------
--- Counted in actual units, per colour/design/size variant, with every
--- count kept in inventory_merch_counts. That log is the source of
--- truth: a variant's unit_count / last_checked_* are only ever set by
--- the trigger below, from that variant's most recent count.
+-- ---------- MERCHANDISE INVENTORY (see migration_034 + 036 for the full rationale) ----------
+-- Counted in actual units. Shape is product > style (color + design,
+-- carries the photo and retired/active) > variant (one size). Merch is
+-- kept in more than one location, so a count is for a variant AT a
+-- location: inventory_merch_counts is the log and the source of truth,
+-- inventory_merch_stock is the current units per variant per location,
+-- and a variant's unit_count is the sum of its stock rows — all kept
+-- by the triggers below. location_id null = not split by location yet.
+-- Counts are recorded through record_merch_count() only.
 create table inventory_merch_products (
   id uuid primary key default gen_random_uuid(),
   name text not null check (length(trim(name)) > 0),
@@ -698,18 +741,33 @@ create trigger inventory_merch_products_set_updated_at
   before update on inventory_merch_products
   for each row execute function set_updated_at();
 
-create table inventory_merch_variants (
+create table inventory_merch_styles (
   id uuid primary key default gen_random_uuid(),
   product_id uuid not null references inventory_merch_products(id) on delete cascade,
   color text,
   design text,
+  photo_url text,
+  status text not null default 'active' check (status in ('active','retired')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index inventory_merch_styles_uq on inventory_merch_styles
+  (product_id, lower(coalesce(color, '')), lower(coalesce(design, '')));
+
+create trigger inventory_merch_styles_set_updated_at
+  before update on inventory_merch_styles
+  for each row execute function set_updated_at();
+
+create table inventory_merch_variants (
+  id uuid primary key default gen_random_uuid(),
+  style_id uuid not null references inventory_merch_styles(id) on delete cascade,
   size text,
-  -- display order within a product (X-Small = 1 ... 3X-Large = 7)
+  -- display order within a style (X-Small = 1 ... 3X-Large = 7)
   size_sort int not null default 0,
   -- only set when it differs from the product's style_number
   style_number text,
   unit_count int not null default 0 check (unit_count >= 0),
-  status text not null default 'active' check (status in ('active','retired')),
   needs_verification boolean not null default false,
   verification_note text,
   last_checked_at timestamptz,
@@ -718,40 +776,62 @@ create table inventory_merch_variants (
   updated_at timestamptz not null default now()
 );
 
-create unique index inventory_merch_variants_uq on inventory_merch_variants
-  (product_id, lower(coalesce(color, '')), lower(coalesce(design, '')), lower(coalesce(size, '')));
+create unique index inventory_merch_variants_uq on inventory_merch_variants (style_id, lower(coalesce(size, '')));
 
 create trigger inventory_merch_variants_set_updated_at
   before update on inventory_merch_variants
   for each row execute function set_updated_at();
 
+create table inventory_merch_stock (
+  id uuid primary key default gen_random_uuid(),
+  variant_id uuid not null references inventory_merch_variants(id) on delete cascade,
+  -- null = not split by location yet
+  location_id uuid references inventory_locations(id),
+  unit_count int not null default 0 check (unit_count >= 0),
+  last_checked_at timestamptz,
+  last_checked_by uuid references staff_profiles(id) on delete set null,
+  constraint inventory_merch_stock_uq unique nulls not distinct (variant_id, location_id)
+);
+
+create index inventory_merch_stock_location_idx on inventory_merch_stock (location_id);
+
 create table inventory_merch_counts (
   id uuid primary key default gen_random_uuid(),
   variant_id uuid not null references inventory_merch_variants(id) on delete cascade,
+  location_id uuid references inventory_locations(id),
   counted_on date not null default current_date,
   counted_at timestamptz not null default now(),
   unit_count int not null check (unit_count >= 0),
   counted_by uuid references staff_profiles(id) on delete set null,
   -- 'import' = carried over from the pre-app spreadsheet (migration_035)
   source text not null default 'app' check (source in ('app','import')),
-  -- one count per variant per day; a recount the same day replaces it
-  unique (variant_id, counted_on)
+  -- one count per variant per location per day; a recount the same day replaces it
+  constraint inventory_merch_counts_uq unique nulls not distinct (variant_id, location_id, counted_on)
 );
 
 create index inventory_merch_counts_date_idx on inventory_merch_counts (counted_on);
 
+-- counts -> stock: the latest count for a variant at a location is its stock there.
 create or replace function sync_merch_variant_from_count()
 returns trigger as $$
 begin
-  update inventory_merch_variants v
-  set unit_count = new.unit_count,
-      last_checked_at = new.counted_at,
-      last_checked_by = new.counted_by
-  where v.id = new.variant_id
-    and not exists (
-      select 1 from inventory_merch_counts c
-      where c.variant_id = new.variant_id and c.counted_on > new.counted_on
-    );
+  if not exists (
+    select 1 from inventory_merch_counts c
+    where c.variant_id = new.variant_id
+      and c.location_id is not distinct from new.location_id
+      and c.counted_on > new.counted_on
+  ) then
+    insert into inventory_merch_stock (variant_id, location_id, unit_count, last_checked_at, last_checked_by)
+    values (new.variant_id, new.location_id, new.unit_count, new.counted_at, new.counted_by)
+    on conflict on constraint inventory_merch_stock_uq do update
+      set unit_count = excluded.unit_count,
+          last_checked_at = excluded.last_checked_at,
+          last_checked_by = excluded.last_checked_by;
+  end if;
+  -- a count at a real location supersedes the old unsplit total
+  if new.location_id is not null then
+    delete from inventory_merch_stock where variant_id = new.variant_id and location_id is null;
+  end if;
   return new;
 end;
 $$ language plpgsql security definer;
@@ -759,6 +839,45 @@ $$ language plpgsql security definer;
 create trigger inventory_merch_counts_sync_variant
   after insert or update on inventory_merch_counts
   for each row execute function sync_merch_variant_from_count();
+
+-- stock -> variant: unit_count is the sum across locations.
+create or replace function sync_merch_variant_from_stock()
+returns trigger as $$
+declare
+  vid uuid := coalesce(new.variant_id, old.variant_id);
+begin
+  update inventory_merch_variants v
+  set unit_count = coalesce((select sum(s.unit_count) from inventory_merch_stock s where s.variant_id = vid), 0),
+      last_checked_at = (select max(s.last_checked_at) from inventory_merch_stock s where s.variant_id = vid),
+      last_checked_by = (select s.last_checked_by from inventory_merch_stock s where s.variant_id = vid
+                         order by s.last_checked_at desc nulls last limit 1)
+  where v.id = vid;
+  return null;
+end;
+$$ language plpgsql security definer;
+
+create trigger inventory_merch_stock_sync_variant
+  after insert or update or delete on inventory_merch_stock
+  for each row execute function sync_merch_variant_from_stock();
+
+-- The one way the apps record a count. p_counted_on is the device's
+-- local date, so a late-evening count lands on the day the counter
+-- thinks it is.
+create or replace function record_merch_count(
+  p_variant_id uuid,
+  p_location_id uuid,
+  p_unit_count int,
+  p_counted_on date default current_date,
+  p_counted_at timestamptz default now()
+) returns void as $$
+  insert into inventory_merch_counts (variant_id, location_id, counted_on, counted_at, unit_count, counted_by, source)
+  values (p_variant_id, p_location_id, p_counted_on, p_counted_at, p_unit_count, auth.uid(), 'app')
+  on conflict on constraint inventory_merch_counts_uq do update
+    set unit_count = excluded.unit_count,
+        counted_at = excluded.counted_at,
+        counted_by = excluded.counted_by,
+        source = 'app';
+$$ language sql;
 
 -- ---------- MUSIC BINGO (see migration_025 for the full rationale) ----------
 -- ---------- SONG LIBRARY ----------
@@ -1421,6 +1540,9 @@ alter table inventory_order_log enable row level security;
 alter table inventory_merch_products enable row level security;
 alter table inventory_merch_variants enable row level security;
 alter table inventory_merch_counts enable row level security;
+alter table inventory_merch_styles enable row level security;
+alter table inventory_merch_stock enable row level security;
+alter table inventory_locations enable row level security;
 
 -- staff_profiles: staff can read the roster; only admins manage roles;
 -- anyone can update their OWN row (name/photo only — see the trigger
@@ -1551,6 +1673,26 @@ create policy "staff all inventory_merch_variants" on inventory_merch_variants f
 
 create policy "staff all inventory_merch_counts" on inventory_merch_counts for all
   using (is_staff()) with check (is_staff());
+
+create policy "staff all inventory_merch_styles" on inventory_merch_styles for all
+  using (is_staff()) with check (is_staff());
+
+create policy "staff all inventory_merch_stock" on inventory_merch_stock for all
+  using (is_staff()) with check (is_staff());
+
+create policy "staff read inventory_locations" on inventory_locations for select using (is_staff());
+create policy "admin write inventory_locations" on inventory_locations for all
+  using (is_admin()) with check (is_admin());
+
+-- Inventory photos: any staff can write under assets/inventory/ (the
+-- rest of the bucket stays admin-only) — see migration_036.
+create policy "staff insert inventory photos" on storage.objects for insert
+  with check (bucket_id = 'assets' and (storage.foldername(name))[1] = 'inventory' and is_staff());
+create policy "staff update inventory photos" on storage.objects for update
+  using (bucket_id = 'assets' and (storage.foldername(name))[1] = 'inventory' and is_staff())
+  with check (bucket_id = 'assets' and (storage.foldername(name))[1] = 'inventory' and is_staff());
+create policy "staff delete inventory photos" on storage.objects for delete
+  using (bucket_id = 'assets' and (storage.foldername(name))[1] = 'inventory' and is_staff());
 
 -- Staff-only, both read and write: PII / financial-equivalent (points) data
 create policy "staff only members" on members for all using (is_staff()) with check (is_staff());
