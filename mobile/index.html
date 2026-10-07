@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>LVBC Staff</title>
+<meta name="theme-color" content="#3E4E6C">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="LVBC Staff">
+<link rel="manifest" href="/mobile/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/mobile/icons/icon-180.png">
+<link rel="icon" type="image/png" href="/mobile/icons/icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<!-- Shared with the desktop staff panel: colour tokens, buttons, badges, cards. -->
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/mobile/mobile.css">
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <!-- LOGIN SCREEN -->
+  <div id="login-screen" class="m-login" style="display:none;">
+    <form id="login-form" class="m-login-card" onsubmit="handleLogin(event)">
+      <div class="logo" style="margin-bottom:20px;">LVBC <span>Staff</span></div>
+      <div class="admin-field">
+        <label class="admin-label" for="login-email">Email</label>
+        <input class="admin-input" type="email" id="login-email" autocomplete="username" required>
+      </div>
+      <div class="admin-field">
+        <label class="admin-label" for="login-password">Password</label>
+        <input class="admin-input" type="password" id="login-password" autocomplete="current-password" required>
+      </div>
+      <div id="login-error" class="m-login-error"></div>
+      <button type="submit" class="btn btn-primary" style="width:100%;">Sign In</button>
+      <!-- Password reset and first-time invite setup live on the desktop panel. -->
+      <a href="/" class="m-login-link">Forgot password? Reset it on the staff panel</a>
+    </form>
+  </div>
+
+  <!-- APP SHELL -->
+  <div id="app-shell" style="display:none;">
+    <header>
+      <span class="logo">LVBC <span id="m-screen-title">Schedule</span></span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="staff-badge" id="staff-name-badge"></span>
+        <button class="btn btn-secondary btn-sm" onclick="handleLogout()">Sign Out</button>
+      </div>
+    </header>
+
+    <div id="m-offline-bar" class="m-offline-bar" style="display:none;">Offline — changes will sync when you're back online</div>
+
+    <main>
+      <!-- SCHEDULE -->
+      <div class="screen active" id="screen-schedule">
+        <div class="section-label" style="margin-top:0;">My Upcoming Shifts</div>
+        <div class="card" id="m-my-shifts"><div class="loading">Loading...</div></div>
+
+        <div class="section-label">Open Shifts</div>
+        <div class="card" id="m-open-shifts"><div class="loading">Loading...</div></div>
+      </div>
+
+      <!-- INVENTORY COUNT -->
+      <div class="screen" id="screen-inventory">
+        <div class="m-inv-summary">
+          <div>
+            <div class="card-title" style="margin-bottom:2px;">Counted Today</div>
+            <div class="card-value teal" id="m-inv-progress">–</div>
+          </div>
+          <div id="m-inv-sync" class="m-inv-sync"></div>
+        </div>
+        <div class="m-chips" id="m-inv-chips"></div>
+        <div id="m-inv-list"><div class="loading">Loading...</div></div>
+      </div>
+
+      <!-- TIME OFF -->
+      <div class="screen" id="screen-timeoff">
+        <div class="section-label" style="margin-top:0;">Time Off</div>
+        <div class="card" id="m-timeoff"></div>
+      </div>
+    </main>
+
+    <nav class="m-tabbar">
+      <button class="nav-btn active" onclick="showTab('schedule', this)">Schedule</button>
+      <button class="nav-btn" onclick="showTab('inventory', this)">Inventory</button>
+      <button class="nav-btn" onclick="showTab('timeoff', this)">Time Off</button>
+    </nav>
+  </div>
+
+  <script src="/config.js"></script>
+  <script src="/mobile/js/core.js"></script>
+  <script src="/mobile/js/schedule.js"></script>
+  <script src="/mobile/js/inventory.js"></script>
+  <script src="/mobile/js/timeoff.js"></script>
+</body>
+</html>

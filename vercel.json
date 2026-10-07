@@ -1,4 +1,7 @@
 {
+  "redirects": [
+    { "source": "/mobile", "destination": "/mobile/", "permanent": false }
+  ],
   "functions": {
     "api/email-bingo-game.js": {
       "maxDuration": 120,
