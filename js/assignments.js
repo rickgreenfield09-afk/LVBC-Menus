@@ -144,9 +144,12 @@ function asgTargetLabel(t) {
 
 function asgBadge(task) { return '<span class="badge ' + ASG_CATEGORY_BADGE[task.category] + '">' + ASG_CATEGORIES[task.category] + '</span>'; }
 
-function asgTaskChipHtml(task, metaText) {
+// draggable is only set on the Shift Duties lists, where order is the point.
+function asgTaskChipHtml(task, metaText, draggable) {
   const n = asgTargets.filter((t) => t.task_id === task.id).length;
-  return '<div class="asg-task' + (task.is_active ? '' : ' paused') + '" onclick="openAssignmentForm(\'' + task.id + '\')">'
+  return '<div class="asg-task' + (task.is_active ? '' : ' paused') + '" onclick="openAssignmentForm(\'' + task.id + '\')"'
+    + (draggable ? ' draggable="true" data-task-id="' + task.id + '" ondragstart="asgDragStart(event)" ondragover="asgDragOver(event)" ondragleave="asgDragLeave(event)" ondrop="asgDrop(event)" ondragend="asgDragEnd()"' : '') + '>'
+    + (draggable ? '<span class="asg-grip" aria-hidden="true">&#8942;&#8942;</span> ' : '')
     + asgBadge(task) + ' <span class="asg-task-title">' + escHtml(task.title) + '</span>'
     + (n ? ' <span class="asg-task-meta">' + n + ' to count</span>' : '')
     + (metaText ? ' <span class="asg-task-meta">' + escHtml(metaText) + '</span>' : '')
@@ -191,16 +194,104 @@ function renderAssignmentsPlan() {
 // ── SHIFT DUTIES PAGE ────────────────────────────
 function renderAssignmentsDuties() {
   const column = (cat) => {
-    const tasks = asgTasks.filter((t) => t.category === cat)
-      .sort((a, b) => (a.frequency === 'daily' ? -1 : a.day_of_week) - (b.frequency === 'daily' ? -1 : b.day_of_week) || a.sort_order - b.sort_order || a.title.localeCompare(b.title));
+    const tasks = asgDutyList(cat);
     return '<div class="grid2-col"><div class="menu-col-header"><div><div class="section-label" style="margin:0;">' + ASG_CATEGORIES[cat] + '</div><div class="asg-task-meta">' + ASG_DUTY_NOTE[cat] + '</div></div>'
       + '<button class="btn btn-sm btn-secondary" onclick="openAssignmentForm(null,\'' + cat + '\')">+ Add</button></div><div class="card">'
-      + (tasks.length ? tasks.map((t) => asgTaskChipHtml(t, t.frequency === 'daily' ? 'every open day' : ASG_DAYS[t.day_of_week] + 's')).join('') : '<div class="loading">Nothing listed yet</div>')
+      + (tasks.length ? tasks.map((t) => asgTaskChipHtml(t, t.frequency === 'daily' ? 'every open day' : ASG_DAYS[t.day_of_week] + 's', true)).join('') : '<div class="loading">Nothing listed yet</div>')
       + '</div></div>';
   };
-  document.getElementById('asg-body').innerHTML = '<div class="card-sub" style="margin:0 0 16px;max-width:640px;">What every shift does at each end. Turnover is the AM bartender\'s handoff to the PM shift, so a day with only one shift skips it and that shift does both opening and closing.</div>'
+  document.getElementById('asg-body').innerHTML = '<div class="card-sub" style="margin:0 0 16px;max-width:640px;">What every shift does at each end, in the order it\'s done — drag a duty to move it. Turnover is the AM bartender\'s handoff to the PM shift, so a day with only one shift skips it and that shift does both opening and closing.</div>'
     + '<div id="asg-form"></div><div class="grid-2" style="grid-template-columns:repeat(3,1fr);">' + ASG_PAGES.duties.map(column).join('') + '</div>';
   if (asgFormOpen) renderAssignmentForm();
+}
+
+// One duty list in its saved order — the order the phone shows it in.
+function asgDutyList(cat) {
+  return asgTasks.filter((t) => t.category === cat).sort((a, b) => a.sort_order - b.sort_order || a.title.localeCompare(b.title));
+}
+
+// ── DRAG TO REORDER (Shift Duties) ───────────────
+let asgDragId = null;
+
+function asgDragStart(e) {
+  asgDragId = e.currentTarget.dataset.taskId;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', asgDragId);
+  e.currentTarget.classList.add('dragging');
+}
+
+// A duty can only be dropped within its own list (opening / turnover / closing).
+function asgDropTarget(e) {
+  const dragged = asgTasks.find((t) => t.id === asgDragId);
+  const target = asgTasks.find((t) => t.id === e.currentTarget.dataset.taskId);
+  return dragged && target && dragged.id !== target.id && dragged.category === target.category ? target : null;
+}
+
+function asgDragOver(e) {
+  if (!asgDropTarget(e)) return;
+  e.preventDefault();
+  const rect = e.currentTarget.getBoundingClientRect();
+  const after = e.clientY > rect.top + rect.height / 2;
+  e.currentTarget.classList.toggle('drop-after', after);
+  e.currentTarget.classList.toggle('drop-before', !after);
+}
+
+function asgDragLeave(e) { e.currentTarget.classList.remove('drop-before', 'drop-after'); }
+function asgDragEnd() { asgDragId = null; document.querySelectorAll('.asg-task.dragging,.asg-task.drop-before,.asg-task.drop-after').forEach((el) => el.classList.remove('dragging', 'drop-before', 'drop-after')); }
+
+async function asgDrop(e) {
+  const target = asgDropTarget(e);
+  if (!target) return;
+  e.preventDefault();
+  const after = e.currentTarget.classList.contains('drop-after');
+  const ids = asgDutyList(target.category).map((t) => t.id).filter((id) => id !== asgDragId);
+  ids.splice(ids.indexOf(target.id) + (after ? 1 : 0), 0, asgDragId);
+  asgDragEnd();
+
+  // Renumber the whole list 1..n and save only the rows whose number moved.
+  const changed = [];
+  ids.forEach((id, i) => { const t = asgTasks.find((x) => x.id === id); if (t.sort_order !== i + 1) { t.sort_order = i + 1; changed.push(t); } });
+  renderAssignmentsDuties();
+  const results = await Promise.all(changed.map((t) => window.supabase.from('assignment_tasks').update({ sort_order: t.sort_order }).eq('id', t.id)));
+  const failed = results.find((r) => r.error);
+  if (failed) { toast('Could not save the new order: ' + failed.error.message, true); await loadAssignments(); }
+}
+
+// ── DUTIES ON THE SHIFT POPUP (Schedule calendar + My Shifts) ──
+// Fills #shift-modal-duties with what each shift on that date is
+// responsible for. On My Shifts it's only the shifts you hold; on the
+// scheduler's calendar it's every shift that day. Read-only — the work
+// is checked off on the phone or the Assignments dashboard.
+async function renderShiftModalDuties(dateStr, shifts, context, myIds) {
+  const el = document.getElementById('shift-modal-duties');
+  if (!el) return;
+  el.innerHTML = '';
+  const slots = asgSlots(new Date(dateStr + 'T00:00:00').getDay());
+  if (!slots.length) return;
+  // The popup can open before anyone has visited Assignments.
+  const [tasks, completions] = await Promise.all([
+    asgTasks.length ? { data: asgTasks } : window.supabase.from('assignment_tasks').select('*').order('sort_order').order('title'),
+    window.supabase.from('assignment_completions').select('task_id,due_key,completed_by,credited_to').eq('due_key', dateStr),
+  ]);
+  if (tasks.error || !tasks.data) return;
+  asgTasks = tasks.data;
+  const done = completions.data || [];
+
+  let html = '';
+  slots.forEach((slot) => {
+    const onShift = shifts.filter((s) => s.role === 'bartender' && s.staff_id && (slots.length === 1 || s.period === slot.period));
+    if (context === 'myshifts' && !onShift.some((s) => myIds.includes(s.staff_id))) return;
+    const duties = asgTasksOnShift(dateStr, slot);
+    if (!duties.length) return;
+    const who = [...new Set(onShift.map((s) => staffName(s.staff_id)))].join(', ');
+    html += '<div class="asg-who" style="margin-top:12px;">' + (slots.length === 1 ? 'Shift' : ASG_PERIODS[slot.period] + ' bartender') + (who ? ' · ' + escHtml(who) : '') + '</div>'
+      + Object.keys(ASG_CATEGORIES).map((cat) => duties.filter((t) => t.category === cat).map((t) => {
+        const c = done.find((x) => x.task_id === t.id);
+        return '<div class="asg-week-task">' + asgBadge(t) + ' <span class="asg-task-title">' + escHtml(t.title) + '</span>'
+          + (c ? ' <span class="asg-status done">&#10003; ' + escHtml(staffName(c.credited_to || c.completed_by)) + '</span>' : '') + '</div>';
+      }).join('')).join('');
+  });
+  el.innerHTML = html ? '<div class="section-label">' + (context === 'myshifts' ? 'Your Duties This Shift' : 'Shift Duties') + '</div>' + html : '';
 }
 
 // ── TASK FORM ────────────────────────────────────

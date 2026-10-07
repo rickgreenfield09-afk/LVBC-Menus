@@ -124,3 +124,8 @@
   .m-off-tick.on span{background:var(--teal);border-color:var(--teal);color:var(--void);}
   .m-off-add{display:flex;gap:8px;margin-top:16px;}
   .m-off-add .admin-input{flex:1;}
+
+  /* ── SHIFT DETAILS (tap a shift on the Schedule tab) ── */
+  .m-shift-tap{flex:1;min-width:0;cursor:pointer;}
+  .m-shift-more{font-size:11px;font-family:'DM Mono',monospace;color:var(--teal);margin-top:4px;}
+  .m-duty{padding:10px 0;border-bottom:1px solid var(--border);}

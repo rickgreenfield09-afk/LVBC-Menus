@@ -9,7 +9,9 @@
 // not move the shift. A scheduler still reassigns it on the desktop
 // panel, same as when a request is claimed there.
 // Depends on: window.supabase, window.currentStaff, toast(),
-// escHtml(), toDateStr(), fmtTime() (core.js)
+// escHtml(), toDateStr(), fmtTime() (core.js), mOpenSheet(),
+// mCloseSheet() (inventory.js), mTasks, mTaskSlots(), mTasksFor(),
+// M_TASK_CATEGORIES (tasks.js)
 
 let mDaySettings = [];
 let mMyStaffIds = [];
@@ -48,16 +50,18 @@ async function loadSchedule() {
   await Promise.all([loadMyUpcomingShifts(), loadCoverageRequests(), loadOpenShifts()]);
 }
 
-function shiftRowHtml(s, actionHtml, metaExtraHtml) {
+// detailId makes the left side of the row tappable, opening that shift's details sheet.
+function shiftRowHtml(s, actionHtml, metaExtraHtml, detailId) {
   const d = new Date(s.shift_date + 'T00:00:00');
   const setting = mDaySettings.find((x) => x.day_of_week === d.getDay()) || {};
   const label = s.role === 'manager' ? 'Manager on Duty' : shiftSlotLabel(setting, s.period);
   const isToday = s.shift_date === toDateStr(new Date());
   const time = s.start_time ? fmtTime(s.start_time) + (s.end_time ? '–' + fmtTime(s.end_time) : '') : '';
-  return '<div class="shift-row"><div>'
+  return '<div class="shift-row"><div' + (detailId ? ' class="m-shift-tap" role="button" tabindex="0" onclick="openShiftDetails(\'' + detailId + '\')"' : '') + '>'
     + '<div class="shift-row-name">' + d.toLocaleDateString('default', { weekday: 'short', month: 'short', day: 'numeric' }) + ' · ' + escHtml(label)
     + (isToday ? ' <span class="badge badge-teal">Today</span>' : '') + '</div>'
     + '<div class="shift-row-meta">' + [time, metaExtraHtml].filter(Boolean).join(' · ') + '</div>'
+    + (detailId ? '<div class="m-shift-more">View duties &rsaquo;</div>' : '')
     + '</div>' + (actionHtml || '') + '</div>';
 }
 
@@ -84,20 +88,54 @@ function renderMyUpcomingShifts() {
   el.innerHTML = mMyShifts.map((s) => {
     const req = mMyShiftRequests.find((r) => r.shift_id === s.id);
     if (req && req.status === 'claimed') {
-      return shiftRowHtml(s, '', '<span style="color:var(--teal);">Covered by ' + escHtml((req.claimer && req.claimer.name) || 'someone') + '</span>');
+      return shiftRowHtml(s, '', '<span style="color:var(--teal);">Covered by ' + escHtml((req.claimer && req.claimer.name) || 'someone') + '</span>', s.id);
     }
     if (req) {
       return shiftRowHtml(s, '<button class="btn btn-sm btn-danger" onclick="cancelCoverageRequest(\'' + req.id + '\')">Cancel Request</button>',
-        '<span style="color:var(--amber);">Coverage requested</span>');
+        '<span style="color:var(--amber);">Coverage requested</span>', s.id);
     }
     if (mCoverFormShiftId === s.id) {
-      return shiftRowHtml(s) + '<div class="m-cover-form">'
+      return shiftRowHtml(s, '', '', s.id) + '<div class="m-cover-form">'
         + '<input class="admin-input" type="text" id="m-cover-note" maxlength="200" placeholder="Note for the team (optional)">'
         + '<div class="m-cover-form-btns"><button class="btn btn-secondary" onclick="toggleCoverForm(null)">Cancel</button>'
         + '<button class="btn btn-primary" onclick="submitCoverageRequest(\'' + s.id + '\')">Send Request</button></div></div>';
     }
-    return shiftRowHtml(s, '<button class="btn btn-sm btn-secondary" onclick="toggleCoverForm(\'' + s.id + '\')">Need Coverage</button>');
+    return shiftRowHtml(s, '<button class="btn btn-sm btn-secondary" onclick="toggleCoverForm(\'' + s.id + '\')">Need Coverage</button>', '', s.id);
   }).join('');
+}
+
+// ── SHIFT DETAILS (tap one of your shifts) ────────
+// Read-only: the date, the hours, and the duties assigned to that
+// shift, in the order they're done. Checking them off happens on the
+// Tasks tab on the day.
+async function openShiftDetails(shiftId) {
+  const s = mMyShifts.find((x) => x.id === shiftId);
+  if (!s) return;
+  const d = new Date(s.shift_date + 'T00:00:00');
+  const setting = mDaySettings.find((x) => x.day_of_week === d.getDay()) || {};
+  const head = '<div class="m-sheet-body"><div class="m-sheet-title">' + d.toLocaleDateString('default', { weekday: 'long', month: 'long', day: 'numeric' }) + '</div>'
+    + '<div class="m-item-sub">' + escHtml(s.role === 'manager' ? 'Manager on Duty' : shiftSlotLabel(setting, s.period) + ' shift')
+    + (s.start_time ? ' · ' + fmtTime(s.start_time) + (s.end_time ? '–' + fmtTime(s.end_time) : '') : '') + '</div>';
+  const foot = '</div><div class="m-sheet-actions" style="grid-template-columns:1fr;"><button class="btn btn-primary" onclick="mCloseSheet()">Close</button></div>';
+  mOpenSheet(head + '<div class="loading">Loading duties...</div>' + foot);
+
+  // The plan may not be loaded yet if the Tasks tab hasn't been opened.
+  if (!mTasks.length) {
+    const { data, error } = await window.supabase.from('assignment_tasks').select('*').eq('is_active', true).order('sort_order').order('title');
+    if (error) { mOpenSheet(head + '<div class="loading">Could not load duties: ' + escHtml(error.message) + '</div>' + foot); return; }
+    mTasks = data;
+  }
+  const slots = mTaskSlots(d.getDay());
+  const slot = s.role === 'bartender' ? (slots.length === 1 ? slots[0] : slots.find((x) => x.period === s.period)) : null;
+  const duties = slot ? mTasksFor(s.shift_date, slot.covers) : [];
+  let body = '';
+  Object.keys(M_TASK_CATEGORIES).forEach((cat) => {
+    const list = duties.filter((t) => t.category === cat);
+    if (!list.length) return;
+    body += '<label class="admin-label m-sheet-label">' + M_TASK_CATEGORIES[cat] + '</label>'
+      + list.map((t) => '<div class="m-duty"><div class="m-task-target-name">' + escHtml(t.title) + '</div>' + (t.instructions ? '<div class="m-task-notes" style="margin-top:2px;">' + escHtml(t.instructions) + '</div>' : '') + '</div>').join('');
+  });
+  mOpenSheet(head + (body || '<div class="loading">No duties are assigned to this shift.</div>') + foot);
 }
 
 function toggleCoverForm(shiftId) {
