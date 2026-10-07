@@ -68,3 +68,15 @@
   .m-pct.ok{color:var(--teal);}
   .m-same{height:48px;border-radius:8px;border:1px solid var(--border);background:var(--raised);color:var(--sub);font-size:12px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;touch-action:manipulation;}
   .m-item.counted .m-same{background:rgba(42,184,166,0.12);border-color:rgba(42,184,166,0.3);color:var(--teal);}
+
+  /* ── MERCH COUNT (the Merch chip on the inventory screen) ── */
+  .m-merch-group{font-size:12px;color:var(--sub);margin:12px 0 6px;}
+  .m-merch-sizes{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px;}
+  .m-merch-group + .m-merch-sizes{margin-top:0;}
+  .m-merch-size{display:flex;flex-direction:column;gap:4px;}
+  .m-merch-size span{font-size:10px;font-family:'DM Mono',monospace;color:var(--muted);letter-spacing:0.5px;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .m-merch-size input{width:100%;height:48px;background:var(--void);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'DM Mono',monospace;font-size:18px;text-align:center;outline:none;-moz-appearance:textfield;}
+  .m-merch-size input::-webkit-outer-spin-button,.m-merch-size input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+  .m-merch-size input:focus{border-color:var(--teal);}
+  .m-merch-size.flagged input{border-color:var(--amber);}
+  .m-merch-size.counted input{border-color:rgba(42,184,166,0.45);background:rgba(42,184,166,0.08);}

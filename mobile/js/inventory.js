@@ -7,6 +7,10 @@
 // Adding/editing items, vendors and the order log stay on the desktop
 // panel — this screen only records levels.
 //
+// Merchandise is the exception to "percent": it's counted in units and
+// lives behind the Merch chip, drawn by mobile/js/merch.js into the
+// same list area.
+//
 // Every change is written to a localStorage queue first and synced
 // from there, so a count taken with no signal (walk-in, cellar) isn't
 // lost: it sends the next time the phone is online. "Counted today"
@@ -32,7 +36,7 @@ async function loadInventoryCount() {
   const { data, error } = await window.supabase.from('inventory_items').select('*');
   if (error) {
     mInvItems = readJson(M_INV_ITEMS_KEY) || [];
-    if (!mInvItems.length) { document.getElementById('m-inv-list').innerHTML = '<div class="loading">Could not load inventory: ' + escHtml(error.message) + '</div>'; return; }
+    if (!mInvItems.length && mInvFilter !== 'merch') { renderInvChips(); document.getElementById('m-inv-list').innerHTML = '<div class="loading">Could not load inventory: ' + escHtml(error.message) + '</div>'; return; }
   } else {
     mInvItems = data || [];
     writeJson(M_INV_ITEMS_KEY, mInvItems);
@@ -41,7 +45,7 @@ async function loadInventoryCount() {
   const queue = mInvQueue();
   mInvItems.forEach((i) => { if (queue[i.id]) { i.percent_remaining = queue[i.id].pct; i.last_checked_at = queue[i.id].at; } });
   renderInvChips();
-  renderInvList();
+  if (mInvFilter === 'merch') loadMerchCount(); else renderInvList();
   mInvFlush();
 }
 
@@ -58,13 +62,15 @@ function mInvCountedToday(i) {
 function setInvFilter(cat) {
   mInvFilter = cat;
   renderInvChips();
-  renderInvList();
+  if (cat !== 'merch') { renderInvList(); return; }
+  document.getElementById('m-inv-list').innerHTML = '<div class="loading">Loading...</div>';
+  loadMerchCount();
 }
 
 function renderInvChips() {
-  const cats = ['all'].concat(Object.keys(M_INV_CATEGORY_LABELS).filter((c) => mInvItems.some((i) => i.category === c)));
+  const cats = ['all'].concat(Object.keys(M_INV_CATEGORY_LABELS).filter((c) => mInvItems.some((i) => i.category === c)), ['merch']);
   document.getElementById('m-inv-chips').innerHTML = cats.map((c) =>
-    '<div class="badge-pill' + (c === mInvFilter ? ' selected' : '') + '" onclick="setInvFilter(\'' + c + '\')">' + (c === 'all' ? 'All' : M_INV_CATEGORY_LABELS[c]) + '</div>').join('');
+    '<div class="badge-pill' + (c === mInvFilter ? ' selected' : '') + '" onclick="setInvFilter(\'' + c + '\')">' + (c === 'all' ? 'All' : c === 'merch' ? 'Merch' : M_INV_CATEGORY_LABELS[c]) + '</div>').join('');
 }
 
 // Grouped by location so the list reads in the order you walk the room.
@@ -97,7 +103,7 @@ function renderInvList() {
 }
 
 function renderInvSyncStatus() {
-  const pending = Object.keys(mInvQueue()).length;
+  const pending = Object.keys(mInvQueue()).length + mMerchPending();
   document.getElementById('m-inv-sync').textContent = pending ? pending + ' waiting to sync' : '';
 }
 

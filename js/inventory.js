@@ -16,7 +16,10 @@
 // Depends on: window.supabase, toast(), escHtml() (js/menu.js)
 
 const INV_CATEGORY_LABELS = { consumables: 'Consumables', snacks: 'Snacks', coffee: 'Coffee', wine: 'Wine', merchandise: 'Merchandise' };
-const INV_ITEM_CATEGORIES = Object.keys(INV_CATEGORY_LABELS);
+// Merchandise keeps its label here (vendor items are still tagged with
+// it) but isn't a percent category — it's counted in units on its own
+// screen, see js/merch.js.
+const INV_ITEM_CATEGORIES = Object.keys(INV_CATEGORY_LABELS).filter((c) => c !== 'merchandise');
 
 let invItemsCache = [];
 let invVendorsCache = [];
@@ -38,6 +41,7 @@ function setInventoryTab(tab, btn) {
   document.getElementById('inventorytab-' + tab).classList.add('active');
   if (tab === 'dashboard') loadInventoryDashboard();
   else if (INV_ITEM_CATEGORIES.includes(tab)) { ensureCategoryTemplateBuilt(tab); loadInventoryCategory(tab); }
+  else if (tab === 'merchandise') loadMerch();
   else if (tab === 'vendors') loadInventoryVendors();
 }
 
@@ -151,7 +155,7 @@ async function loadInventoryDashboard() {
     const rows = invItemsCache.filter((i) => i.category === cat);
     return invDashCardHtml(INV_CATEGORY_LABELS[cat], rows.map((i) => invStatusColor(i.percent_remaining, i.low_threshold, i.critical_threshold)));
   });
-  cardsEl.innerHTML = categoryCards.join('');
+  cardsEl.innerHTML = categoryCards.join('') + await invDashMerchCardHtml();
 
   const needsAttention = [];
   invItemsCache.forEach((i) => {
@@ -176,6 +180,18 @@ async function loadInventoryDashboard() {
       + '<td>' + invOrderCellHtml(n.itemType, n.id, n.color, n.vendorItemId, n.cat) + '</td></tr>';
   }).join('');
   naEl.innerHTML = '<div class="table-wrap"><table><thead><tr><th></th><th>Category</th><th>Item</th><th>Location</th><th>Level</th><th>Vendor / Reorder Info</th><th>Order Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+// Merch has no low/critical thresholds, so its card shows units on
+// hand and anything flagged for verification instead of red/yellow.
+async function invDashMerchCardHtml() {
+  const { data, error } = await window.supabase.from('inventory_merch_variants').select('unit_count,status,needs_verification');
+  if (error) return '<div class="card"><div class="card-title">Merchandise</div><div class="card-value">—</div><div class="card-sub">Not available</div></div>';
+  const active = data.filter((v) => v.status === 'active');
+  const flagged = data.filter((v) => v.needs_verification).length;
+  return '<div class="card" style="cursor:pointer;" onclick="setInventoryTab(\'merchandise\', document.getElementById(\'inventorytab-btn-merchandise\'))"><div class="card-title">Merchandise</div>'
+    + '<div class="card-value">' + data.reduce((a, v) => a + v.unit_count, 0) + '</div>'
+    + '<div class="card-sub">units &middot; ' + active.filter((v) => v.unit_count === 0).length + ' sizes out' + (flagged ? ' &middot; ' + flagged + ' to verify' : '') + '</div></div>';
 }
 
 function invDashCardHtml(label, colors) {
