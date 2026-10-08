@@ -5,9 +5,11 @@
 // (mobile/js/tasks.js). This screen is for the people who build the
 // schedule (canSchedule()); RLS enforces the same.
 //
-//   Dashboard               this week's shifts with each task done /
-//                           open / missed, plus how many tasks were
-//                           assigned to and completed by each employee
+//   Dashboard               today's shifts in full (who is on, what
+//                           they owe), pending ad hoc assignments, the
+//                           rest of the week collapsed per day, and how
+//                           many tasks each employee was assigned and
+//                           completed
 //   Inventory               which items and merch each shift counts
 //   Cleaning & Maintenance  recurring tasks, plus special assignments
 //   Shift Duties            opening, turnover and closing lists
@@ -60,6 +62,8 @@ let asgTasks = [];
 let asgTargets = [];
 let asgCompletions = [];
 let asgWeekShifts = [];
+let asgTodayShifts = [];         // today's bartender shifts, whatever week is on screen
+let asgOpenDays = new Set();     // dates expanded under "Rest of the week"
 let asgItems = [];        // percent items, for target pickers and labels
 let asgMerchStyles = [];  // active styles with their product name
 let asgView = 'dashboard';
@@ -443,13 +447,15 @@ async function loadAssignmentsWeek() {
   const end = toDateStr(new Date(asgWeekStart.getFullYear(), asgWeekStart.getMonth(), asgWeekStart.getDate() + 6));
   const quarterStart = asgQuarterStart(start);
   // Completions for this week's dates, plus anything that settles a quarterly or ad hoc task.
-  const [completions, shifts] = await Promise.all([
+  const [completions, shifts, todayShifts] = await Promise.all([
     window.supabase.from('assignment_completions').select('*').or('due_key.eq.adhoc,completed_on.gte.' + (quarterStart < start ? quarterStart : start)),
     window.supabase.from('shifts').select('shift_date,period,staff_id,role').gte('shift_date', start).lte('shift_date', end).eq('role', 'bartender'),
+    window.supabase.from('shifts').select('shift_date,period,staff_id,role').eq('shift_date', toDateStr(new Date())).eq('role', 'bartender'),
   ]);
   if (completions.error) { document.getElementById('asg-body').innerHTML = '<div class="loading">Could not load this week: ' + escHtml(completions.error.message) + '</div>'; return; }
   asgCompletions = completions.data;
   asgWeekShifts = shifts.data || [];
+  asgTodayShifts = todayShifts.data || [];
   if (asgView === 'dashboard') await loadAssignmentsMetrics();
   asgRender();
 }
@@ -460,59 +466,101 @@ function asgStatusHtml(c, dateStr, today) {
       : dateStr === today ? '<span class="asg-status open">Open</span>' : '';
 }
 
+function asgToggleDay(dateStr, open) { if (open) asgOpenDays.add(dateStr); else asgOpenDays.delete(dateStr); }
+
+// Layout, top to bottom: today's shifts in full (who is on, what they
+// owe), the ad hoc tasks still waiting, the rest of the week folded
+// away per day, open quarterly tasks, then tasks by employee.
 function renderAssignmentsDashboard() {
   const today = toDateStr(new Date());
   const days = [];
   for (let i = 0; i < 7; i++) days.push(new Date(asgWeekStart.getFullYear(), asgWeekStart.getMonth(), asgWeekStart.getDate() + i));
-  let due = 0, done = 0, missed = 0;
+  const week = { due: 0, done: 0, missed: 0 };
 
-  const taskRow = (t, dateStr, period) => {
+  const taskRow = (t, dateStr, period, tally) => {
     const c = asgCompletion(t, dateStr);
-    if (dateStr <= today) { due++; if (c) done++; else if (dateStr < today) missed++; }
+    if (dateStr <= today) { tally.due++; if (c) tally.done++; else if (dateStr < today) tally.missed++; }
     const action = dateStr > today ? '' : c
       ? '<button class="merch-link" onclick="undoAssignmentDone(\'' + c.id + '\')">undo</button>'
       : '<button class="merch-link" onclick="markAssignmentDone(\'' + t.id + '\',\'' + dateStr + '\',\'' + period + '\')">mark done</button>';
     return '<div class="asg-week-task">' + asgBadge(t) + ' <span class="asg-task-title asg-link" onclick="openAssignmentForm(\'' + t.id + '\')">' + escHtml(t.title) + '</span> ' + asgStatusHtml(c, dateStr, today) + ' ' + action + '</div>';
   };
+  // One shift of one day: who is on it and what it owes.
+  const shiftHtml = (dateStr, slot, single, shifts, tally) => {
+    const who = [...new Set(shifts.filter((x) => x.shift_date === dateStr && (single || x.period === slot.period)).map((x) => (x.staff_id ? staffName(x.staff_id) : 'Open shift')))];
+    const tasks = asgTasksOnShift(dateStr, slot);
+    return { who: who.length ? who.join(', ') : 'No one scheduled', count: tasks.length,
+      body: tasks.length ? tasks.map((t) => taskRow(t, dateStr, slot.period, tally)).join('') : '<span class="asg-empty">No tasks</span>' };
+  };
+  const shiftLabel = (slot, single) => (single ? 'Bartender (one shift)' : ASG_PERIODS[slot.period] + ' Bartender');
 
-  let rows = '';
+  // ── today ──
+  const todaySlots = asgSlots(new Date().getDay());
+  const todayTally = { due: 0, done: 0, missed: 0 };
+  const todayCards = todaySlots.map((slot) => {
+    const sh = shiftHtml(today, slot, todaySlots.length === 1, asgTodayShifts, todayTally);
+    return '<div class="card"><div class="asg-today-head"><div><div class="card-title" style="margin:0;">' + shiftLabel(slot, todaySlots.length === 1) + '</div>'
+      + '<div class="asg-today-who">' + escHtml(sh.who) + '</div></div><div class="asg-task-meta">' + sh.count + ' task' + (sh.count === 1 ? '' : 's') + '</div></div>' + sh.body + '</div>';
+  });
+
+  // ── pending ad hoc (shift one-offs and special assignments, any due date) ──
+  const pending = asgTasks.filter((t) => t.is_active && t.frequency === 'adhoc' && !asgCompletion(t, today)).sort((a, b) => a.due_date.localeCompare(b.due_date));
+  const dueState = (t) => (t.due_date < today ? '<span class="asg-status missed">&#10007; Overdue</span>' : t.due_date === today ? '<span class="asg-status open">Due today</span>' : '<span class="asg-task-meta">Upcoming</span>');
+  const pendingHtml = pending.length ? '<div class="table-wrap"><table><thead><tr><th>Task</th><th>Type</th><th>Assigned To</th><th>Due</th><th>Status</th><th></th></tr></thead><tbody>'
+    + pending.map((t) => '<tr><td><span class="asg-task-title asg-link" onclick="openAssignmentForm(\'' + t.id + '\')">' + escHtml(t.title) + '</span>'
+      + (t.instructions ? '<div class="asg-task-meta">' + escHtml(t.instructions) + '</div>' : '') + '</td>'
+      + '<td>' + asgBadge(t) + '</td>'
+      + '<td>' + (t.assigned_staff_id ? escHtml(staffName(t.assigned_staff_id)) + ' <span class="asg-task-meta">special assignment</span>' : ASG_PERIODS[t.period] + ' bartender on shift') + '</td>'
+      + '<td style="white-space:nowrap;">' + new Date(t.due_date + 'T00:00:00').toLocaleDateString('default', { weekday: 'short', month: 'short', day: 'numeric' }) + '</td>'
+      + '<td style="white-space:nowrap;">' + dueState(t) + '</td>'
+      + '<td style="text-align:right;"><button class="merch-link" onclick="markAssignmentDone(\'' + t.id + '\',\'' + today + '\',\'' + (t.assigned_staff_id ? '' : t.period) + '\')">mark done</button></td></tr>').join('')
+    + '</tbody></table></div>' : '<div class="card"><div class="loading">No ad hoc assignments waiting.</div></div>';
+
+  // ── the rest of the week on screen, one collapsed row per day ──
+  let otherDays = '';
   days.forEach((d) => {
     const dateStr = toDateStr(d);
     const slots = asgSlots(d.getDay());
-    if (!slots.length) return;
-    rows += '<tr' + (dateStr === today ? ' class="asg-today"' : '') + '><td class="asg-day">' + d.toLocaleDateString('default', { weekday: 'long' }) + '<div class="asg-task-meta">' + asgShortDate(dateStr) + '</div></td>';
-    slots.forEach((s) => {
-      const who = asgWeekShifts.filter((x) => x.shift_date === dateStr && (slots.length === 1 || x.period === s.period)).map((x) => (x.staff_id ? staffName(x.staff_id) : 'Open shift'));
-      const tasks = asgTasksOnShift(dateStr, s);
-      rows += '<td' + (slots.length === 1 ? ' colspan="2"' : '') + '><div class="asg-who">' + (who.length ? escHtml([...new Set(who)].join(', ')) : 'No one scheduled') + '</div>'
-        + (tasks.length ? tasks.map((t) => taskRow(t, dateStr, s.period)).join('') : '<span class="asg-empty">No tasks</span>') + '</td>';
+    const tally = { due: 0, done: 0, missed: 0 };
+    const cells = slots.map((slot) => {
+      const sh = shiftHtml(dateStr, slot, slots.length === 1, asgWeekShifts, tally);
+      return '<div><div class="asg-who">' + shiftLabel(slot, slots.length === 1) + ' · ' + escHtml(sh.who) + '</div>' + sh.body + '</div>';
     });
-    rows += '</tr>';
+    week.due += tally.due; week.done += tally.done; week.missed += tally.missed;
+    if (dateStr === today || !slots.length) return; // today is shown in full above; closed days have nothing
+    const count = slots.reduce((a, slot) => a + asgTasksOnShift(dateStr, slot).length, 0);
+    const summary = dateStr < today ? tally.done + ' / ' + tally.due + ' done' + (tally.missed ? ' · <span class="asg-status missed" style="margin:0;">' + tally.missed + ' missed</span>' : '') : count + ' task' + (count === 1 ? '' : 's') + ' planned';
+    otherDays += '<details class="asg-day-details"' + (asgOpenDays.has(dateStr) ? ' open' : '') + ' ontoggle="asgToggleDay(\'' + dateStr + '\',this.open)"><summary><span class="asg-day">' + d.toLocaleDateString('default', { weekday: 'long' })
+      + '</span> <span class="asg-task-meta">' + asgShortDate(dateStr) + '</span><span class="asg-day-summary">' + summary + '</span></summary>'
+      + '<div class="asg-day-body" style="grid-template-columns:repeat(' + cells.length + ',1fr);">' + cells.join('') + '</div></details>';
   });
 
   const label = asgShortDate(toDateStr(days[0])) + ' – ' + days[6].toLocaleDateString('default', { month: 'short', day: 'numeric', year: 'numeric' });
   const tile = (title, value, sub) => '<div class="card"><div class="card-title">' + title + '</div><div class="card-value">' + value + '</div><div class="card-sub">' + sub + '</div></div>';
-  // Not tied to one shift, so they sit below the grid: quarterly tasks,
-  // special assignments, and ad hoc tasks that slipped past their date.
   const quarterly = asgTasks.filter((t) => t.is_active && t.frequency === 'quarterly');
-  const special = asgTasks.filter((t) => t.is_active && t.assigned_staff_id && (!asgCompletion(t, today) || asgCompletion(t, today).completed_on >= toDateStr(days[0])));
-  const overdue = asgTasks.filter((t) => t.is_active && t.frequency === 'adhoc' && !t.assigned_staff_id && t.due_date < today && !asgCompletion(t, today));
-  const loose = (t, note) => { const c = asgCompletion(t, today); return '<div class="asg-week-task">' + asgBadge(t) + ' <span class="asg-task-title asg-link" onclick="openAssignmentForm(\'' + t.id + '\')">' + escHtml(t.title) + '</span> <span class="asg-task-meta">' + escHtml(note) + '</span> '
+  const quarterlyRow = (t) => { const c = asgCompletion(t, today); return '<div class="asg-week-task">' + asgBadge(t) + ' <span class="asg-task-title asg-link" onclick="openAssignmentForm(\'' + t.id + '\')">' + escHtml(t.title) + '</span> <span class="asg-task-meta">'
+    + ASG_PERIODS[t.period] + (t.day_of_week != null ? ' · ' + ASG_DAYS[t.day_of_week] + 's' : ' · any day') + '</span> '
     + (c ? '<span class="asg-status done">&#10003; ' + escHtml(staffName(c.credited_to || c.completed_by)) + '</span> <button class="merch-link" onclick="undoAssignmentDone(\'' + c.id + '\')">undo</button>'
-      : '<span class="asg-status ' + (t.frequency === 'adhoc' && t.due_date < today ? 'missed">Overdue' : 'open">Open') + '</span> <button class="merch-link" onclick="markAssignmentDone(\'' + t.id + '\',\'' + today + '\',\'\')">mark done</button>') + '</div>'; };
+      : '<span class="asg-status open">Open</span> <button class="merch-link" onclick="markAssignmentDone(\'' + t.id + '\',\'' + today + '\',\'\')">mark done</button>') + '</div>'; };
 
-  document.getElementById('asg-body').innerHTML = '<div class="menu-col-header"><div style="display:flex;align-items:center;gap:8px;">'
+  document.getElementById('asg-body').innerHTML =
+    '<div class="menu-col-header"><div class="section-label" style="margin:0;">Today · ' + new Date().toLocaleDateString('default', { weekday: 'long', month: 'short', day: 'numeric' }) + '</div>'
+    + (todaySlots.length ? '<div class="asg-task-meta">' + todayTally.done + ' / ' + todayTally.due + ' done</div>' : '') + '</div>'
+    + (todaySlots.length ? '<div class="grid-2" style="grid-template-columns:repeat(' + todayCards.length + ',1fr);align-items:start;margin-bottom:8px;">' + todayCards.join('') + '</div>'
+      : '<div class="card"><div class="loading">Closed today — no shifts.</div></div>')
+
+    + '<div class="section-label">Pending ad hoc assignments</div>' + pendingHtml
+
+    + '<div class="menu-col-header" style="margin-top:28px;"><div class="section-label" style="margin:0;">Rest of the week</div><div style="display:flex;align-items:center;gap:8px;">'
     + '<button class="btn btn-sm btn-secondary" aria-label="Previous week" onclick="assignmentsWeekNav(-1)">&#8249;</button>'
-    + '<div class="section-label" style="margin:0;min-width:190px;text-align:center;">' + label + '</div>'
+    + '<div class="asg-task-meta" style="min-width:170px;text-align:center;">' + label + '</div>'
     + '<button class="btn btn-sm btn-secondary" aria-label="Next week" onclick="assignmentsWeekNav(1)">&#8250;</button>'
     + '<button class="btn btn-sm btn-secondary" onclick="assignmentsWeekNav(0)">This Week</button></div></div>'
-    + '<div class="grid-4" style="grid-template-columns:repeat(3,1fr);">' + tile('Done', done + ' / ' + due, 'of tasks due so far this week') + tile('Missed', missed, 'past shifts, not checked off')
+    + '<div class="grid-4" style="grid-template-columns:repeat(3,1fr);">' + tile('Done', week.done + ' / ' + week.due, 'of tasks due so far that week') + tile('Missed', week.missed, 'past shifts, not checked off')
     + tile('Open Quarterly', quarterly.filter((t) => !asgCompletion(t, today)).length, 'not yet done this quarter') + '</div>'
-    + (rows ? '<div class="table-wrap asg-grid"><table><thead><tr><th style="width:140px;"></th><th>AM Bartender</th><th>PM Bartender</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="loading">No open days this week.</div>')
-    + (quarterly.length || special.length || overdue.length ? '<div class="section-label">Not tied to one shift</div><div class="card">'
-      + special.map((t) => loose(t, 'special assignment · ' + staffName(t.assigned_staff_id) + ' · due ' + asgShortDate(t.due_date))).join('')
-      + overdue.map((t) => loose(t, 'ad hoc · was due ' + asgShortDate(t.due_date))).join('')
-      + quarterly.map((t) => loose(t, 'quarterly · ' + ASG_PERIODS[t.period] + (t.day_of_week != null ? ' · ' + ASG_DAYS[t.day_of_week] + 's' : ''))).join('') + '</div>' : '')
+    + (otherDays || '<div class="card"><div class="loading">No other open days that week.</div></div>')
+
+    + (quarterly.length ? '<div class="section-label">Quarterly</div><div class="card">' + quarterly.map(quarterlyRow).join('') + '</div>' : '')
     + (asgTasks.length ? '' : '<div class="card-sub" style="margin-top:16px;">No tasks yet — add them on the Inventory, Cleaning &amp; Maintenance and Shift Duties pages.</div>')
     + assignmentsMetricsHtml();
 }
@@ -523,7 +571,7 @@ function renderAssignmentsDashboard() {
 async function markAssignmentDone(taskId, dateStr, period) {
   const task = asgTasks.find((t) => t.id === taskId);
   const slots = asgSlots(new Date(dateStr + 'T00:00:00').getDay());
-  const onShift = period ? asgWeekShifts.find((x) => x.shift_date === dateStr && x.staff_id && (slots.length === 1 || x.period === period)) : null;
+  const onShift = period ? asgWeekShifts.concat(asgTodayShifts).find((x) => x.shift_date === dateStr && x.staff_id && (slots.length === 1 || x.period === period)) : null;
   const credited_to = task.assigned_staff_id || (onShift ? onShift.staff_id : period ? null : window.currentStaff.id);
   const { error } = await window.supabase.from('assignment_completions')
     .insert({ task_id: taskId, due_key: asgDueKey(task, dateStr), completed_on: dateStr, completed_by: window.currentStaff.id, credited_to });
