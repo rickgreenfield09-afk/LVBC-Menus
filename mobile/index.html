@@ -42,9 +42,9 @@
   <div id="app-shell" style="display:none;">
     <header>
       <span class="logo">LVBC <span id="m-screen-title">Schedule</span></span>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span class="staff-badge" id="staff-name-badge"></span>
-        <button class="btn btn-secondary btn-sm" onclick="handleLogout()">Sign Out</button>
+      <div class="m-header-right">
+        <div class="m-avatar" id="m-avatar"></div>
+        <button class="m-menu-btn" aria-label="Menu" aria-controls="m-menu" onclick="openMenu()"><span></span><span></span><span></span></button>
       </div>
     </header>
 
@@ -73,6 +73,23 @@
         <div id="m-offsite"></div>
       </div>
 
+      <!-- MEMBER CHECK-IN (js/members.js) -->
+      <div class="screen" id="screen-members">
+        <div class="m-mem-search">
+          <input class="search-bar" type="search" id="m-mem-search" placeholder="Name, email or member #" autocomplete="off" oninput="mMemSearchInput(this.value)">
+          <button class="btn btn-scan" onclick="mMemOpenScanner()">Scan</button>
+        </div>
+        <div id="m-mem-results"></div>
+        <div class="section-label">Today's Check-Ins <span id="m-mem-today-count" style="color:var(--teal);"></span></div>
+        <div class="card" id="m-mem-today"><div class="loading">Loading...</div></div>
+      </div>
+
+      <!-- LEADERBOARD (js/members.js) -->
+      <div class="screen" id="screen-leaderboard">
+        <div class="m-chips" id="m-lb-chips"></div>
+        <div class="leaderboard-card" id="m-lb-list"><div class="loading" style="padding:16px;">Loading...</div></div>
+      </div>
+
       <!-- INVENTORY COUNT -->
       <div class="screen" id="screen-inventory">
         <div class="m-inv-summary">
@@ -90,10 +107,23 @@
     <!-- Full-screen editor for one inventory record; filled by inventory.js / merch.js -->
     <div id="m-sheet" class="m-sheet" style="display:none;"></div>
 
-    <nav class="m-tabbar">
-      <button class="nav-btn active" onclick="showTab('schedule', this)">Schedule</button>
-      <button class="nav-btn" onclick="showTab('tasks', this)">Tasks</button>
-      <button class="nav-btn" onclick="showTab('inventory', this)">Inventory</button>
+    <!-- Slide-in menu: every page lives here. To add a page, add a
+         .screen above, a button below, and its title + loader in core.js. -->
+    <div id="m-menu-scrim" class="m-menu-scrim" onclick="closeMenu()"></div>
+    <nav id="m-menu" class="m-menu" aria-hidden="true">
+      <div class="m-menu-head">
+        <div class="m-avatar" id="m-menu-avatar"></div>
+        <div class="m-menu-who"><div id="m-menu-name"></div><span id="m-menu-role"></span></div>
+        <button class="m-menu-close" aria-label="Close menu" onclick="closeMenu()">&#10005;</button>
+      </div>
+      <div class="m-menu-label">My Shift</div>
+      <button class="m-menu-item active" data-tab="schedule" onclick="showTab('schedule')">Schedule</button>
+      <button class="m-menu-item" data-tab="tasks" onclick="showTab('tasks')">Tasks</button>
+      <button class="m-menu-item" data-tab="inventory" onclick="showTab('inventory')">Inventory</button>
+      <div class="m-menu-label">Members</div>
+      <button class="m-menu-item" data-tab="members" onclick="showTab('members')">Member Check-In</button>
+      <button class="m-menu-item" data-tab="leaderboard" onclick="showTab('leaderboard')">Leaderboard</button>
+      <div class="m-menu-foot"><button class="btn btn-secondary" style="width:100%;" onclick="handleLogout()">Sign Out</button></div>
     </nav>
   </div>
 
@@ -104,5 +134,6 @@
   <script src="/mobile/js/merch.js"></script>
   <script src="/mobile/js/tasks.js"></script>
   <script src="/mobile/js/offsite.js"></script>
+  <script src="/mobile/js/members.js"></script>
 </body>
 </html>

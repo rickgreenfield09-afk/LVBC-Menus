@@ -80,6 +80,7 @@
       <button class="nav-btn active" onclick="showScreen('menu', this); loadMenu()">Menus</button>
       <button class="nav-btn" onclick="showScreen('schedule', this); loadSchedule()">Schedule</button>
       <button class="nav-btn" onclick="showScreen('inventory', this); loadInventory()">Inventory</button>
+      <button class="nav-btn" onclick="showScreen('members', this); loadMembers()">Members</button>
       <button class="nav-btn" id="nav-btn-assignments" style="display:none;" onclick="showScreen('assignments', this); loadAssignments()">Assignments</button>
       <button class="nav-btn" onclick="showScreen('bingo', this); loadBingo()">Bingo <span class="badge badge-teal" id="bingo-nav-ready" style="display:none;margin-left:4px;"></span></button>
       <button class="nav-btn" id="nav-btn-marketing" style="display:none;" onclick="showScreen('marketing', this); loadMarketing()">Marketing</button>
@@ -537,6 +538,18 @@
           <button class="sub-tab" id="asg-view-events" onclick="setAssignmentsView('events')">Events</button>
         </div>
         <div id="asg-body"><div class="loading">Loading...</div></div>
+      </div>
+
+      <!-- MEMBERS SCREEN (js/members.js) -->
+      <div class="screen" id="screen-members">
+        <div class="sub-tabs">
+          <button class="sub-tab active" id="mem-view-checkin" onclick="setMembersView('checkin')">Check-In</button>
+          <button class="sub-tab" id="mem-view-rewards" onclick="setMembersView('rewards')">Rewards</button>
+          <button class="sub-tab" id="mem-view-members" onclick="setMembersView('members')">Members</button>
+          <button class="sub-tab" id="mem-view-catalog" onclick="setMembersView('catalog')">Catalog</button>
+          <button class="sub-tab" id="mem-view-reports" onclick="setMembersView('reports')">Reports</button>
+        </div>
+        <div id="mem-body"><div class="loading">Loading...</div></div>
       </div>
 
       <!-- INVENTORY SCREEN -->
@@ -1234,6 +1247,7 @@
   <script src="js/metrics.js"></script>
   <script src="js/assignments.js"></script>
   <script src="js/offsite.js"></script>
+  <script src="js/members.js"></script>
   <script src="js/bingo.js"></script>
 </body>
 </html>

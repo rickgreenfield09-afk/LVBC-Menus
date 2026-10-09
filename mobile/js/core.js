@@ -4,8 +4,9 @@
 // so RLS applies exactly as it does on the desktop panel. Provides:
 //   - window.supabase          (Supabase JS client)
 //   - window.currentStaff      (signed-in staff_profiles row, or null)
-//   - showTab(id, navBtn)      (bottom tab router)
-//   - toast(msg, isError), escHtml(s), toDateStr(d), fmtTime(t)
+//   - showTab(id)              (page router, driven by the header menu)
+//   - openMenu(), closeMenu()  (the slide-in page menu)
+//   - toast(msg, isError), escHtml(s), mInitials(name), toDateStr(d), fmtTime(t)
 
 (function () {
   const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.LVBC_CONFIG;
@@ -18,8 +19,11 @@
 
 window.currentStaff = null;
 const M_PROFILE_KEY = 'lvbc-mobile-profile';
-const M_TAB_TITLES = { schedule: 'Schedule', tasks: 'Tasks', inventory: 'Inventory' };
-const M_TAB_LOADERS = { schedule: () => loadSchedule(), tasks: () => loadTasks(), inventory: () => loadInventoryCount() };
+const M_TAB_TITLES = { schedule: 'Schedule', tasks: 'Tasks', inventory: 'Inventory', members: 'Check-In', leaderboard: 'Leaderboard' };
+const M_TAB_LOADERS = {
+  schedule: () => loadSchedule(), tasks: () => loadTasks(), inventory: () => loadInventoryCount(),
+  members: () => loadMemberCheckin(), leaderboard: () => loadLeaderboard(),
+};
 
 // ── AUTH ─────────────────────────────────────────────────
 async function checkSession() {
@@ -76,26 +80,47 @@ async function handleLogout() {
 function renderLoggedIn() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app-shell').style.display = 'flex';
-  document.getElementById('staff-name-badge').textContent = window.currentStaff.name;
+  const staff = window.currentStaff;
+  // The header shows the photo set on the desktop panel's profile, or initials.
+  const avatar = staff.photo_url
+    ? '<img src="' + escHtml(staff.photo_url) + '" alt="">'
+    : escHtml(mInitials(staff.name));
+  document.getElementById('m-avatar').innerHTML = avatar;
+  document.getElementById('m-menu-avatar').innerHTML = avatar;
+  document.getElementById('m-menu-name').textContent = staff.name;
+  document.getElementById('m-menu-role').textContent = staff.position || '';
   updateOfflineBar();
   loadSchedule();
 }
 
 function renderLoggedOut(msg) {
+  closeMenu();
   document.getElementById('app-shell').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('login-error').textContent = msg || '';
 }
 
-// ── TAB ROUTER ───────────────────────────────────────────
-function showTab(id, btn) {
+// ── PAGE ROUTER + MENU ───────────────────────────────────
+function showTab(id) {
+  closeMenu();
   document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
   document.getElementById('screen-' + id).classList.add('active');
-  document.querySelectorAll('.m-tabbar .nav-btn').forEach((b) => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
+  document.querySelectorAll('.m-menu-item').forEach((b) => b.classList.toggle('active', b.dataset.tab === id));
   document.getElementById('m-screen-title').textContent = M_TAB_TITLES[id];
   window.scrollTo(0, 0);
   M_TAB_LOADERS[id]();
+}
+
+function openMenu() {
+  document.getElementById('m-menu').classList.add('open');
+  document.getElementById('m-menu').setAttribute('aria-hidden', 'false');
+  document.getElementById('m-menu-scrim').classList.add('open');
+}
+
+function closeMenu() {
+  document.getElementById('m-menu').classList.remove('open');
+  document.getElementById('m-menu').setAttribute('aria-hidden', 'true');
+  document.getElementById('m-menu-scrim').classList.remove('open');
 }
 
 function updateOfflineBar() {
@@ -119,6 +144,10 @@ function toast(msg, isError) {
 
 function escHtml(s) {
   return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function mInitials(name) {
+  return (name || '?').split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase();
 }
 
 function toDateStr(d) {

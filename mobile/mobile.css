@@ -1,7 +1,7 @@
   /* mobile.css
      Loaded after /style.css — the mobile app takes its color tokens,
      buttons, badges and cards from the desktop sheet and only overrides
-     layout here: a phone-width column, a bottom tab bar, and tap targets
+     layout here: a phone-width column, a slide-in page menu, and tap targets
      big enough to hit one-handed while counting stock. */
 
   html{-webkit-text-size-adjust:100%;}
@@ -11,9 +11,13 @@
   header{padding:0 16px;padding-top:env(safe-area-inset-top);height:calc(52px + env(safe-area-inset-top));position:sticky;top:0;z-index:50;}
   .logo{font-size:20px;letter-spacing:2px;white-space:nowrap;}
   .logo span{margin-left:8px;}
-  .staff-badge{max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .m-header-right{display:flex;align-items:center;gap:10px;}
+  .m-avatar{width:34px;height:34px;border-radius:50%;background:var(--raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:15px;color:var(--teal);overflow:hidden;flex-shrink:0;}
+  .m-avatar img{width:100%;height:100%;object-fit:cover;}
+  .m-menu-btn{width:44px;height:44px;margin-right:-10px;background:none;border:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;cursor:pointer;touch-action:manipulation;}
+  .m-menu-btn span{display:block;width:22px;height:2px;border-radius:2px;background:var(--text);}
 
-  main{padding:16px;padding-bottom:calc(76px + env(safe-area-inset-bottom));overflow-y:visible;}
+  main{padding:16px;padding-bottom:calc(24px + env(safe-area-inset-bottom));overflow-y:visible;}
   .card{padding:14px 16px;}
 
   /* iOS zooms the page when a focused input is under 16px */
@@ -27,14 +31,25 @@
   .m-login-error{color:var(--red);font-size:12px;margin-bottom:12px;min-height:16px;}
   .m-login-link{display:block;text-align:center;font-size:12px;color:var(--sub);margin-top:16px;}
 
-  /* ── BOTTOM TAB BAR ── */
-  .m-tabbar{position:fixed;left:0;right:0;bottom:0;z-index:50;padding:0;padding-bottom:env(safe-area-inset-bottom);gap:0;border-bottom:none;border-top:1px solid var(--border);}
-  .m-tabbar .nav-btn{flex:1;padding:0 4px;height:56px;font-size:13px;border-bottom:none;border-top:2px solid transparent;}
-  .m-tabbar .nav-btn.active{border-top-color:var(--teal);}
+  /* ── PAGE MENU (opens from the header's hamburger) ── */
+  .m-menu-scrim{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,0.6);opacity:0;pointer-events:none;transition:opacity 0.2s;}
+  .m-menu-scrim.open{opacity:1;pointer-events:auto;}
+  .m-menu{position:fixed;top:0;right:0;bottom:0;z-index:310;width:min(300px,84vw);padding:0;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);gap:0;flex-direction:column;border-bottom:none;border-left:1px solid var(--border);overflow-y:auto;transform:translateX(100%);visibility:hidden;transition:transform 0.22s ease,visibility 0.22s;}
+  .m-menu.open{transform:none;visibility:visible;}
+  .m-menu-head{display:flex;align-items:center;gap:12px;padding:16px;border-bottom:1px solid var(--border);}
+  .m-menu-head .m-avatar{width:44px;height:44px;font-size:18px;}
+  .m-menu-who{flex:1;min-width:0;font-weight:600;font-size:15px;}
+  .m-menu-who div{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .m-menu-who span{display:block;font-weight:400;font-size:11px;font-family:'DM Mono',monospace;color:var(--sub);text-transform:capitalize;margin-top:2px;}
+  .m-menu-close{width:44px;height:44px;margin-right:-10px;background:none;border:none;color:var(--sub);font-size:16px;cursor:pointer;}
+  .m-menu-label{font-size:10px;font-family:'DM Mono',monospace;color:var(--muted);letter-spacing:2px;text-transform:uppercase;padding:18px 16px 6px;}
+  .m-menu-item{display:block;width:100%;text-align:left;background:none;border:none;border-left:3px solid transparent;color:var(--text);font-family:'DM Sans',sans-serif;font-size:16px;font-weight:500;padding:14px 16px 14px 13px;cursor:pointer;touch-action:manipulation;}
+  .m-menu-item.active{color:var(--teal);border-left-color:var(--teal);background:rgba(42,184,166,0.08);}
+  .m-menu-foot{margin-top:auto;padding:16px;}
 
   .m-offline-bar{background:rgba(232,184,75,0.15);color:var(--amber);border-bottom:1px solid rgba(232,184,75,0.3);font-size:12px;font-family:'DM Mono',monospace;padding:8px 16px;text-align:center;}
 
-  .toast{left:16px;right:16px;bottom:calc(72px + env(safe-area-inset-bottom));text-align:center;}
+  .toast{left:16px;right:16px;bottom:calc(20px + env(safe-area-inset-bottom));text-align:center;}
 
   /* ── SCHEDULE ── */
   .shift-row{padding:12px 0;}
@@ -129,3 +144,24 @@
   .m-shift-tap{flex:1;min-width:0;cursor:pointer;}
   .m-shift-more{font-size:11px;font-family:'DM Mono',monospace;color:var(--teal);margin-top:4px;}
   .m-duty{padding:10px 0;border-bottom:1px solid var(--border);}
+
+  /* ── MEMBERS (check-in, member card, leaderboard) ── */
+  .m-mem-search{display:flex;gap:8px;margin-bottom:12px;}
+  .m-mem-search .search-bar{min-width:0;}
+  .m-mem-row{display:flex;align-items:center;gap:12px;cursor:pointer;}
+  .m-mem-row .m-avatar{width:40px;height:40px;font-size:16px;}
+  .m-mem-pts{font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--teal);line-height:1;text-align:right;}
+  .m-mem-pts small{display:block;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;}
+  .m-mem-head{display:flex;align-items:center;gap:14px;}
+  .m-mem-head .m-avatar{width:56px;height:56px;font-size:22px;}
+  .m-mem-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px;}
+  .m-mem-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;}
+  .m-mem-done{grid-column:1/-1;text-align:center;padding:12px;border-radius:8px;background:rgba(42,184,166,0.12);border:1px solid rgba(42,184,166,0.35);color:var(--teal);font-family:'DM Mono',monospace;font-size:13px;}
+  .m-mem-badges{display:flex;flex-wrap:wrap;gap:6px;}
+  .m-mem-badge{font-size:11px;font-family:'DM Mono',monospace;padding:4px 10px;border-radius:12px;border:1px solid var(--border);}
+  .m-mem-line{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);}
+  .m-mem-line:last-child{border-bottom:none;}
+  .m-mem-line-body{flex:1;min-width:0;}
+  .m-mem-line .btn{flex-shrink:0;}
+  .m-mem-line.locked{opacity:0.45;}
+  .scanner-overlay{padding-top:env(safe-area-inset-top);}
