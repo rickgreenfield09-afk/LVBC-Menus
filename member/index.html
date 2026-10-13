@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>LVBC Member App</title>
+<meta name="theme-color" content="#3E4E6C">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="LVBC">
+<link rel="manifest" href="/member/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/mobile/icons/icon-180.png">
+<link rel="icon" type="image/png" href="/mobile/icons/icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Barlow:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/member/member.css">
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+
+<!-- SIGN IN / SIGN UP — one card shown at a time (showAuthCard in core.js) -->
+<div id="login-screen" style="display:none;">
+  <img class="login-logo" id="login-logo" alt="LVBC Logo" onerror="this.style.opacity='0'">
+  <div class="login-brand">Lago Vista<br>Brewing Co.</div>
+  <div class="login-sub">Member App</div>
+
+  <form class="login-card" id="auth-signin" onsubmit="handleSignIn(event)">
+    <div class="login-title">Sign In</div>
+    <div id="signin-alert" class="alert"></div>
+    <div class="form-group">
+      <label class="form-label" for="signin-email">Email Address</label>
+      <input type="email" id="signin-email" placeholder="your@email.com" autocomplete="username" required>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="signin-pin">6-Digit PIN</label>
+      <input type="password" id="signin-pin" placeholder="••••••" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" autocomplete="current-password" required>
+    </div>
+    <button type="submit" class="btn btn-primary" id="signin-btn">Sign In</button>
+    <div class="auth-links">
+      <a href="#" onclick="showAuthCard('signup', event)">Create an account</a>
+      <a href="#" onclick="showAuthCard('forgot', event)">Forgot PIN?</a>
+    </div>
+  </form>
+
+  <form class="login-card" id="auth-signup" style="display:none;" onsubmit="handleSignUp(event)">
+    <div class="login-title">Create Account</div>
+    <p class="auth-note">Free to join. Earn points every visit and trade them for rewards.</p>
+    <div id="signup-alert" class="alert"></div>
+    <div class="form-group">
+      <label class="form-label" for="signup-name">Name</label>
+      <input type="text" id="signup-name" placeholder="First and last name" autocomplete="name" required>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="signup-email">Email Address</label>
+      <input type="email" id="signup-email" placeholder="your@email.com" autocomplete="username" required>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="signup-pin">Choose a 6-Digit PIN</label>
+      <input type="password" id="signup-pin" placeholder="6 digits" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" autocomplete="new-password" required>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="signup-pin2">Confirm PIN</label>
+      <input type="password" id="signup-pin2" placeholder="6 digits" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" autocomplete="new-password" required>
+    </div>
+    <button type="submit" class="btn btn-primary" id="signup-btn">Create Account</button>
+    <div class="auth-links"><a href="#" onclick="showAuthCard('signin', event)">I already have an account</a></div>
+  </form>
+
+  <form class="login-card" id="auth-forgot" style="display:none;" onsubmit="handleForgotPin(event)">
+    <div class="login-title">Reset PIN</div>
+    <p class="auth-note">Enter your email and we'll send a link to choose a new PIN.</p>
+    <div id="forgot-alert" class="alert"></div>
+    <div class="form-group">
+      <label class="form-label" for="forgot-email">Email Address</label>
+      <input type="email" id="forgot-email" placeholder="your@email.com" autocomplete="username" required>
+    </div>
+    <button type="submit" class="btn btn-primary" id="forgot-btn">Send Reset Link</button>
+    <div class="auth-links"><a href="#" onclick="showAuthCard('signin', event)">Back to sign in</a></div>
+  </form>
+
+  <!-- Reached from the reset-PIN email link -->
+  <form class="login-card" id="auth-newpin" style="display:none;" onsubmit="handleNewPin(event)">
+    <div class="login-title">Choose a New PIN</div>
+    <div id="newpin-alert" class="alert"></div>
+    <div class="form-group">
+      <label class="form-label" for="newpin-1">New 6-Digit PIN</label>
+      <input type="password" id="newpin-1" placeholder="6 digits" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" autocomplete="new-password" required>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="newpin-2">Confirm PIN</label>
+      <input type="password" id="newpin-2" placeholder="6 digits" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" autocomplete="new-password" required>
+    </div>
+    <button type="submit" class="btn btn-primary" id="newpin-btn">Save PIN</button>
+  </form>
+
+  <div class="login-card" id="auth-message" style="display:none;">
+    <div class="login-title" id="auth-message-title"></div>
+    <p class="auth-note" id="auth-message-body" style="margin-bottom:20px;"></p>
+    <button class="btn btn-secondary" style="margin-top:0;" onclick="showAuthCard('signin')">Back to sign in</button>
+  </div>
+</div>
+
+<!-- APP SHELL -->
+<div id="app-shell">
+  <header class="app-header">
+    <div class="app-header-left">
+      <img class="app-header-logo" id="header-logo" alt="LVBC" onerror="this.style.opacity='0'">
+      <div class="app-header-title" id="app-header-title">LVBC</div>
+    </div>
+    <div class="app-header-right">
+      <button class="header-profile-btn" id="header-avatar-btn" aria-label="My profile" onclick="showTab('profile')"></button>
+      <button class="menu-btn" aria-label="Menu" aria-controls="app-menu" onclick="openMenu()"><span></span><span></span><span></span></button>
+    </div>
+  </header>
+
+  <div class="app-content">
+
+    <!-- MY CARD (js/card.js) -->
+    <div class="tab-screen active" id="tab-card">
+      <div id="checkin-flash" class="checkin-flash">
+        <div class="flash-title">Welcome back!</div>
+        <div class="flash-detail" id="flash-detail"></div>
+        <div class="flash-beers" id="flash-beers"></div>
+      </div>
+      <div class="member-card">
+        <div class="card-header">
+          <div>
+            <div class="card-member-name" id="card-name">—</div>
+            <div class="tier-badge" id="card-tier">—</div>
+          </div>
+          <div class="card-number"><span id="card-number">—</span><small>Member #</small></div>
+        </div>
+        <div id="qr-wrapper" class="qr-wrapper"></div>
+        <div class="points-row">
+          <div class="points-block">
+            <div class="points-val" id="card-balance">0</div>
+            <div class="points-label">Points Balance</div>
+          </div>
+          <div class="points-block">
+            <div class="points-val" id="card-lifetime" style="color:var(--text-secondary)">0</div>
+            <div class="points-label">Lifetime Earned</div>
+          </div>
+        </div>
+        <div class="reward-progress">
+          <div class="progress-label">
+            <span id="progress-label">Select a reward to track your progress</span>
+            <span id="progress-pct"></span>
+          </div>
+          <div class="progress-bar" id="progress-bar-wrap" style="display:none"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+          <div class="reward-goal-selector">
+            <div class="reward-goal-label">Reward Goal</div>
+            <select class="reward-goal-select" id="reward-goal-select" onchange="saveRewardGoal(this.value)"></select>
+          </div>
+        </div>
+      </div>
+      <div class="profile-section">
+        <div class="profile-section-title">Member Since</div>
+        <div style="font-size:14px;color:var(--text-secondary)" id="card-since">—</div>
+      </div>
+    </div>
+
+    <!-- ACTIVITY (js/activity.js) -->
+    <div class="tab-screen" id="tab-activity">
+      <div class="activity-badge-strip">
+        <div class="badge-strip-header">
+          <div class="badge-strip-title">Recently Earned Badges</div>
+          <button class="btn-ghost" onclick="showTab('badges')">View All →</button>
+        </div>
+        <div class="badge-grid" id="badge-strip-grid"></div>
+      </div>
+      <div id="activity-list"><div class="empty">Loading activity...</div></div>
+    </div>
+
+    <!-- BADGES (js/activity.js) -->
+    <div class="tab-screen" id="tab-badges">
+      <div id="badges-page-content"><div class="empty">Loading badges...</div></div>
+    </div>
+
+    <!-- LEADERBOARD (js/activity.js) -->
+    <div class="tab-screen" id="tab-leaderboard">
+      <div class="lb-toggle">
+        <button class="lb-toggle-btn active" id="lb-btn-month" onclick="setLeaderboard('month')">This Month</button>
+        <button class="lb-toggle-btn" id="lb-btn-all" onclick="setLeaderboard('all')">All Time</button>
+      </div>
+      <div id="leaderboard-list"><div class="empty">Loading...</div></div>
+    </div>
+
+    <!-- ON TAP (js/menus.js) -->
+    <div class="tab-screen" id="tab-tap">
+      <div class="tap-toggle">
+        <button class="tap-toggle-btn active" id="tap-btn-beer" onclick="setTapView('beer')">Beer</button>
+        <button class="tap-toggle-btn" id="tap-btn-wine" onclick="setTapView('wine')">Wine</button>
+        <button class="tap-toggle-btn" id="tap-btn-coffee" onclick="setTapView('coffee')">Coffee</button>
+        <button class="tap-toggle-btn" id="tap-btn-na" onclick="setTapView('na')">N/A</button>
+      </div>
+      <div id="tap-view"><div class="empty">Loading...</div></div>
+    </div>
+
+    <!-- EVENTS (js/menus.js) -->
+    <div class="tab-screen" id="tab-events">
+      <div class="events-section-label" style="margin-top:0;">Next Two Weeks</div>
+      <div id="events-soon-list"><div class="empty">Loading...</div></div>
+      <div class="events-section-label">Coming Up</div>
+      <div id="events-later-list"><div class="empty">Loading...</div></div>
+    </div>
+
+    <!-- REWARDS (js/card.js) -->
+    <div class="tab-screen" id="tab-rewards">
+      <div id="rewards-content"><div class="empty">Loading...</div></div>
+    </div>
+
+    <!-- PROFILE (js/profile.js) -->
+    <div class="tab-screen" id="tab-profile">
+      <div class="profile-section">
+        <div class="profile-section-title">Profile Photo</div>
+        <div class="profile-avatar-section">
+          <div class="profile-avatar" id="profile-avatar-display"></div>
+          <div class="profile-avatar-upload">
+            <label for="avatar-file-input">Upload new photo</label>
+            <p>JPG or PNG, shown on the leaderboard</p>
+            <input type="file" id="avatar-file-input" accept="image/*" onchange="uploadAvatar(this)">
+          </div>
+        </div>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-section-title">Personal Info</div>
+        <div id="profile-alert" class="alert"></div>
+        <div class="form-group">
+          <label class="form-label" for="prof-name">Name</label>
+          <input type="text" id="prof-name" autocomplete="name">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="prof-email">Email</label>
+          <input type="email" id="prof-email" disabled>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="prof-phone">Phone</label>
+          <input type="tel" id="prof-phone" autocomplete="tel">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="prof-birthday">Birthday</label>
+          <input type="date" id="prof-birthday">
+        </div>
+        <button class="btn btn-primary" onclick="saveProfile()">Save Changes</button>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-section-title">Beer Style Preferences</div>
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:14px">We'll surface new beers that match your taste.</p>
+        <div class="style-chips" id="style-chips"></div>
+        <button class="btn-ghost" style="margin-top:16px" onclick="saveStyles()">Save Preferences</button>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-section-title">Communications</div>
+        <div class="comms-row">
+          <div><div class="comms-label">All Notifications</div><div class="comms-desc">Master toggle</div></div>
+          <label class="toggle"><input type="checkbox" id="comms-opt-in" onchange="saveComms()"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="comms-row">
+          <div><div class="comms-label">Events</div><div class="comms-desc">Trivia, bingo, karaoke, special events</div></div>
+          <label class="toggle"><input type="checkbox" id="comms-events" onchange="saveComms()"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="comms-row">
+          <div><div class="comms-label">New Releases</div><div class="comms-desc">When a new beer hits the tap list</div></div>
+          <label class="toggle"><input type="checkbox" id="comms-releases" onchange="saveComms()"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="comms-row">
+          <div><div class="comms-label">Promotions</div><div class="comms-desc">Thrifty Thursday, flash rewards, deals</div></div>
+          <label class="toggle"><input type="checkbox" id="comms-promos" onchange="saveComms()"><span class="toggle-slider"></span></label>
+        </div>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-section-title">Security</div>
+        <div id="pin-alert" class="alert"></div>
+        <div class="form-group">
+          <label class="form-label" for="pin-new">New 6-Digit PIN</label>
+          <input type="password" id="pin-new" placeholder="6 digits" maxlength="6" inputmode="numeric" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="pin-confirm">Confirm PIN</label>
+          <input type="password" id="pin-confirm" placeholder="6 digits" maxlength="6" inputmode="numeric" autocomplete="new-password">
+        </div>
+        <button class="btn btn-secondary" style="margin-top:0;" onclick="changePin()">Change PIN</button>
+      </div>
+
+      <button class="logout-btn" onclick="handleSignOut()">Sign Out</button>
+    </div>
+
+  </div>
+
+  <!-- Slide-in menu: every page lives here. To add a page, add a
+       .tab-screen above, a button below, and its title + loader in core.js. -->
+  <div id="menu-scrim" class="menu-scrim" onclick="closeMenu()"></div>
+  <nav id="app-menu" class="app-menu" aria-hidden="true">
+    <div class="menu-head">
+      <div class="menu-avatar" id="menu-avatar"></div>
+      <div class="menu-who"><div id="menu-name"></div><span id="menu-tier"></span></div>
+      <button class="menu-close" aria-label="Close menu" onclick="closeMenu()">&#10005;</button>
+    </div>
+    <div class="menu-label">My Membership</div>
+    <button class="menu-item active" data-tab="card" onclick="showTab('card')">My Card</button>
+    <button class="menu-item" data-tab="activity" onclick="showTab('activity')">Activity</button>
+    <button class="menu-item" data-tab="badges" onclick="showTab('badges')">Badges</button>
+    <button class="menu-item" data-tab="rewards" onclick="showTab('rewards')">Rewards</button>
+    <button class="menu-item" data-tab="leaderboard" onclick="showTab('leaderboard')">Leaderboard</button>
+    <div class="menu-label">At the Brewery</div>
+    <button class="menu-item" data-tab="tap" onclick="showTab('tap')">On Tap</button>
+    <button class="menu-item" data-tab="events" onclick="showTab('events')">Events</button>
+    <div class="menu-label">Account</div>
+    <button class="menu-item" data-tab="profile" onclick="showTab('profile')">My Profile</button>
+    <div class="menu-foot"><button class="logout-btn" style="margin-top:0;" onclick="handleSignOut()">Sign Out</button></div>
+  </nav>
+</div>
+
+<script src="/config.js"></script>
+<script src="/member/js/core.js"></script>
+<script src="/member/js/card.js"></script>
+<script src="/member/js/activity.js"></script>
+<script src="/member/js/menus.js"></script>
+<script src="/member/js/profile.js"></script>
+</body>
+</html>
