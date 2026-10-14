@@ -29,15 +29,15 @@ const TRIVIA_SHEET_CSS = BINGO_SHEET_CSS
   + '.q.tb{margin-top:0.08in;}.q.tb .n{min-width:0;text-align:left;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;white-space:nowrap;padding-right:2px;}'
   + '.tb-note{font-size:7px;color:#555;margin-left:0.29in;}'
   + '.team{margin:7px 0 2px;}.team .lbl{font-family:Oswald,sans-serif;font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;}'
-  + '.team .tline{border-bottom:1.5px solid #1a1410;height:0.3in;}'
+  + '.team .tline{border-bottom:1.5px solid #1a1410;height:0.26in;}'
   + '.score{margin-top:auto;border:2px solid #1a1410;}'
   + '.score .st{font-family:Oswald,sans-serif;font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;text-align:center;background:#1a1410;color:#fff;padding:2px 0;}'
-  + '.score .sr{display:flex;align-items:center;border-top:1px solid #1a1410;height:0.27in;padding:0 6px;font-family:Oswald,sans-serif;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;}'
+  + '.score .sr{display:flex;align-items:center;border-top:1px solid #1a1410;height:0.21in;padding:0 6px;font-family:Oswald,sans-serif;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;}'
   + '.score .sr:first-of-type{border-top:none;}.score .sr span{flex:1;}.score .sr i{width:0.7in;height:0.19in;border-bottom:1px solid #1a1410;font-style:normal;}'
-  + '.score .sr.tot{border-top:2px solid #1a1410;height:0.32in;font-size:12px;font-weight:700;}'
+  + '.score .sr.tot{border-top:2px solid #1a1410;height:0.25in;font-size:12px;font-weight:700;}'
   + '.score .sr i b{font-size:8px;color:#555;font-weight:500;}';
 
-function triviaAnswerQuadrant(round, sheetLabel) {
+function triviaAnswerQuadrant(round) {
   let lines = '';
   for (let i = 1; i <= TRIVIA_QUESTIONS_PER_ROUND; i++) {
     lines += '<div class="q"><span class="n">' + i + '.</span><span class="box"></span><span class="line"></span></div>';
@@ -47,11 +47,17 @@ function triviaAnswerQuadrant(round, sheetLabel) {
     + '<div class="ans">' + lines
     + '<div class="q tb"><span class="n">Tiebreaker</span><span class="line"></span></div>'
     + '<div class="tb-note">Closest answer breaks a tie.</div></div>'
-    + '<div class="card-foot">SHEET ' + sheetLabel + ' · R' + round + '</div></div>';
+    + '</div>';
 }
 
-function triviaInfoQuadrant(eventDate, events, sheetLabel) {
-  const shown = events.slice(0, 5);
+// The Wednesday after the trivia night (Music Bingo night).
+function triviaNextWednesday(dateStr) {
+  const dow = new Date(dateStr + 'T00:00:00').getDay();
+  return bingoAddDays(dateStr, ((3 - dow + 7) % 7) || 7);
+}
+
+function triviaInfoQuadrant(eventDate, events) {
+  const shown = events.slice(0, 4);
   const evHtml = shown.length
     ? shown.map((e) => '<div class="ev"><b>' + escHtml(bingoFmtDate(e.date, { weekday: 'short', month: 'numeric', day: 'numeric' })) + '</b><span>' + escHtml(e.name) + (e.time ? ' · ' + escHtml(e.time) : '') + '</span></div>').join('')
       + (events.length > shown.length ? '<div class="ev"><span>+ ' + (events.length - shown.length) + ' more — ask your bartender!</span></div>' : '')
@@ -59,14 +65,17 @@ function triviaInfoQuadrant(eventDate, events, sheetLabel) {
   const row = (label) => '<div class="sr"><span>' + label + '</span><i></i></div>';
   return '<div class="quad info">'
     + '<div class="brand"><img src="' + LOGO_URL + '"><div><div class="brand-name">' + BINGO_BREWERY + '</div><div class="title">Trivia<br>Night</div></div></div>'
-    + '<div class="date">' + escHtml(bingoFmtDate(eventDate, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })) + ' · Sheet ' + sheetLabel + '</div>'
+    + '<div class="date">' + escHtml(bingoFmtDate(eventDate, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })) + '</div>'
     + '<div class="h">How to Play</div>'
     + '<div class="keep">One sheet per team — all 3 rounds!</div>'
     + '<ul class="rules">'
+    + '<li><b>Do not use your cellphone! This is a friendly game, let\'s keep it clean.</b></li>'
     + '<li>Work together — write your team\'s answer on the line for each question.</li>'
     + '<li>Each round has ' + TRIVIA_QUESTIONS_PER_ROUND + ' questions plus a tiebreaker. Only one sheet per team.</li>'
-    + '<li>Hand your sheet to the host after each round to be scored, then check the box for each correct answer.</li>'
-    + '<li>Highest total score wins. Closest tiebreaker answer settles a tie.</li></ul>'
+    + '<li><b>At the end of each round, hand your score sheet to a table near you to be scored.</b></li>'
+    + '<li>Highest total score wins. Closest tiebreaker answer settles a tie.</li>'
+    + '<li><b>The team with the best name gets to pick a category for the next Music Bingo on ' + escHtml(bingoFmtDate(triviaNextWednesday(eventDate), { weekday: 'long', month: 'long', day: 'numeric' })) + '.</b></li>'
+    + '<li><b>The winner of each round gets a flight of 4 beers for their team.</b></li></ul>'
     + '<div class="h">This Week at LVBC</div>' + evHtml
     + '<div class="team"><div class="lbl">Team Name</div><div class="tline"></div></div>'
     + '<div class="score"><div class="st">Scoring Summary</div>'
@@ -78,9 +87,8 @@ function triviaInfoQuadrant(eventDate, events, sheetLabel) {
 function triviaSheetsHtml(eventDate, events, sheets) {
   const pages = [];
   for (let s = 1; s <= sheets; s++) {
-    const label = String(s).padStart(2, '0');
-    pages.push('<div class="page">' + triviaAnswerQuadrant(1, label) + triviaInfoQuadrant(eventDate, events, label)
-      + triviaAnswerQuadrant(2, label) + triviaAnswerQuadrant(3, label) + '</div>');
+    pages.push('<div class="page">' + triviaAnswerQuadrant(1) + triviaInfoQuadrant(eventDate, events)
+      + triviaAnswerQuadrant(2) + triviaAnswerQuadrant(3) + '</div>');
   }
   return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Trivia Answer Sheets — ' + escHtml(bingoFmtDate(eventDate)) + '</title>'
     + FONT_LINK + '<style>' + TRIVIA_SHEET_CSS + '</style></head><body>'
