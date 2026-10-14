@@ -32,8 +32,8 @@
       <input type="email" id="signin-email" placeholder="your@email.com" autocomplete="username" required>
     </div>
     <div class="form-group">
-      <label class="form-label" for="signin-pin">6-Digit PIN</label>
-      <input type="password" id="signin-pin" placeholder="••••••" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" autocomplete="current-password" required>
+      <label class="form-label" for="signin-pin">8-Digit PIN</label>
+      <input type="password" id="signin-pin" placeholder="••••••••" maxlength="8" inputmode="numeric" autocomplete="current-password" required>
     </div>
     <button type="submit" class="btn btn-primary" id="signin-btn">Sign In</button>
     <div class="auth-links">
@@ -55,12 +55,12 @@
       <input type="email" id="signup-email" placeholder="your@email.com" autocomplete="username" required>
     </div>
     <div class="form-group">
-      <label class="form-label" for="signup-pin">Choose a 6-Digit PIN</label>
-      <input type="password" id="signup-pin" placeholder="6 digits" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" autocomplete="new-password" required>
+      <label class="form-label" for="signup-pin">Choose a 8-Digit PIN</label>
+      <input type="password" id="signup-pin" placeholder="8 digits" maxlength="8" inputmode="numeric" pattern="[0-9]{8}" autocomplete="new-password" required>
     </div>
     <div class="form-group">
       <label class="form-label" for="signup-pin2">Confirm PIN</label>
-      <input type="password" id="signup-pin2" placeholder="6 digits" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" autocomplete="new-password" required>
+      <input type="password" id="signup-pin2" placeholder="8 digits" maxlength="8" inputmode="numeric" pattern="[0-9]{8}" autocomplete="new-password" required>
     </div>
     <button type="submit" class="btn btn-primary" id="signup-btn">Create Account</button>
     <div class="auth-links"><a href="#" onclick="showAuthCard('signin', event)">I already have an account</a></div>
@@ -83,14 +83,15 @@
     <div class="login-title">Choose a New PIN</div>
     <div id="newpin-alert" class="alert"></div>
     <div class="form-group">
-      <label class="form-label" for="newpin-1">New 6-Digit PIN</label>
-      <input type="password" id="newpin-1" placeholder="6 digits" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" autocomplete="new-password" required>
+      <label class="form-label" for="newpin-1">New 8-Digit PIN</label>
+      <input type="password" id="newpin-1" placeholder="8 digits" maxlength="8" inputmode="numeric" pattern="[0-9]{8}" autocomplete="new-password" required>
     </div>
     <div class="form-group">
       <label class="form-label" for="newpin-2">Confirm PIN</label>
-      <input type="password" id="newpin-2" placeholder="6 digits" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" autocomplete="new-password" required>
+      <input type="password" id="newpin-2" placeholder="8 digits" maxlength="8" inputmode="numeric" pattern="[0-9]{8}" autocomplete="new-password" required>
     </div>
     <button type="submit" class="btn btn-primary" id="newpin-btn">Save PIN</button>
+    <div class="auth-links"><a href="#" onclick="event.preventDefault(); handleSignOut()">Cancel and sign out</a></div>
   </form>
 
   <div class="login-card" id="auth-message" style="display:none;">
@@ -276,12 +277,12 @@
         <div class="profile-section-title">Security</div>
         <div id="pin-alert" class="alert"></div>
         <div class="form-group">
-          <label class="form-label" for="pin-new">New 6-Digit PIN</label>
-          <input type="password" id="pin-new" placeholder="6 digits" maxlength="6" inputmode="numeric" autocomplete="new-password">
+          <label class="form-label" for="pin-new">New 8-Digit PIN</label>
+          <input type="password" id="pin-new" placeholder="8 digits" maxlength="8" inputmode="numeric" autocomplete="new-password">
         </div>
         <div class="form-group">
           <label class="form-label" for="pin-confirm">Confirm PIN</label>
-          <input type="password" id="pin-confirm" placeholder="6 digits" maxlength="6" inputmode="numeric" autocomplete="new-password">
+          <input type="password" id="pin-confirm" placeholder="8 digits" maxlength="8" inputmode="numeric" autocomplete="new-password">
         </div>
         <button class="btn btn-secondary" style="margin-top:0;" onclick="changePin()">Change PIN</button>
       </div>

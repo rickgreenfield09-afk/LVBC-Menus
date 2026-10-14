@@ -111,7 +111,7 @@ async function uploadAvatar(input) {
 
 async function changePin() {
   const pin = document.getElementById('pin-new').value.trim();
-  if (!PIN_RE.test(pin)) { profileAlert('Choose a PIN of exactly 6 digits', true, 'pin-alert'); return; }
+  if (!PIN_RE.test(pin)) { profileAlert('Choose a PIN of exactly 8 digits', true, 'pin-alert'); return; }
   if (pin !== document.getElementById('pin-confirm').value.trim()) { profileAlert('The two PINs don\'t match', true, 'pin-alert'); return; }
   const { error } = await window.supabase.auth.updateUser({ password: pin });
   if (error) { profileAlert(error.message, true, 'pin-alert'); return; }

@@ -27,6 +27,8 @@ create table staff_profiles (
   email text,
   -- self-service profile photo — see migration_019.
   photo_url text,
+  -- +1 and ten digits; every staffer must add one (migration_043)
+  phone text check (phone is null or phone ~ '^\+1[0-9]{10}$'),
   -- gets the Music Bingo materials email on print — see migration_031.
   receives_bingo_materials boolean not null default false,
   created_at timestamptz not null default now()

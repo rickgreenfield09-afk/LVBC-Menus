@@ -44,12 +44,13 @@ function renderStaffRoster() {
       + '<td style="font-size:12px;color:var(--sub)">' + escHtml(s.email || '')
       + (staffHasLogin(s) ? '' : (s.email ? ' ' : '') + '<span style="font-size:11px;color:var(--red)">No login</span>')
       + (s.receives_bingo_materials ? ' <span class="badge badge-purple" title="Gets the Music Bingo materials email">Bingo emails</span>' : '') + '</td>'
+      + '<td style="font-size:12px;color:var(--sub);white-space:nowrap;">' + (s.phone ? escHtml(formatPhone(s.phone)) : '<span style="color:var(--muted)">—</span>') + '</td>'
       + '<td style="font-size:12px;color:var(--sub)">' + (POSITION_LABELS[s.position] || '') + '</td>'
       + '<td>' + roleBadge + '</td>'
       + '<td style="font-size:12px;color:var(--sub)">' + (s.can_schedule ? 'Yes' : 'No') + '</td>'
       + '<td><button class="btn btn-sm btn-danger" onclick="event.stopPropagation();removeStaff(\'' + s.id + '\',\'' + escHtml(s.name).replace(/'/g, "\\'") + '\')">Remove</button></td></tr>';
   }).join('');
-  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Position</th><th>Role</th><th>Can Schedule</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Position</th><th>Role</th><th>Can Schedule</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
 function pickStaff(id) {
@@ -66,6 +67,9 @@ function loadStaffIntoForm(s) {
   document.getElementById('staff-cancel-edit').style.visibility = 'visible';
   document.getElementById('staff-name').value = s.name || '';
   document.getElementById('staff-email').value = s.email || '';
+  // Phone is only on the edit form: a new invitee adds their own the first time they sign in.
+  document.getElementById('staff-phone-group').style.display = '';
+  document.getElementById('staff-phone').value = s.phone ? formatPhone(s.phone) : '';
   document.getElementById('staff-role').value = s.role || 'user';
   document.getElementById('staff-position').value = s.position || 'bartender';
   document.getElementById('staff-can-schedule').checked = !!s.can_schedule;
@@ -86,13 +90,15 @@ function cancelStaffEdit() {
   document.getElementById('staff-cancel-edit').style.visibility = 'hidden';
   document.getElementById('staff-name').value = '';
   document.getElementById('staff-email').value = '';
+  document.getElementById('staff-phone-group').style.display = 'none';
+  document.getElementById('staff-phone').value = '';
   document.getElementById('staff-role').value = 'user';
   document.getElementById('staff-position').value = 'bartender';
   document.getElementById('staff-can-schedule').checked = false;
   document.getElementById('staff-bingo-email-group').style.display = 'none';
   document.getElementById('staff-bingo-email').checked = false;
   document.getElementById('btn-save-staff').textContent = 'Send Invite';
-  document.getElementById('staff-form-hint').textContent = "They'll get an email to set their own password and sign in.";
+  document.getElementById('staff-form-hint').textContent = "They'll get an email to choose their own 8-digit PIN and sign in.";
   clearStaffAlert();
   renderStaffRoster();
 }
@@ -130,7 +136,10 @@ async function saveStaff() {
   if (staffEditMode) {
     const receivesBingo = document.getElementById('staff-bingo-email').checked;
     if (receivesBingo && !email) { btn.disabled = false; staffAlert('Add an email address to send them Music Bingo materials.', true); return; }
-    const { error } = await window.supabase.from('staff_profiles').update({ name, role, position, can_schedule: canSchedule, receives_bingo_materials: receivesBingo }).eq('id', selStaff);
+    const rawPhone = document.getElementById('staff-phone').value.trim();
+    const phone = rawPhone ? normalizePhone(rawPhone) : null;
+    if (rawPhone && !phone) { btn.disabled = false; staffAlert('Enter a 10-digit US mobile number, or leave it blank.', true); return; }
+    const { error } = await window.supabase.from('staff_profiles').update({ name, role, position, can_schedule: canSchedule, receives_bingo_materials: receivesBingo, phone }).eq('id', selStaff);
     if (error) { btn.disabled = false; staffAlert(error.message, true); return; }
     const s = staffRoster.find((x) => x.id === selStaff);
     const emailChanged = email && email.toLowerCase() !== ((s && s.email) || '').toLowerCase();

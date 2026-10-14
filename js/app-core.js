@@ -6,6 +6,23 @@
 //   - toast(msg, isError)
 //   - tierClass(tierName)      (css class for tier pills)
 //   - getInitials(name)
+//
+// Sign-in is email + an 8-digit PIN (the PIN is the Supabase Auth
+// password; the staff mobile app and the member app use the same one).
+// Anyone still on an older password can sign in with it once and is
+// then made to choose a PIN before getting in.
+//
+// A reset or invite link signs the person in with a temporary session
+// so they can choose a PIN. Until that PIN is saved, the session must
+// not open the app — not even after a reload — so the "PIN required"
+// mark is kept in localStorage (STAFF_PIN_REQUIRED_KEY, shared with the
+// staff mobile app on the same origin) and checkSession() honours it.
+
+const STAFF_PIN_RE = /^\d{8}$/;
+const STAFF_PIN_REQUIRED_KEY = 'lvbc-staff-pin-required';
+function markPinRequired(userId) { try { localStorage.setItem(STAFF_PIN_REQUIRED_KEY, userId); } catch (e) { /* storage blocked — the in-memory flag still holds this page */ } }
+function clearPinRequired() { try { localStorage.removeItem(STAFF_PIN_REQUIRED_KEY); } catch (e) { /* nothing to clear */ } }
+function pinRequiredFor(userId) { try { return localStorage.getItem(STAFF_PIN_REQUIRED_KEY) === userId; } catch (e) { return false; } }
 
 (function () {
   const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.LVBC_CONFIG;
@@ -24,8 +41,9 @@
   // at invite time) is what tells them apart.
   client.auth.onAuthStateChange((event, session) => {
     if (event === 'PASSWORD_RECOVERY' || (event === 'SIGNED_IN' && session?.user?.user_metadata?.needs_password)) {
+      markPinRequired(session.user.id);
       awaitingPasswordSet = true;
-      renderSetPassword();
+      renderSetPassword(event === 'PASSWORD_RECOVERY' ? 'Choose a new 8-digit PIN to finish resetting your sign-in.' : 'Choose an 8-digit PIN to finish setting up your account.');
     }
   });
 })();
@@ -41,9 +59,9 @@ async function checkSession() {
     renderLoggedOut();
     return;
   }
-  if (session.user?.user_metadata?.needs_password) {
-    // Reloaded mid-invite-flow before a password was ever set — this
-    // session is authenticated but shouldn't be treated as a real login.
+  if (session.user?.user_metadata?.needs_password || pinRequiredFor(session.user.id)) {
+    // Reloaded mid-invite or mid-reset before a PIN was saved — this
+    // session is authenticated but must not be treated as a real login.
     awaitingPasswordSet = true;
     renderSetPassword();
     return;
@@ -77,9 +95,17 @@ async function handleLogin(e) {
   const errEl = document.getElementById('login-error');
   errEl.textContent = '';
 
-  const { error } = await window.supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await window.supabase.auth.signInWithPassword({ email, password });
   if (error) {
-    errEl.textContent = error.message;
+    errEl.textContent = error.message === 'Invalid login credentials' ? 'That email and PIN don\'t match.' : error.message;
+    return;
+  }
+  document.getElementById('login-password').value = '';
+  // Still on an old-style password: right credentials, but choose a PIN before going in.
+  if (!STAFF_PIN_RE.test(password)) {
+    markPinRequired(data.user.id);
+    awaitingPasswordSet = true;
+    renderSetPassword('Sign-in now uses an 8-digit PIN. Choose yours to continue — you\'ll use it on the staff panel and the staff phone app.');
     return;
   }
   await checkSession();
@@ -118,6 +144,8 @@ async function handleForgotPassword(e) {
 }
 
 async function handleLogout() {
+  clearPinRequired();
+  awaitingPasswordSet = false;
   await window.supabase.auth.signOut();
   window.currentStaff = null;
   renderLoggedOut();
@@ -130,19 +158,35 @@ async function handleSetPassword(e) {
   const errEl = document.getElementById('set-password-error');
   errEl.textContent = '';
 
+  if (!STAFF_PIN_RE.test(pw1)) {
+    errEl.textContent = 'Your PIN must be exactly 8 digits.';
+    return;
+  }
   if (pw1 !== pw2) {
-    errEl.textContent = 'Passwords do not match.';
+    errEl.textContent = 'The two PINs don\'t match.';
     return;
   }
 
   const { error } = await window.supabase.auth.updateUser({ password: pw1, data: { needs_password: false } });
   if (error) {
-    errEl.textContent = error.message;
+    // Stay on this screen: the session is only good for choosing a PIN.
+    errEl.textContent = pinErrorMessage(error);
     return;
   }
 
+  clearPinRequired();
+  document.getElementById('set-password-1').value = '';
+  document.getElementById('set-password-2').value = '';
   awaitingPasswordSet = false;
   await checkSession();
+}
+
+// Supabase's wording for the refusals people actually hit.
+function pinErrorMessage(error) {
+  if (error.code === 'same_password' || /different from the old/i.test(error.message)) return 'That\'s already your PIN. Choose a different one.';
+  if (error.code === 'weak_password' || /weak|pwned|leaked/i.test(error.message)) return 'That PIN is too easy to guess. Choose a less common one.';
+  if (/session/i.test(error.message)) return 'This link has expired. Request a new reset email and try again.';
+  return error.message;
 }
 
 function renderLoggedIn() {
@@ -160,6 +204,20 @@ function renderLoggedIn() {
   if (typeof loadDashboard === 'function') loadDashboard();
   if (typeof loadMenu === 'function') loadMenu();
   if (typeof refreshBingoNavBadge === 'function') refreshBingoNavBadge();
+  // Every staffer needs a number on file for the staff phone app's Team page.
+  if (!window.currentStaff.phone) openProfileModal(true);
+}
+
+// "(512) 555-0123", "512.555.0123", "+1 512 555 0123" -> "+15125550123"; null if it isn't a US number.
+function normalizePhone(raw) {
+  let digits = String(raw || '').replace(/\D/g, '');
+  if (digits.length === 11 && digits[0] === '1') digits = digits.slice(1);
+  return digits.length === 10 ? '+1' + digits : null;
+}
+
+function formatPhone(phone) {
+  const d = String(phone || '').replace(/\D/g, '').slice(-10);
+  return d.length === 10 ? '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6) : phone || '';
 }
 
 function renderLoggedOut() {
@@ -168,7 +226,9 @@ function renderLoggedOut() {
   document.getElementById('login-screen').style.display = 'flex';
 }
 
-function renderSetPassword() {
+function renderSetPassword(note) {
+  if (note) document.getElementById('set-password-note').textContent = note;
+  document.getElementById('set-password-error').textContent = '';
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app-shell').style.display = 'none';
   document.getElementById('set-password-screen').style.display = 'flex';
@@ -224,16 +284,24 @@ function getInitials(name) {
 // any column here besides name/photo_url even if this code tried to
 // send one, so this stays safe regardless of what the UI sends.
 let pendingProfilePhotoFile = null;
+let profilePhoneRequired = false;
 
-function openProfileModal() {
+// required: opened at sign-in because there's no phone number yet —
+// it can't be closed until one is saved.
+function openProfileModal(required) {
   pendingProfilePhotoFile = null;
+  profilePhoneRequired = required === true;
+  document.getElementById('profile-close-btn').style.display = profilePhoneRequired ? 'none' : '';
   document.getElementById('profile-name-input').value = window.currentStaff.name || '';
+  document.getElementById('profile-phone-input').value = window.currentStaff.phone ? formatPhone(window.currentStaff.phone) : '';
   document.getElementById('profile-photo-preview').src = window.currentStaff.photo_url || 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"%3E%3Crect width="96" height="96" fill="%23ccc"/%3E%3C/svg%3E';
   document.getElementById('profile-alert').style.display = 'none';
+  if (profilePhoneRequired) profileAlert('Add your mobile number to continue — the team uses it to text and call you from the staff phone app.', false);
   document.getElementById('profile-modal').style.display = 'flex';
 }
 
 function closeProfileModal() {
+  if (profilePhoneRequired) return;
   document.getElementById('profile-modal').style.display = 'none';
 }
 
@@ -255,9 +323,11 @@ function profileAlert(msg, isError) {
 async function saveProfile() {
   const name = document.getElementById('profile-name-input').value.trim();
   if (!name) { profileAlert('Name is required.', true); return; }
+  const phone = normalizePhone(document.getElementById('profile-phone-input').value);
+  if (!phone) { profileAlert('Enter a 10-digit US mobile number.', true); return; }
 
   const uid = window.currentStaff.id;
-  const updates = { name };
+  const updates = { name, phone };
 
   if (pendingProfilePhotoFile) {
     const ext = (pendingProfilePhotoFile.name.split('.').pop() || 'jpg').toLowerCase();
@@ -273,6 +343,7 @@ async function saveProfile() {
   window.currentStaff = Object.assign({}, window.currentStaff, updates);
   document.getElementById('staff-name-badge').textContent = window.currentStaff.name;
   toast('Profile updated');
+  profilePhoneRequired = false;
   closeProfileModal();
 }
 

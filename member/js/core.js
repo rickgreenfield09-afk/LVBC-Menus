@@ -14,10 +14,21 @@
 //   - toast(msg, isError), escHtml(s), initials(name), avatarHtml(m),
 //     tierName(m), isPaidMember(m), fmtDate(d, opts), fmtTime(t)
 //
-// The PIN is the account's Supabase Auth password — 6 digits, checked
+// The PIN is the account's Supabase Auth password — 8 digits, checked
 // here only for shape. It is never read from or written to a table.
+// PINs used to be 6 digits: an older PIN still signs in once, and the
+// member is then made to choose an 8-digit one before getting in.
+//
+// A reset link signs the member in with a temporary session so they
+// can choose a PIN. Until it's saved that session must not open the
+// app, even after a reload — MEMBER_PIN_REQUIRED_KEY holds the mark and
+// checkSession() honours it.
 
-const PIN_RE = /^\d{6}$/;
+const PIN_RE = /^\d{8}$/;
+const MEMBER_PIN_REQUIRED_KEY = 'lvbc-member-pin-required';
+function markPinRequired(userId) { try { localStorage.setItem(MEMBER_PIN_REQUIRED_KEY, userId); } catch (e) { /* storage blocked — settingNewPin still holds this page */ } }
+function clearPinRequired() { try { localStorage.removeItem(MEMBER_PIN_REQUIRED_KEY); } catch (e) { /* nothing to clear */ } }
+function pinRequiredFor(userId) { try { return localStorage.getItem(MEMBER_PIN_REQUIRED_KEY) === userId; } catch (e) { return false; } }
 const MEMBER_SELECT = '*, tiers(name, rank)';
 const TAB_TITLES = { card: 'LVBC', activity: 'Activity', badges: 'My Badges', rewards: 'Rewards', leaderboard: 'Leaderboard', tap: 'On Tap', events: 'Events', profile: 'My Profile' };
 const TAB_LOADERS = {
@@ -45,8 +56,9 @@ let realtimeChannel = null;
   }
 
   // The reset-PIN email link lands here with a temporary session.
-  window.supabase.auth.onAuthStateChange((event) => {
+  window.supabase.auth.onAuthStateChange((event, session) => {
     if (event === 'PASSWORD_RECOVERY') {
+      markPinRequired(session.user.id);
       settingNewPin = true;
       renderSignedOut();
       showAuthCard('newpin');
@@ -59,7 +71,16 @@ async function checkSession() {
   if (settingNewPin) return;
   const { data: { session } } = await window.supabase.auth.getSession();
   if (!session) { renderSignedOut(); return; }
+  if (pinRequiredFor(session.user.id)) { requireNewPin(); return; }
   await enterApp(session);
+}
+
+// Shows the choose-a-PIN card and keeps the app shut until it's saved.
+function requireNewPin(note) {
+  settingNewPin = true;
+  renderSignedOut();
+  showAuthCard('newpin');
+  if (note) authAlert('newpin', note, true);
 }
 
 // Links the account to its member row (creating one for a brand-new
@@ -121,7 +142,7 @@ async function handleSignIn(e) {
   e.preventDefault();
   const email = document.getElementById('signin-email').value.trim().toLowerCase();
   const pin = document.getElementById('signin-pin').value.trim();
-  if (!PIN_RE.test(pin)) { authAlert('signin', 'Your PIN is 6 digits.'); return; }
+  if (!pin) { authAlert('signin', 'Enter your PIN.'); return; }
   const done = setBusy('signin-btn', 'Signing in...');
   const { data, error } = await window.supabase.auth.signInWithPassword({ email, password: pin });
   done();
@@ -131,6 +152,12 @@ async function handleSignIn(e) {
     return;
   }
   document.getElementById('signin-pin').value = '';
+  // An older 6-digit PIN: right credentials, but choose an 8-digit one first.
+  if (!PIN_RE.test(pin)) {
+    markPinRequired(data.user.id);
+    requireNewPin('PINs are now 8 digits. Choose your new PIN to continue.');
+    return;
+  }
   await enterApp(data.session);
 }
 
@@ -140,7 +167,7 @@ async function handleSignUp(e) {
   const email = document.getElementById('signup-email').value.trim().toLowerCase();
   const pin = document.getElementById('signup-pin').value.trim();
   if (!name) { authAlert('signup', 'Enter your name.'); return; }
-  if (!PIN_RE.test(pin)) { authAlert('signup', 'Choose a PIN of exactly 6 digits.'); return; }
+  if (!PIN_RE.test(pin)) { authAlert('signup', 'Choose a PIN of exactly 8 digits.'); return; }
   if (pin !== document.getElementById('signup-pin2').value.trim()) { authAlert('signup', 'The two PINs don\'t match.'); return; }
 
   const done = setBusy('signup-btn', 'Creating account...');
@@ -175,12 +202,20 @@ async function handleForgotPin(e) {
 async function handleNewPin(e) {
   e.preventDefault();
   const pin = document.getElementById('newpin-1').value.trim();
-  if (!PIN_RE.test(pin)) { authAlert('newpin', 'Choose a PIN of exactly 6 digits.'); return; }
+  if (!PIN_RE.test(pin)) { authAlert('newpin', 'Choose a PIN of exactly 8 digits.'); return; }
   if (pin !== document.getElementById('newpin-2').value.trim()) { authAlert('newpin', 'The two PINs don\'t match.'); return; }
   const done = setBusy('newpin-btn', 'Saving...');
   const { error } = await window.supabase.auth.updateUser({ password: pin });
   done();
-  if (error) { authAlert('newpin', error.message); return; }
+  if (error) {
+    // Stay on this card: the session is only good for choosing a PIN.
+    authAlert('newpin', error.code === 'same_password' || /different from the old/i.test(error.message) ? 'That\'s already your PIN. Choose a different one.'
+      : error.code === 'weak_password' || /weak|pwned|leaked/i.test(error.message) ? 'That PIN is too easy to guess. Choose a less common one.'
+        : /session/i.test(error.message) ? 'This link has expired. Request a new reset email and try again.' : error.message);
+    return;
+  }
+  clearPinRequired();
+  ['newpin-1', 'newpin-2'].forEach((id) => { document.getElementById(id).value = ''; });
   settingNewPin = false;
   showAuthCard('signin');
   await checkSession();
@@ -188,6 +223,8 @@ async function handleNewPin(e) {
 }
 
 async function handleSignOut() {
+  clearPinRequired();
+  settingNewPin = false;
   if (realtimeChannel) { window.supabase.removeChannel(realtimeChannel); realtimeChannel = null; }
   await window.supabase.auth.signOut();
   window.currentMember = null;

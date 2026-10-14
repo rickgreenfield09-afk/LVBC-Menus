@@ -47,7 +47,78 @@ async function loadSchedule() {
     mDaySettings = data || [];
   }
   mMyStaffIds = await resolveMyStaffIds();
-  await Promise.all([loadMyUpcomingShifts(), loadCoverageRequests(), loadOpenShifts()]);
+  await Promise.all([loadScheduleCalendar(), loadMyUpcomingShifts(), loadCoverageRequests(), loadOpenShifts()]);
+}
+
+// ── WHOLE-SCHEDULE CALENDAR ───────────────────────
+// A month of everyone's shifts. Each day shows a teal dot if you're on
+// and an amber one if a shift is still open; tapping a day lists every
+// shift on it underneath — who, which shift, hours — with Claim on
+// open ones.
+let mCalCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+let mCalShifts = [];
+let mCalSelected = toDateStr(new Date());
+
+function calendarMonth(delta) {
+  mCalCursor = new Date(mCalCursor.getFullYear(), mCalCursor.getMonth() + delta, 1);
+  const today = new Date();
+  mCalSelected = mCalCursor.getFullYear() === today.getFullYear() && mCalCursor.getMonth() === today.getMonth() ? toDateStr(today) : toDateStr(mCalCursor);
+  loadScheduleCalendar();
+}
+
+async function loadScheduleCalendar() {
+  const start = toDateStr(mCalCursor);
+  const end = toDateStr(new Date(mCalCursor.getFullYear(), mCalCursor.getMonth() + 1, 0));
+  const { data, error } = await window.supabase.from('shifts').select('id,shift_date,period,role,staff_id,start_time,end_time,staff:staff_id(name)')
+    .gte('shift_date', start).lte('shift_date', end).order('start_time');
+  if (error) { document.getElementById('m-cal').innerHTML = '<div class="loading">Could not load the schedule: ' + escHtml(error.message) + '</div>'; return; }
+  mCalShifts = data || [];
+  renderScheduleCalendar();
+}
+
+function selectCalendarDay(dateStr) { mCalSelected = dateStr; renderScheduleCalendar(); }
+
+function renderScheduleCalendar() {
+  const today = toDateStr(new Date());
+  const first = mCalCursor;
+  const last = new Date(first.getFullYear(), first.getMonth() + 1, 0);
+  let cells = ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d) => '<div class="m-cal-dow">' + d + '</div>').join('');
+  for (let i = 0; i < first.getDay(); i++) cells += '<div></div>';
+  for (let day = 1; day <= last.getDate(); day++) {
+    const dateStr = toDateStr(new Date(first.getFullYear(), first.getMonth(), day));
+    const setting = mDaySettings.find((x) => x.day_of_week === new Date(dateStr + 'T00:00:00').getDay()) || {};
+    const rows = mCalShifts.filter((s) => s.shift_date === dateStr);
+    const mine = rows.some((s) => mMyStaffIds.includes(s.staff_id));
+    const open = rows.some((s) => !s.staff_id);
+    cells += '<button class="m-cal-day' + (dateStr === mCalSelected ? ' selected' : '') + (dateStr === today ? ' today' : '') + (setting.is_closed ? ' closed' : '') + '" onclick="selectCalendarDay(\'' + dateStr + '\')">'
+      + '<span>' + day + '</span><i>' + (mine ? '<b class="mine"></b>' : '') + (open ? '<b class="open"></b>' : '') + '</i></button>';
+  }
+  document.getElementById('m-cal').innerHTML = '<div class="m-cal-head"><button class="m-cal-nav" aria-label="Previous month" onclick="calendarMonth(-1)">&#8249;</button>'
+    + '<div class="m-cal-title">' + first.toLocaleDateString('default', { month: 'long', year: 'numeric' }) + '</div>'
+    + '<button class="m-cal-nav" aria-label="Next month" onclick="calendarMonth(1)">&#8250;</button></div>'
+    + '<div class="m-cal-grid">' + cells + '</div>'
+    + '<div class="m-cal-key"><span><b class="mine"></b>You\'re on</span><span><b class="open"></b>Open shift</span></div>'
+    + mCalDayHtml(mCalSelected);
+}
+
+// Everything on one day: manager on duty first, then AM and PM.
+function mCalDayHtml(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const setting = mDaySettings.find((x) => x.day_of_week === d.getDay()) || {};
+  let html = '<div class="m-cal-detail"><div class="m-item-name">' + d.toLocaleDateString('default', { weekday: 'long', month: 'long', day: 'numeric' }) + '</div>';
+  if (setting.is_closed) return html + '<div class="loading">Closed</div></div>';
+  const rows = mCalShifts.filter((s) => s.shift_date === dateStr);
+  if (!rows.length) return html + '<div class="loading">Nothing scheduled yet</div></div>';
+  const order = (s) => (s.role === 'manager' ? 0 : s.period === 'morning' ? 1 : 2);
+  html += rows.slice().sort((a, b) => order(a) - order(b)).map((s) => {
+    const mine = mMyStaffIds.includes(s.staff_id);
+    const label = s.role === 'manager' ? 'Manager on Duty' + (s.period ? ' · ' + shiftSlotLabel(setting, s.period) : '') : shiftSlotLabel(setting, s.period);
+    return '<div class="shift-row"><div><div class="shift-row-name">' + (s.staff_id ? escHtml(mine ? 'You' : (s.staff && s.staff.name) || 'Staff') : '<span style="color:var(--amber);">Open shift</span>') + '</div>'
+      + '<div class="shift-row-meta">' + escHtml(label) + (s.start_time ? ' · ' + fmtTime(s.start_time) + (s.end_time ? '–' + fmtTime(s.end_time) : '') : '') + '</div></div>'
+      + (!s.staff_id && dateStr >= toDateStr(new Date()) ? '<button class="btn btn-sm btn-primary" onclick="claimOpenShift(\'' + s.id + '\')">Claim</button>' : '')
+      + (mine ? '<span class="badge badge-teal">You</span>' : '') + '</div>';
+  }).join('');
+  return html + '</div>';
 }
 
 // detailId makes the left side of the row tappable, opening that shift's details sheet.
@@ -226,4 +297,5 @@ async function claimOpenShift(shiftId) {
   toast('Shift claimed — it\'s yours now');
   loadMyUpcomingShifts();
   loadOpenShifts();
+  loadScheduleCalendar();
 }

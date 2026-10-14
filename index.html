@@ -21,19 +21,20 @@
         <input class="admin-input" type="email" id="login-email" required>
       </div>
       <div class="admin-field" style="margin-bottom:8px;">
-        <label class="admin-label">Password</label>
-        <input class="admin-input" type="password" id="login-password" required>
+        <label class="admin-label">8-Digit PIN</label>
+        <input class="admin-input" type="password" id="login-password" autocomplete="current-password" required>
       </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Still on your old password? Sign in with it once and you'll be asked to choose a PIN.</div>
       <div style="text-align:right;margin-bottom:16px;">
-        <a href="#" onclick="showForgotPassword(event)" style="font-size:12px;color:var(--sub);">Forgot password?</a>
+        <a href="#" onclick="showForgotPassword(event)" style="font-size:12px;color:var(--sub);">Forgot PIN?</a>
       </div>
       <div id="login-error" style="color:var(--red);font-size:12px;margin-bottom:12px;"></div>
       <button type="submit" class="btn btn-primary" style="width:100%;">Sign In</button>
     </form>
 
     <form id="forgot-password-form" onsubmit="handleForgotPassword(event)" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:32px;width:320px;">
-      <div class="logo" style="margin-bottom:8px;">LVBC <span>Reset Password</span></div>
-      <p style="font-size:12px;color:var(--muted);margin:0 0 20px;">Enter your email and we'll send you a link to reset your password.</p>
+      <div class="logo" style="margin-bottom:8px;">LVBC <span>Reset PIN</span></div>
+      <p style="font-size:12px;color:var(--muted);margin:0 0 20px;">Enter your email and we'll send you a link to choose a new PIN.</p>
       <div class="admin-field" style="margin-bottom:16px;">
         <label class="admin-label">Email</label>
         <input class="admin-input" type="email" id="forgot-password-email" required>
@@ -45,21 +46,22 @@
     </form>
   </div>
 
-  <!-- SET PASSWORD SCREEN (invite / recovery link lands here) -->
+  <!-- SET PIN SCREEN (invite / reset link, or first sign-in with an old password) -->
   <div id="set-password-screen" style="display:none;min-height:100vh;align-items:center;justify-content:center;">
     <form onsubmit="handleSetPassword(event)" style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:32px;width:320px;">
-      <div class="logo" style="margin-bottom:8px;">LVBC <span>Set Your Password</span></div>
-      <p style="font-size:12px;color:var(--muted);margin:0 0 20px;">Choose a password to finish setting up your account.</p>
+      <div class="logo" style="margin-bottom:8px;">LVBC <span>Choose Your PIN</span></div>
+      <p id="set-password-note" style="font-size:12px;color:var(--muted);margin:0 0 20px;">Choose an 8-digit PIN to finish signing in.</p>
       <div class="admin-field" style="margin-bottom:12px;">
-        <label class="admin-label">New Password</label>
-        <input class="admin-input" type="password" id="set-password-1" minlength="8" required>
+        <label class="admin-label">New 8-Digit PIN</label>
+        <input class="admin-input" type="password" id="set-password-1" inputmode="numeric" pattern="[0-9]{8}" maxlength="8" autocomplete="new-password" required>
       </div>
       <div class="admin-field" style="margin-bottom:16px;">
-        <label class="admin-label">Confirm Password</label>
-        <input class="admin-input" type="password" id="set-password-2" minlength="8" required>
+        <label class="admin-label">Confirm PIN</label>
+        <input class="admin-input" type="password" id="set-password-2" inputmode="numeric" pattern="[0-9]{8}" maxlength="8" autocomplete="new-password" required>
       </div>
       <div id="set-password-error" style="color:var(--red);font-size:12px;margin-bottom:12px;"></div>
-      <button type="submit" class="btn btn-primary" style="width:100%;">Save Password</button>
+      <button type="submit" class="btn btn-primary" style="width:100%;margin-bottom:12px;">Save PIN</button>
+      <a href="#" onclick="event.preventDefault(); handleLogout()" style="font-size:12px;color:var(--sub);">Cancel and sign out</a>
     </form>
   </div>
 
@@ -93,7 +95,7 @@
       <div class="card" style="width:380px;max-width:90vw;">
         <div class="menu-col-header">
           <div class="section-label" style="margin:0;">My Profile</div>
-          <button class="btn btn-sm btn-secondary" onclick="closeProfileModal()">&#10005; Close</button>
+          <button class="btn btn-sm btn-secondary" id="profile-close-btn" onclick="closeProfileModal()">&#10005; Close</button>
         </div>
         <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:20px;">
           <img id="profile-photo-preview" style="width:96px;height:96px;border-radius:50%;object-fit:cover;background:var(--raised);border:1px solid var(--border);margin-bottom:10px;" alt="">
@@ -103,6 +105,10 @@
         <div class="form-group" style="margin-bottom:16px;">
           <label class="form-label">Name</label>
           <input class="form-input" style="width:100%;" type="text" id="profile-name-input">
+        </div>
+        <div class="form-group" style="margin-bottom:16px;">
+          <label class="form-label">Mobile Number</label>
+          <input class="form-input" style="width:100%;" type="tel" id="profile-phone-input" autocomplete="tel" placeholder="(512) 555-0123">
         </div>
         <div id="profile-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
         <button class="btn btn-primary" style="width:100%;" onclick="saveProfile()">Save Changes</button>
@@ -487,6 +493,7 @@
             <div class="card">
               <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Name</label><input class="form-input" style="width:100%;" type="text" id="staff-name" placeholder="e.g. Jordan Lee"></div>
               <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Email</label><input class="form-input" style="width:100%;" type="email" id="staff-email" placeholder="e.g. jordan@example.com"></div>
+              <div class="form-group" id="staff-phone-group" style="margin-bottom:16px;display:none;"><label class="form-label">Mobile Number</label><input class="form-input" style="width:100%;" type="tel" id="staff-phone" placeholder="(512) 555-0123"></div>
               <div class="form-row">
                 <div class="form-group">
                   <label class="form-label">Position</label>
@@ -516,7 +523,7 @@
               </div>
               <div id="staff-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
               <button class="btn btn-primary" style="width:100%;" id="btn-save-staff" onclick="saveStaff()">Send Invite</button>
-              <div style="font-size:11px;color:var(--muted);margin-top:8px;" id="staff-form-hint">They'll get an email to set their own password and sign in.</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:8px;" id="staff-form-hint">They'll get an email to choose their own 8-digit PIN and sign in.</div>
             </div>
           </div>
           <div class="grid2-col">

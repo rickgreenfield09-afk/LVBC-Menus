@@ -28,20 +28,66 @@
         <input class="admin-input" type="email" id="login-email" autocomplete="username" required>
       </div>
       <div class="admin-field">
-        <label class="admin-label" for="login-password">Password</label>
+        <label class="admin-label" for="login-password">8-Digit PIN</label>
         <input class="admin-input" type="password" id="login-password" autocomplete="current-password" required>
       </div>
+      <div class="m-login-hint">Still on your old password? Sign in with it once and you'll be asked to choose a PIN.</div>
       <div id="login-error" class="m-login-error"></div>
       <button type="submit" class="btn btn-primary" style="width:100%;">Sign In</button>
-      <!-- Password reset and first-time invite setup live on the desktop panel. -->
-      <a href="/" class="m-login-link">Forgot password? Reset it on the staff panel</a>
+      <a href="#" class="m-login-link" onclick="showLoginCard('forgot-form', event)">Forgot PIN?</a>
+    </form>
+
+    <form id="forgot-form" class="m-login-card" style="display:none;" onsubmit="handleForgotPin(event)">
+      <div class="logo" style="margin-bottom:12px;">LVBC <span>Reset PIN</span></div>
+      <p class="m-login-hint" style="margin-bottom:16px;">Enter your email and we'll send a link to choose a new PIN.</p>
+      <div class="admin-field">
+        <label class="admin-label" for="forgot-email">Email</label>
+        <input class="admin-input" type="email" id="forgot-email" autocomplete="username" required>
+      </div>
+      <div id="forgot-msg" class="m-login-error"></div>
+      <button type="submit" class="btn btn-primary" style="width:100%;">Send Reset Link</button>
+      <a href="#" class="m-login-link" onclick="showLoginCard('login-form', event)">Back to sign in</a>
+    </form>
+  </div>
+
+  <!-- CHOOSE PIN (reset / invite link, or first sign-in with an old password) -->
+  <div id="setpin-screen" class="m-login" style="display:none;">
+    <form class="m-login-card" onsubmit="handleSetPin(event)">
+      <div class="logo" style="margin-bottom:12px;">LVBC <span>Choose PIN</span></div>
+      <p class="m-login-hint" id="setpin-note" style="margin-bottom:16px;">Choose an 8-digit PIN to finish signing in.</p>
+      <div class="admin-field">
+        <label class="admin-label" for="setpin-1">New 8-Digit PIN</label>
+        <input class="admin-input" type="password" id="setpin-1" inputmode="numeric" pattern="[0-9]{8}" maxlength="8" autocomplete="new-password" required>
+      </div>
+      <div class="admin-field">
+        <label class="admin-label" for="setpin-2">Confirm PIN</label>
+        <input class="admin-input" type="password" id="setpin-2" inputmode="numeric" pattern="[0-9]{8}" maxlength="8" autocomplete="new-password" required>
+      </div>
+      <div id="setpin-error" class="m-login-error"></div>
+      <button type="submit" class="btn btn-primary" style="width:100%;">Save PIN</button>
+      <a href="#" class="m-login-link" onclick="event.preventDefault(); handleLogout()">Cancel and sign out</a>
+    </form>
+  </div>
+
+  <!-- PHONE NUMBER (required before the app opens; see team.js) -->
+  <div id="phone-screen" class="m-login" style="display:none;">
+    <form class="m-login-card" onsubmit="handlePhoneGate(event)">
+      <div class="logo" style="margin-bottom:12px;">LVBC <span>Your Number</span></div>
+      <p class="m-login-hint" style="margin-bottom:16px;">Add your mobile number so the team can text or call you from the Team page. Everyone on staff can see it.</p>
+      <div class="admin-field">
+        <label class="admin-label" for="phone-input">Mobile number</label>
+        <input class="admin-input" type="tel" id="phone-input" inputmode="tel" autocomplete="tel" placeholder="(512) 555-0123" required>
+      </div>
+      <div id="phone-error" class="m-login-error"></div>
+      <button type="submit" class="btn btn-primary" style="width:100%;">Save and Continue</button>
+      <a href="#" class="m-login-link" onclick="event.preventDefault(); handleLogout()">Sign out</a>
     </form>
   </div>
 
   <!-- APP SHELL -->
   <div id="app-shell" style="display:none;">
     <header>
-      <span class="logo">LVBC <span id="m-screen-title">Schedule</span></span>
+      <span class="logo">LVBC <span id="m-screen-title">My Shift</span></span>
       <div style="display:flex;align-items:center;gap:8px;">
         <span class="staff-badge" id="staff-name-badge"></span>
         <button class="btn btn-secondary btn-sm" onclick="handleLogout()">Sign Out</button>
@@ -52,8 +98,10 @@
 
     <main>
       <!-- SCHEDULE -->
-      <div class="screen active" id="screen-schedule">
-        <div class="section-label" style="margin-top:0;">My Upcoming Shifts</div>
+      <div class="screen" id="screen-schedule">
+        <div class="card m-cal-card" id="m-cal"><div class="loading">Loading...</div></div>
+
+        <div class="section-label">My Upcoming Shifts</div>
         <div class="card" id="m-my-shifts"><div class="loading">Loading...</div></div>
 
         <div class="section-label">Coverage Requests</div>
@@ -63,10 +111,10 @@
         <div class="card" id="m-open-shifts"><div class="loading">Loading...</div></div>
       </div>
 
-      <!-- TASKS (this shift's responsibilities) -->
-      <div class="screen" id="screen-tasks">
+      <!-- MY SHIFT (today's shift and its duties; the id predates the rename) -->
+      <div class="screen active" id="screen-tasks">
         <div class="m-inv-summary">
-          <div class="card-title" style="margin:0;">This Shift</div>
+          <div class="card-title" style="margin:0;">My Shift</div>
           <div class="m-inv-sync" id="m-tasks-progress" style="color:var(--teal);"></div>
         </div>
         <div id="m-tasks"><div class="loading">Loading...</div></div>
@@ -85,15 +133,21 @@
         <div class="m-chips" id="m-inv-chips"></div>
         <div id="m-inv-list"><div class="loading">Loading...</div></div>
       </div>
+
+      <!-- TEAM -->
+      <div class="screen" id="screen-team">
+        <div id="m-team"><div class="loading">Loading...</div></div>
+      </div>
     </main>
 
     <!-- Full-screen editor for one inventory record; filled by inventory.js / merch.js -->
     <div id="m-sheet" class="m-sheet" style="display:none;"></div>
 
     <nav class="m-tabbar">
-      <button class="nav-btn active" onclick="showTab('schedule', this)">Schedule</button>
-      <button class="nav-btn" onclick="showTab('tasks', this)">Tasks</button>
+      <button class="nav-btn active" onclick="showTab('tasks', this)">My Shift</button>
+      <button class="nav-btn" onclick="showTab('schedule', this)">Schedule</button>
       <button class="nav-btn" onclick="showTab('inventory', this)">Inventory</button>
+      <button class="nav-btn" onclick="showTab('team', this)">Team</button>
     </nav>
   </div>
 
@@ -104,5 +158,6 @@
   <script src="/mobile/js/merch.js"></script>
   <script src="/mobile/js/tasks.js"></script>
   <script src="/mobile/js/offsite.js"></script>
+  <script src="/mobile/js/team.js"></script>
 </body>
 </html>
