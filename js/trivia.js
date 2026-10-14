@@ -33,13 +33,12 @@ const TRIVIA_SHEET_CSS = BINGO_SHEET_CSS
   + '.team .tline{border-bottom:1.5px solid #1a1410;height:0.26in;}'
   + '.score{margin-top:auto;border:2px solid #1a1410;}'
   + '.score .st{font-family:Oswald,sans-serif;font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;text-align:center;background:#1a1410;color:#fff;padding:2px 0;}'
-  + '.score .sr{display:flex;align-items:center;border-top:1px solid #1a1410;height:0.21in;padding:0 6px;font-family:Oswald,sans-serif;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;}'
-  + '.score .sr:first-of-type{border-top:none;}.score .sr span{flex:1;}.score .sr i{width:0.7in;height:0.19in;border-bottom:1px solid #1a1410;font-style:normal;}'
-  + '.score .sr.tot{border-top:2px solid #1a1410;height:0.25in;font-size:12px;font-weight:700;}'
+  + '.score .sr{display:flex;align-items:center;border-top:1px solid #1a1410;height:0.25in;padding:0 6px;font-family:Oswald,sans-serif;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;}'
+  + '.score .sr:first-of-type{border-top:none;}.score .sr span{flex:1;}'
+  + '.score .sr.tot{border-top:2px solid #1a1410;height:0.3in;font-size:12px;font-weight:700;}'
   + '.top{display:flex;align-items:center;gap:0.1in;}.topl{flex:none;}.topl .date{margin-bottom:2px;}'
   + '.prizes{flex:1;min-width:0;text-align:center;font-family:Oswald,sans-serif;text-transform:uppercase;line-height:1.1;border-top:1.5px solid #1a1410;border-bottom:1.5px solid #1a1410;padding:4px 0;display:flex;flex-direction:column;gap:5px;}.pz span{display:block;font-size:8px;font-weight:500;letter-spacing:0.08em;}.pz b{display:block;font-size:14px;font-weight:700;letter-spacing:0.03em;}'
   + '.evcols{columns:2;column-gap:0.2in;}.evcols .ev{break-inside:avoid;}.evcols .ev b{min-width:0.55in;}'
-  + '.score .sr i b{font-size:8px;color:#555;font-weight:500;}';
 
 function triviaAnswerQuadrant(round) {
   let lines = '';
@@ -65,7 +64,7 @@ function triviaInfoQuadrant(eventDate, events) {
   const evHtml = shown.length
     ? '<div class="evcols">' + shown.map((e) => '<div class="ev"><b>' + escHtml(bingoFmtDate(e.date, { weekday: 'short', month: 'numeric', day: 'numeric' })) + '</b><span>' + escHtml(e.name) + (e.time ? ' · ' + escHtml(e.time) : '') + '</span></div>').join('') + '</div>'
     : '<div class="ev"><span>Ask your bartender what\'s coming up!</span></div>';
-  const row = (label) => '<div class="sr"><span>' + label + '</span><i></i></div>';
+  const row = (label) => '<div class="sr"><span>' + label + '</span></div>';
   return '<div class="quad info">'
     + '<div class="top"><div class="topl">'
     + '<div class="brand"><img src="' + LOGO_URL + '"><div><div class="brand-name">' + BINGO_BREWERY + '</div><div class="title">Trivia<br>Night</div></div></div>'
@@ -84,7 +83,7 @@ function triviaInfoQuadrant(eventDate, events) {
     + '<div class="team"><div class="lbl">Team Name</div><div class="tline"></div></div>'
     + '<div class="score"><div class="st">Scoring Summary</div>'
     + row('Round 1') + row('Round 2') + row('Round 3')
-    + '<div class="sr tot"><span>Total Score</span><i></i></div></div>'
+    + '<div class="sr tot"><span>Total Score</span></div></div>'
     + '</div>';
 }
 
