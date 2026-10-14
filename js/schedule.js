@@ -361,8 +361,10 @@ async function openShiftModal(dateStr, context) {
 
   onShiftModalRoleChange();
   applyShiftModalEditVisibility();
-  // What each shift that day is responsible for (js/assignments.js) — not awaited, so it never holds up the popup.
-  renderShiftModalDuties(dateStr, freshShifts, shiftModalContext, myIdsForCoverage());
+  // What each shift that day is responsible for (js/assignments.js) — My Shifts only; the scheduler's Calendar popup omits it.
+  // Not awaited, so it never holds up the popup.
+  if (shiftModalContext === 'calendar') document.getElementById('shift-modal-duties').innerHTML = '';
+  else renderShiftModalDuties(dateStr, freshShifts, shiftModalContext, myIdsForCoverage());
 
   document.getElementById('shift-modal-events-list').innerHTML = '<div class="loading">Loading...</div>';
   modalEvents = await fetchEventsForDate(dateStr);
