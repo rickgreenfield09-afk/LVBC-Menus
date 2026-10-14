@@ -13,6 +13,7 @@
 const TRIVIA_QUESTIONS_PER_ROUND = 10;
 const TRIVIA_DEFAULT_SHEETS = 20;
 const TRIVIA_MAX_SHEETS = 200;
+const TRIVIA_MAX_EVENTS = 8;
 
 function loadTrivia() {
   const dateEl = document.getElementById('trivia-date');
@@ -35,6 +36,9 @@ const TRIVIA_SHEET_CSS = BINGO_SHEET_CSS
   + '.score .sr{display:flex;align-items:center;border-top:1px solid #1a1410;height:0.21in;padding:0 6px;font-family:Oswald,sans-serif;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;}'
   + '.score .sr:first-of-type{border-top:none;}.score .sr span{flex:1;}.score .sr i{width:0.7in;height:0.19in;border-bottom:1px solid #1a1410;font-style:normal;}'
   + '.score .sr.tot{border-top:2px solid #1a1410;height:0.25in;font-size:12px;font-weight:700;}'
+  + '.top{display:flex;align-items:center;gap:0.1in;}.topl{flex:none;}.topl .date{margin-bottom:2px;}'
+  + '.prizes{flex:1;min-width:0;text-align:center;font-family:Oswald,sans-serif;text-transform:uppercase;line-height:1.1;border-top:1.5px solid #1a1410;border-bottom:1.5px solid #1a1410;padding:4px 0;display:flex;flex-direction:column;gap:5px;}.pz span{display:block;font-size:8px;font-weight:500;letter-spacing:0.08em;}.pz b{display:block;font-size:14px;font-weight:700;letter-spacing:0.03em;}'
+  + '.evcols{columns:2;column-gap:0.2in;}.evcols .ev{break-inside:avoid;}.evcols .ev b{min-width:0.55in;}'
   + '.score .sr i b{font-size:8px;color:#555;font-weight:500;}';
 
 function triviaAnswerQuadrant(round) {
@@ -57,25 +61,25 @@ function triviaNextWednesday(dateStr) {
 }
 
 function triviaInfoQuadrant(eventDate, events) {
-  const shown = events.slice(0, 4);
+  const shown = events.slice(0, TRIVIA_MAX_EVENTS);
   const evHtml = shown.length
-    ? shown.map((e) => '<div class="ev"><b>' + escHtml(bingoFmtDate(e.date, { weekday: 'short', month: 'numeric', day: 'numeric' })) + '</b><span>' + escHtml(e.name) + (e.time ? ' · ' + escHtml(e.time) : '') + '</span></div>').join('')
-      + (events.length > shown.length ? '<div class="ev"><span>+ ' + (events.length - shown.length) + ' more — ask your bartender!</span></div>' : '')
+    ? '<div class="evcols">' + shown.map((e) => '<div class="ev"><b>' + escHtml(bingoFmtDate(e.date, { weekday: 'short', month: 'numeric', day: 'numeric' })) + '</b><span>' + escHtml(e.name) + (e.time ? ' · ' + escHtml(e.time) : '') + '</span></div>').join('') + '</div>'
     : '<div class="ev"><span>Ask your bartender what\'s coming up!</span></div>';
   const row = (label) => '<div class="sr"><span>' + label + '</span><i></i></div>';
   return '<div class="quad info">'
+    + '<div class="top"><div class="topl">'
     + '<div class="brand"><img src="' + LOGO_URL + '"><div><div class="brand-name">' + BINGO_BREWERY + '</div><div class="title">Trivia<br>Night</div></div></div>'
-    + '<div class="date">' + escHtml(bingoFmtDate(eventDate, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })) + '</div>'
+    + '<div class="date">' + escHtml(bingoFmtDate(eventDate, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })) + '</div></div>'
+    + '<div class="prizes"><div class="pz"><span>Each round winner gets a</span><b>4-beer flight!</b></div><div class="pz"><span>Overall winner gets a</span><b>trophy!</b></div></div></div>'
     + '<div class="h">How to Play</div>'
     + '<div class="keep">One sheet per team — all 3 rounds!</div>'
     + '<ul class="rules">'
     + '<li><b>Do not use your cellphone! This is a friendly game, let\'s keep it clean.</b></li>'
     + '<li>Work together — write your team\'s answer on the line for each question.</li>'
     + '<li>Each round has ' + TRIVIA_QUESTIONS_PER_ROUND + ' questions plus a tiebreaker. Only one sheet per team.</li>'
-    + '<li><b>At the end of each round, hand your score sheet to a table near you to be scored.</b></li>'
+    + '<li>At the end of each round, hand your score sheet to a table near you to be scored.</li>'
     + '<li>Highest total score wins. Closest tiebreaker answer settles a tie.</li>'
-    + '<li><b>The team with the best name gets to pick a category for the next Music Bingo on ' + escHtml(bingoFmtDate(triviaNextWednesday(eventDate), { weekday: 'long', month: 'long', day: 'numeric' })) + '.</b></li>'
-    + '<li><b>The winner of each round gets a flight of 4 beers for their team.</b></li></ul>'
+    + '<li>The team with the best name gets to pick a category for the next Music Bingo on ' + escHtml(bingoFmtDate(triviaNextWednesday(eventDate), { weekday: 'long', month: 'long', day: 'numeric' })) + '.</li></ul>'
     + '<div class="h">This Week at LVBC</div>' + evHtml
     + '<div class="team"><div class="lbl">Team Name</div><div class="tline"></div></div>'
     + '<div class="score"><div class="st">Scoring Summary</div>'
