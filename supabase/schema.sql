@@ -31,6 +31,8 @@ create table staff_profiles (
   phone text check (phone is null or phone ~ '^\+1[0-9]{10}$'),
   -- gets the Music Bingo materials email on print — see migration_031.
   receives_bingo_materials boolean not null default false,
+  -- untick to leave them off the staff phone app's Team page (migration_044)
+  show_in_roster boolean not null default true,
   created_at timestamptz not null default now()
 );
 
@@ -57,6 +59,7 @@ begin
     new.can_schedule := old.can_schedule;
     new.email := old.email;
     new.receives_bingo_materials := old.receives_bingo_materials;
+    new.show_in_roster := old.show_in_roster;
   end if;
   return new;
 end;

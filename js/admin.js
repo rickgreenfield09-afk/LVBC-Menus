@@ -43,7 +43,8 @@ function renderStaffRoster() {
       + '<td style="font-weight:500' + (sel ? ';color:var(--teal)' : '') + '">' + escHtml(s.name) + '</td>'
       + '<td style="font-size:12px;color:var(--sub)">' + escHtml(s.email || '')
       + (staffHasLogin(s) ? '' : (s.email ? ' ' : '') + '<span style="font-size:11px;color:var(--red)">No login</span>')
-      + (s.receives_bingo_materials ? ' <span class="badge badge-purple" title="Gets the Music Bingo materials email">Bingo emails</span>' : '') + '</td>'
+      + (s.receives_bingo_materials ? ' <span class="badge badge-purple" title="Gets the Music Bingo materials email">Bingo emails</span>' : '')
+      + (s.show_in_roster === false ? ' <span class="badge badge-muted" title="Not shown on the phone app\'s Team page">Hidden from Team</span>' : '') + '</td>'
       + '<td style="font-size:12px;color:var(--sub);white-space:nowrap;">' + (s.phone ? escHtml(formatPhone(s.phone)) : '<span style="color:var(--muted)">—</span>') + '</td>'
       + '<td style="font-size:12px;color:var(--sub)">' + (POSITION_LABELS[s.position] || '') + '</td>'
       + '<td>' + roleBadge + '</td>'
@@ -73,6 +74,7 @@ function loadStaffIntoForm(s) {
   document.getElementById('staff-role').value = s.role || 'user';
   document.getElementById('staff-position').value = s.position || 'bartender';
   document.getElementById('staff-can-schedule').checked = !!s.can_schedule;
+  document.getElementById('staff-show-in-roster').checked = s.show_in_roster !== false;
   // Only offered when editing — a new invite has no profile to flag yet.
   document.getElementById('staff-bingo-email-group').style.display = '';
   document.getElementById('staff-bingo-email').checked = !!s.receives_bingo_materials;
@@ -95,6 +97,7 @@ function cancelStaffEdit() {
   document.getElementById('staff-role').value = 'user';
   document.getElementById('staff-position').value = 'bartender';
   document.getElementById('staff-can-schedule').checked = false;
+  document.getElementById('staff-show-in-roster').checked = true;
   document.getElementById('staff-bingo-email-group').style.display = 'none';
   document.getElementById('staff-bingo-email').checked = false;
   document.getElementById('btn-save-staff').textContent = 'Send Invite';
@@ -123,6 +126,7 @@ async function saveStaff() {
   const role = document.getElementById('staff-role').value;
   const position = document.getElementById('staff-position').value;
   const canSchedule = document.getElementById('staff-can-schedule').checked;
+  const showInRoster = document.getElementById('staff-show-in-roster').checked;
   clearStaffAlert();
 
   if (!name) { staffAlert('Name is required.', true); return; }
@@ -139,7 +143,7 @@ async function saveStaff() {
     const rawPhone = document.getElementById('staff-phone').value.trim();
     const phone = rawPhone ? normalizePhone(rawPhone) : null;
     if (rawPhone && !phone) { btn.disabled = false; staffAlert('Enter a 10-digit US mobile number, or leave it blank.', true); return; }
-    const { error } = await window.supabase.from('staff_profiles').update({ name, role, position, can_schedule: canSchedule, receives_bingo_materials: receivesBingo, phone }).eq('id', selStaff);
+    const { error } = await window.supabase.from('staff_profiles').update({ name, role, position, can_schedule: canSchedule, receives_bingo_materials: receivesBingo, phone, show_in_roster: showInRoster }).eq('id', selStaff);
     if (error) { btn.disabled = false; staffAlert(error.message, true); return; }
     const s = staffRoster.find((x) => x.id === selStaff);
     const emailChanged = email && email.toLowerCase() !== ((s && s.email) || '').toLowerCase();

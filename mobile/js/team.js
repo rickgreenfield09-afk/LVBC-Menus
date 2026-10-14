@@ -7,7 +7,8 @@
 // Numbers live on staff_profiles.phone (migration_043), stored as +1
 // and ten digits. Everyone must have one — core.js stops a staffer at
 // sign-in until they've added theirs — and each person edits their own
-// here. All staff can see all numbers.
+// here. All staff can see all numbers. Admins can take someone off this
+// list (staff_profiles.show_in_roster, migration_044); you always see yourself.
 // Depends on: window.supabase, window.currentStaff, toast(),
 // escHtml(), toDateStr(), normalizePhone(), formatPhone() (core.js),
 // mOpenSheet(), mCloseSheet() (inventory.js)
@@ -22,11 +23,11 @@ let mTeamSelected = new Set();
 async function loadTeam() {
   const el = document.getElementById('m-team');
   const [staff, today] = await Promise.all([
-    window.supabase.from('staff_profiles').select('id,name,position,photo_url,phone').order('name'),
+    window.supabase.from('staff_profiles').select('id,name,position,photo_url,phone,show_in_roster').order('name'),
     window.supabase.from('shifts').select('staff_id').eq('shift_date', toDateStr(new Date())).not('staff_id', 'is', null),
   ]);
   if (staff.error) { el.innerHTML = '<div class="loading">Could not load the team: ' + escHtml(staff.error.message) + '</div>'; return; }
-  mTeam = staff.data;
+  mTeam = staff.data.filter((p) => p.show_in_roster !== false || p.id === window.currentStaff.id);
   mTeamWorkingToday = new Set((today.data || []).map((s) => s.staff_id));
   renderTeam();
 }

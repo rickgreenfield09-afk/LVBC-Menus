@@ -7,10 +7,11 @@
 // Assignments screen (js/assignments.js, migration_037 + 038); here
 // you only do the work and check it off.
 //
-// Shift tasks belong to a shift, not a person, so this shows the tasks
-// for whichever of today's shifts you hold. If you aren't on today, it
-// previews your next shift read-only; schedulers and admins who aren't
-// on see all of today's shifts.
+// Only what concerns you: the shift you hold today, the people on that
+// same shift (and the manager covering it), and that shift's duties —
+// never another shift's people or tasks. If you aren't on today it shows
+// your next shift the same way, read-only. A manager-on-duty shift has
+// no bartender duties, so it shows the shift card on its own.
 //
 // Whose a task is:
 //   opening    the AM bartender
@@ -100,7 +101,7 @@ async function loadTasks() {
     window.supabase.from('assignment_completions').select('*').or('due_key.eq.adhoc,completed_on.gte.' + quarterStart),
     // Every role, not just bartenders, so the shift card can name the manager on duty.
     window.supabase.from('shifts').select('id,shift_date,period,staff_id,role,start_time,end_time,staff:staff_id(name)').eq('shift_date', today),
-    window.supabase.from('shifts').select('shift_date,period').in('staff_id', mMyStaffIds).eq('role', 'bartender').gt('shift_date', today).order('shift_date').limit(1),
+    window.supabase.from('shifts').select('shift_date').in('staff_id', mMyStaffIds).in('role', ['bartender', 'manager']).gt('shift_date', today).order('shift_date').limit(1),
     // The count buttons need the inventory records behind them.
     loadInventoryCount(), loadMerchCount(),
   ]);
@@ -111,25 +112,28 @@ async function loadTasks() {
   mTaskTargets = targets.data;
   mTaskCompletions = completions.data;
 
-  const dow = new Date(today + 'T00:00:00').getDay();
-  const todaySlots = mTaskSlots(dow).map((s, _, all) => Object.assign({}, s, {
-    shifts: shifts.data.filter((x) => x.role === 'bartender' && (all.length === 1 || x.period === s.period)),
-  }));
-  const mine = todaySlots.filter((s) => s.shifts.some((x) => mMyStaffIds.includes(x.staff_id)));
-  const manager = window.currentStaff.role === 'admin' || window.currentStaff.can_schedule;
-  if (mine.length) mTaskView = { dateStr: today, slots: mine, dayShifts: shifts.data };
-  else if (manager && todaySlots.length) mTaskView = { dateStr: today, slots: todaySlots, dayShifts: shifts.data, note: 'You\'re not on the schedule today — showing every shift.' };
-  else if (next.data && next.data.length) {
-    const n = next.data[0];
-    const slots = mTaskSlots(new Date(n.shift_date + 'T00:00:00').getDay());
-    const { data: nextDay } = await window.supabase.from('shifts').select('id,shift_date,period,staff_id,role,start_time,end_time,staff:staff_id(name)').eq('shift_date', n.shift_date);
-    const dayShifts = nextDay || [];
-    mTaskView = { dateStr: n.shift_date, dayShifts, preview: true,
-      slots: slots.filter((s) => slots.length === 1 || s.period === n.period)
-        .map((s) => Object.assign({}, s, { shifts: dayShifts.filter((x) => x.role === 'bartender' && (slots.length === 1 || x.period === s.period)) })),
-      note: 'You\'re not on the schedule today. Here is your next shift.' };
-  } else mTaskView = { dateStr: today, slots: [], dayShifts: [], note: 'You have no upcoming shifts on the schedule.' };
+  let view = mMyShiftView(today, shifts.data);
+  if (!view && next.data && next.data.length) {
+    const nextDate = next.data[0].shift_date;
+    const { data: nextDay } = await window.supabase.from('shifts').select('id,shift_date,period,staff_id,role,start_time,end_time,staff:staff_id(name)').eq('shift_date', nextDate);
+    view = mMyShiftView(nextDate, nextDay || []);
+    if (view) Object.assign(view, { preview: true, note: 'You\'re not on the schedule today. Here is your next shift.' });
+  }
+  mTaskView = view || { dateStr: today, slots: [], dayShifts: [], note: 'You have no upcoming shifts on the schedule.' };
   renderTasks();
+}
+
+// The view of one date for you alone: the bartender shift(s) you hold,
+// or your manager-on-duty shift if that's all you have. Null if you
+// aren't working that day.
+function mMyShiftView(dateStr, dayShifts) {
+  const slots = mTaskSlots(new Date(dateStr + 'T00:00:00').getDay());
+  const onSlot = (s, x) => slots.length === 1 || x.period === s.period;
+  const mine = slots.map((s) => Object.assign({}, s, { shifts: dayShifts.filter((x) => x.role === 'bartender' && onSlot(s, x)) }))
+    .filter((s) => s.shifts.some((x) => mMyStaffIds.includes(x.staff_id)));
+  if (mine.length) return { dateStr, slots: mine, dayShifts };
+  const mod = dayShifts.find((x) => x.role === 'manager' && mMyStaffIds.includes(x.staff_id));
+  return mod ? { dateStr, slots: [], dayShifts, modShift: mod } : null;
 }
 
 // Re-draws after a count is saved from the edit sheet, if this screen is the one showing.
@@ -188,6 +192,9 @@ function renderTasks() {
   let total = 0, doneCount = 0;
   const tally = (t, on) => { total++; if (mTaskCompletion(t, on)) doneCount++; };
 
+  // A manager-on-duty shift carries no bartender duties — just its card.
+  if (mTaskView.modShift) html += mModCardHtml(dateStr, mTaskView.modShift, setting);
+
   slots.forEach((slot) => {
     const tasks = mTasksFor(dateStr, slot.covers);
     const mineHere = slot.shifts.find((x) => mMyStaffIds.includes(x.staff_id));
@@ -230,18 +237,37 @@ function mShiftCardHtml(dateStr, slot, single, mine, setting) {
   const start = (mine && mine.start_time) || (single ? setting.morning_start : setting[slot.period + '_start']);
   const end = (mine && mine.end_time) || (single ? setting.evening_end || setting.morning_end : setting[slot.period + '_end']);
   const day = mTaskView.dayShifts || [];
-  const names = (rows) => [...new Set(rows.map((x) => (x.staff_id ? (mMyStaffIds.includes(x.staff_id) ? 'You' : (x.staff && x.staff.name) || 'Staff') : 'Open shift')))].join(', ');
-  const crew = [];
-  const bartenders = day.filter((x) => x.role === 'bartender');
-  if (single) { if (bartenders.length) crew.push(['Bartender', names(bartenders)]); }
-  else {
-    ['morning', 'evening'].forEach((p) => { const rows = bartenders.filter((x) => x.period === p); if (rows.length) crew.push([shiftSlotLabel(setting, p) + ' bartender', names(rows)]); });
-  }
-  const mods = day.filter((x) => x.role === 'manager');
-  if (mods.length) crew.push(['Manager on duty', names(mods)]);
+  // Only this shift's people: the bartenders on it, and the manager covering it
+  // (a day-long manager shift, or one on the same half of the day).
+  const crew = [['Bartender' + (slot.shifts.length > 1 ? 's' : ''), mShiftNames(slot.shifts)]];
+  const mods = day.filter((x) => x.role === 'manager' && (single || !x.period || x.period === slot.period));
+  if (mods.length) crew.push(['Manager on duty', mShiftNames(mods)]);
   return '<div class="card m-shift-card"><div class="m-shift-card-day">' + (dateStr === today ? 'Today' : d.toLocaleDateString('default', { weekday: 'long' }))
     + ' <span>' + d.toLocaleDateString('default', { month: 'short', day: 'numeric' }) + '</span></div>'
     + '<div class="m-sheet-title">' + escHtml(single ? 'Bartender shift' : shiftSlotLabel(setting, slot.period) + ' shift') + '</div>'
+    + (start ? '<div class="m-shift-card-hours">' + fmtTime(start) + (end ? ' – ' + fmtTime(end) : '') + '</div>' : '')
+    + (crew.length ? '<div class="m-shift-crew">' + crew.map(([role, who]) => '<div><span>' + escHtml(role) + '</span>' + escHtml(who) + '</div>').join('') + '</div>' : '')
+    + '</div>';
+}
+
+function mShiftNames(rows) {
+  return [...new Set(rows.map((x) => (x.staff_id ? (mMyStaffIds.includes(x.staff_id) ? 'You' : (x.staff && x.staff.name) || 'Staff') : 'Open shift')))].join(', ');
+}
+
+// Your manager-on-duty shift: its hours and the bartenders you're covering.
+function mModCardHtml(dateStr, mod, setting) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const slots = mTaskSlots(d.getDay());
+  const start = mod.start_time || (mod.period ? setting[mod.period + '_start'] : setting.morning_start);
+  const end = mod.end_time || (mod.period ? setting[mod.period + '_end'] : setting.evening_end || setting.morning_end);
+  const under = (mTaskView.dayShifts || []).filter((x) => x.role === 'bartender' && (!mod.period || slots.length === 1 || x.period === mod.period));
+  const crew = slots.filter((s) => !mod.period || slots.length === 1 || s.period === mod.period).map((s) => {
+    const rows = under.filter((x) => slots.length === 1 || x.period === s.period);
+    return rows.length ? [(slots.length === 1 ? 'Bartender' : shiftSlotLabel(setting, s.period) + ' bartender'), mShiftNames(rows)] : null;
+  }).filter(Boolean);
+  return '<div class="card m-shift-card"><div class="m-shift-card-day">' + (dateStr === toDateStr(new Date()) ? 'Today' : d.toLocaleDateString('default', { weekday: 'long' }))
+    + ' <span>' + d.toLocaleDateString('default', { month: 'short', day: 'numeric' }) + '</span></div>'
+    + '<div class="m-sheet-title">Manager on Duty</div>'
     + (start ? '<div class="m-shift-card-hours">' + fmtTime(start) + (end ? ' – ' + fmtTime(end) : '') + '</div>' : '')
     + (crew.length ? '<div class="m-shift-crew">' + crew.map(([role, who]) => '<div><span>' + escHtml(role) + '</span>' + escHtml(who) + '</div>').join('') + '</div>' : '')
     + '</div>';
