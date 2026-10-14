@@ -84,7 +84,7 @@
       <button class="nav-btn" onclick="showScreen('inventory', this); loadInventory()">Inventory</button>
       <button class="nav-btn" onclick="showScreen('members', this); loadMembers()">Members</button>
       <button class="nav-btn" id="nav-btn-assignments" style="display:none;" onclick="showScreen('assignments', this); loadAssignments()">Assignments</button>
-      <button class="nav-btn" onclick="showScreen('bingo', this); loadBingo()">Bingo <span class="badge badge-teal" id="bingo-nav-ready" style="display:none;margin-left:4px;"></span></button>
+      <button class="nav-btn" onclick="showScreen('games', this); loadGames()">Games <span class="badge badge-teal" id="bingo-nav-ready" style="display:none;margin-left:4px;"></span></button>
       <button class="nav-btn" id="nav-btn-marketing" style="display:none;" onclick="showScreen('marketing', this); loadMarketing()">Marketing</button>
       <button class="nav-btn" id="nav-btn-admin" style="display:none;" onclick="showScreen('admin', this); loadAdmin()">Admin</button>
       <!-- Dashboard, Reports tabs added as their .js files land -->
@@ -648,8 +648,40 @@
         </div>
       </div>
 
+      <!-- GAMES SCREEN: Bingo (its own sub-tabs, below) + Trivia -->
+      <div class="screen" id="screen-games">
+        <div class="sub-tabs">
+          <button class="sub-tab active" id="gamestab-btn-bingo" onclick="setGamesTab('bingo', this)">Bingo</button>
+          <button class="sub-tab" id="gamestab-btn-trivia" onclick="setGamesTab('trivia', this)">Trivia</button>
+        </div>
+
+        <!-- TRIVIA -->
+        <div class="sub-sec" id="gamestab-trivia">
+          <div class="grid-2">
+            <div class="grid2-col">
+              <div class="section-label" style="margin-top:0;">Trivia Answer Sheets</div>
+              <div class="card">
+                <div class="form-row">
+                  <div class="form-group"><label class="form-label">Trivia Night</label><input class="form-input" style="width:100%;" type="date" id="trivia-date"></div>
+                  <div class="form-group"><label class="form-label">Sheets to Print (max of 200)</label><input class="form-input" style="width:100%;" type="number" min="1" max="200" id="trivia-sheets" value="20">
+                    <div style="font-size:11px;color:var(--muted);margin-top:4px;">One sheet per team — each sheet has an answer card for all 3 rounds.</div></div>
+                </div>
+                <div id="trivia-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
+                <button class="btn btn-primary" style="width:100%;" id="trivia-print-btn" onclick="printTriviaSheets()">Create &amp; Print Sheets</button>
+              </div>
+            </div>
+            <div class="grid2-col">
+              <div class="section-label" style="margin-top:0;">What's on the Sheet</div>
+              <div class="card" style="font-size:13px;color:var(--sub);line-height:1.6;">
+                Three answer cards (Rounds 1–3), each with 10 numbered answer lines — a checkbox after each number marks correct answers — plus a tiebreaker line. The info quadrant has the rules, this week's events, a team name line, and a scoring summary for Rounds 1–3 and the total.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sub-sec active" id="gamestab-bingo">
       <!-- BINGO SCREEN -->
-      <div class="screen" id="screen-bingo">
+      <div id="screen-bingo">
         <div class="sub-tabs">
           <button class="sub-tab active" id="bingotab-btn-dashboard" onclick="setBingoTab('dashboard', this)">Dashboard</button>
           <button class="sub-tab" id="bingotab-btn-playlists" onclick="setBingoTab('playlists', this)">Playlists</button>
@@ -795,6 +827,8 @@
           <div id="bingo-history-list"><div class="loading">Loading...</div></div>
         </div>
       </div>
+        </div><!-- /gamestab-bingo -->
+      </div><!-- /screen-games -->
 
       <!-- MARKETING SCREEN -->
       <div class="screen" id="screen-marketing">
@@ -1262,5 +1296,6 @@
   <script src="js/offsite.js"></script>
   <script src="js/members.js"></script>
   <script src="js/bingo.js"></script>
+  <script src="js/trivia.js"></script>
 </body>
 </html>

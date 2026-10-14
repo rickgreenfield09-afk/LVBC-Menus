@@ -497,9 +497,9 @@
   .bingo-round{border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px;background:var(--raised);}
   .bingo-round-title{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1.5px;margin-bottom:10px;}
   .bingo-warning{margin-top:8px;padding:8px 10px;border-radius:6px;font-size:12px;background:rgba(232,184,75,0.12);color:var(--amber);border:1px solid rgba(232,184,75,0.25);}
-  #screen-bingo input[type=number]{-moz-appearance:textfield;appearance:textfield;}
-  #screen-bingo input[type=number]::-webkit-outer-spin-button,
-  #screen-bingo input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+  #screen-games input[type=number]{-moz-appearance:textfield;appearance:textfield;}
+  #screen-games input[type=number]::-webkit-outer-spin-button,
+  #screen-games input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
   .bingo-spotify-results{position:absolute;left:0;right:0;top:100%;margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:8px;z-index:50;max-height:360px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,0.4);}
   .bingo-spotify-hit{display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);}
   .bingo-spotify-hit:last-child{border-bottom:none;}

@@ -32,6 +32,20 @@ let bingoEditSongs = [];
 let bingoEditPatternId = null;
 let bingoPatternCells = new Set();
 
+// Games screen: Bingo (this file) and Trivia (trivia.js) as sub-pages.
+function loadGames() {
+  setGamesTab('bingo', document.getElementById('gamestab-btn-bingo'));
+}
+
+function setGamesTab(tab, btn) {
+  document.querySelectorAll('#screen-games > .sub-tabs .sub-tab').forEach((b) => b.classList.remove('active'));
+  document.querySelectorAll('#screen-games > .sub-sec').forEach((s) => s.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.getElementById('gamestab-' + tab).classList.add('active');
+  if (tab === 'bingo') loadBingo();
+  else if (tab === 'trivia') loadTrivia();
+}
+
 function loadBingo() {
   setBingoTab('dashboard', document.getElementById('bingotab-btn-dashboard'));
 }
@@ -511,8 +525,8 @@ function bingoHandleSpotifyReturn() {
   history.replaceState(null, '', window.location.pathname);
   if (result === 'connected') toast('Spotify connected');
   else toast('Spotify connection failed: ' + (params.get('reason') || 'unknown error'), true);
-  const navBtn = Array.from(document.querySelectorAll('.nav-btn')).find((b) => b.textContent.trim().startsWith('Bingo'));
-  if (navBtn) { showScreen('bingo', navBtn); loadBingo(); }
+  const navBtn = Array.from(document.querySelectorAll('.nav-btn')).find((b) => b.textContent.trim().startsWith('Games'));
+  if (navBtn) { showScreen('games', navBtn); loadGames(); }
 }
 
 // Spotify titles often carry release noise ("- Remastered 2011",
