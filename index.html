@@ -1254,8 +1254,27 @@
             <div class="gen-card"><div class="gen-card-title">Wine &amp; N/A Menu</div><div class="gen-card-desc">Full wine menu with glass/bottle badges, N/A beer, and options grid.</div><button class="btn btn-primary btn-sm" onclick="genWineMenu()">Generate Wine Menu</button></div>
             <div class="gen-card"><div class="gen-card-title">Wine Half-Sheet</div><div class="gen-card-desc">Compact half-card wine &amp; N/A for table or bar use.</div><button class="btn btn-primary btn-sm" onclick="genWineHalf()">Generate Wine Half</button></div>
             <div class="gen-card"><div class="gen-card-title">Fridge Labels</div><div class="gen-card-desc">3.94×1.57in crowler labels — select individual beers or print all.</div><button class="btn btn-primary btn-sm" onclick="openLabelPicker()">Select &amp; Generate Labels</button></div>
+            <div class="gen-card"><div class="gen-card-title">Flip Menus</div><div class="gen-card-desc">Half-sheet inserts for the table flip-menu holders — two per page.</div><div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="genFlipPolicies()">Policies</button><button class="btn btn-secondary btn-sm" onclick="genFlipPending('The Mug Club card')">Mug Club</button><button class="btn btn-secondary btn-sm" onclick="openFlipBeerPicker()">Beer Cards</button></div></div>
           </div>
           <div class="gen-status" id="gen-status"></div>
+
+          <div id="flip-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:500;align-items:center;justify-content:center;">
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;width:560px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;">
+              <div style="padding:20px 24px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+                <div><div style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px;">Select Beer Flip Cards</div><div style="font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);margin-top:2px;">Click beers to toggle — two cards print per sheet</div></div>
+                <button onclick="closeFlipPicker()" style="background:none;border:none;color:var(--sub);font-size:20px;cursor:pointer;line-height:1;">✕</button>
+              </div>
+              <div style="padding:12px 24px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-shrink:0;">
+                <button class="btn btn-sm btn-secondary" onclick="flipSelectAll()">Select All</button>
+                <button class="btn btn-sm btn-secondary" onclick="flipSelectNone()">Clear All</button>
+              </div>
+              <div id="flip-picker-list" style="flex:1;overflow-y:auto;padding:12px 24px;display:flex;flex-direction:column;gap:6px;"></div>
+              <div style="padding:16px 24px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;flex-shrink:0;">
+                <button class="btn btn-secondary" onclick="closeFlipPicker()">Cancel</button>
+                <button class="btn btn-primary" onclick="genFlipBeers()">Generate Cards</button>
+              </div>
+            </div>
+          </div>
 
           <div id="label-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:500;align-items:center;justify-content:center;">
             <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;width:560px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;">
