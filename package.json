@@ -2,9 +2,10 @@
   "name": "lvbc-menus",
   "private": true,
   "type": "module",
-  "description": "LVBC staff panel. Static front end; the dependencies are only for api/email-bingo-game.js (PDF rendering).",
+  "description": "LVBC staff panel. Static front end; the dependencies are for api/email-bingo-game.js (PDF rendering) and api/send-push.js (web-push).",
   "dependencies": {
     "@sparticuz/chromium": "153.0.0",
-    "puppeteer-core": "25.12.0"
+    "puppeteer-core": "25.12.0",
+    "web-push": "3.6.7"
   }
 }

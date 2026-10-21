@@ -25,6 +25,7 @@ function setMarketingTab(tab, btn) {
   if (tab === 'dashboard') loadMarketingDashboard();
   if (tab === 'campaigns') loadMarketingCampaigns();
   if (tab === 'audience') loadMarketingAudience();
+  if (tab === 'push') loadPush();
   if (tab === 'games') loadGames();
   if (tab === 'settings') loadMarketingSettings();
 }

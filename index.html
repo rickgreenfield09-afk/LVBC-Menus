@@ -661,6 +661,7 @@
           <button class="sub-tab active" id="marketingtab-btn-dashboard" onclick="setMarketingTab('dashboard', this)">Dashboard</button>
           <button class="sub-tab" id="marketingtab-btn-campaigns" onclick="setMarketingTab('campaigns', this)">Campaigns</button>
           <button class="sub-tab" id="marketingtab-btn-audience" onclick="setMarketingTab('audience', this)">Audience</button>
+          <button class="sub-tab" id="marketingtab-btn-push" onclick="setMarketingTab('push', this)">Push</button>
           <button class="sub-tab" id="marketingtab-btn-games" onclick="setMarketingTab('games', this)">Games</button>
           <button class="sub-tab" id="marketingtab-btn-settings" onclick="setMarketingTab('settings', this)">Settings</button>
         </div>
@@ -839,6 +840,55 @@
           <div class="section-label" style="margin-top:0;">Connection Status</div>
           <div class="table-wrap" id="mkt-settings-status"><div class="loading">Loading...</div></div>
         </div>
+        <!-- PUSH -->
+        <div class="sub-sec" id="marketingtab-push">
+          <div class="section-label" style="margin-top:0;">Reach</div>
+          <div id="push-status" style="margin-bottom:24px;"><div class="loading">Loading...</div></div>
+
+          <div class="grid-2">
+            <div class="grid2-col">
+              <div class="section-label" style="margin-top:0;">New Notification</div>
+              <div class="card">
+                <div class="form-group"><label class="form-label">Send To</label>
+                  <select class="form-input" style="width:100%;" id="push-audience">
+                    <option value="members">Members</option>
+                    <option value="staff">Staff</option>
+                    <option value="both">Members + Staff</option>
+                  </select></div>
+                <div class="form-group"><label class="form-label">Title <span id="push-title-count" style="color:var(--muted);float:right;">0/65</span></label>
+                  <input class="form-input" style="width:100%;" id="push-title" maxlength="65" oninput="updatePushPreview()" placeholder="Trivia tonight at 7!"></div>
+                <div class="form-group"><label class="form-label">Message <span id="push-body-count" style="color:var(--muted);float:right;">0/240</span></label>
+                  <textarea class="form-input" style="width:100%;" rows="3" id="push-body" maxlength="240" oninput="updatePushPreview()" placeholder="Grab your team. First round is on us."></textarea></div>
+                <div class="form-group"><label class="form-label">Opens</label>
+                  <select class="form-input" style="width:100%;" id="push-url">
+                    <option value="">The app they received it in</option>
+                    <option value="/member/">Member app</option>
+                    <option value="/mobile/">Staff app</option>
+                  </select>
+                  <div style="font-size:11px;color:var(--muted);margin-top:4px;">Where a tap lands. Members who turned off All Notifications in their profile are skipped.</div></div>
+                <div id="push-alert" style="font-size:13px;margin-bottom:10px;"></div>
+                <button class="btn btn-primary" id="push-send-btn" onclick="sendPush()">Send Notification</button>
+              </div>
+            </div>
+            <div class="grid2-col">
+              <div class="section-label" style="margin-top:0;">Preview</div>
+              <div class="card">
+                <div style="display:flex;gap:12px;align-items:flex-start;">
+                  <img src="/mobile/icons/icon-192.png" alt="" style="width:40px;height:40px;border-radius:9px;">
+                  <div style="min-width:0;">
+                    <div id="push-preview-title" style="font-weight:600;"></div>
+                    <div id="push-preview-body" style="font-size:13px;color:var(--muted);margin-top:2px;word-break:break-word;"></div>
+                    <div style="font-size:11px;color:var(--muted);margin-top:6px;">Las Vegas Brewing Co. &middot; now</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-label">Recent Notifications</div>
+          <div class="table-wrap" id="push-history"><div class="loading">Loading...</div></div>
+        </div>
+
         <!-- GAMES: Bingo (its own sub-tabs, below) + Trivia -->
         <div class="sub-sec" id="marketingtab-games">
       <div id="screen-games">
@@ -1327,6 +1377,7 @@
   <script src="js/app-core.js"></script>
   <script src="js/admin.js"></script>
   <script src="js/marketing.js"></script>
+  <script src="js/push.js"></script>
   <script src="js/inventory.js"></script>
   <script src="js/locations.js"></script>
   <script src="js/merch.js"></script>

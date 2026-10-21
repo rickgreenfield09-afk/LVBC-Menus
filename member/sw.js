@@ -20,6 +20,7 @@ const SHELL = [
   '/member/js/membership.js',
   '/member/js/store.js',
   '/config.js',
+  '/push-client.js',
 ];
 const CDN_HOSTS = ['unpkg.com', 'cdnjs.cloudflare.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
@@ -49,4 +50,28 @@ self.addEventListener('fetch', (event) => {
       return res;
     }).catch(() => caches.match(req, { ignoreSearch: sameOrigin }).then((hit) => hit || (req.mode === 'navigate' ? caches.match('/member/') : Response.error())))
   );
+});
+
+// Push notifications (sent from the staff panel's Marketing > Push). The
+// payload is { title, body, url }; a tap opens the app at url, or focuses
+// it if it is already open.
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (e) { /* not JSON */ }
+  event.waitUntil(self.registration.showNotification(data.title || 'Las Vegas Brewing Co.', {
+    body: data.body || '',
+    icon: '/mobile/icons/icon-192.png',
+    badge: '/mobile/icons/icon-192.png',
+    data: { url: data.url || '/member/' },
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = new URL(event.notification.data.url, self.location.origin).href;
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
+    const open = wins.find((w) => w.url.startsWith(self.location.origin + '/member/'));
+    if (open) return open.navigate(target).then((w) => w && w.focus());
+    return self.clients.openWindow(target);
+  }));
 });

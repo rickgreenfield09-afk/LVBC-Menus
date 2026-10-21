@@ -26,6 +26,7 @@ function populateProfile() {
   document.getElementById('comms-events').checked = m.comms_events;
   document.getElementById('comms-releases').checked = m.comms_new_releases;
   document.getElementById('comms-promos').checked = m.comms_promotions;
+  LVBC_PUSH.mount('push-mount', 'member');
   document.getElementById('profile-avatar-display').innerHTML = avatarHtml(m);
   const liked = m.taste_profile || [];
   document.getElementById('style-chips').innerHTML = BEER_STYLES.map((s) =>

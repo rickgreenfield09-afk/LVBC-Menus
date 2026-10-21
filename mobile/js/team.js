@@ -21,6 +21,7 @@ let mTeamSelecting = false;
 let mTeamSelected = new Set();
 
 async function loadTeam() {
+  LVBC_PUSH.mount('m-push', 'staff');
   const el = document.getElementById('m-team');
   const [staff, today] = await Promise.all([
     window.supabase.from('staff_profiles').select('id,name,position,photo_url,phone,show_in_roster').order('name'),
