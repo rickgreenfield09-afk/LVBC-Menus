@@ -18,6 +18,7 @@ const SHELL = [
   '/member/js/menus.js',
   '/member/js/profile.js',
   '/member/js/membership.js',
+  '/member/js/store.js',
   '/config.js',
 ];
 const CDN_HOSTS = ['unpkg.com', 'cdnjs.cloudflare.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];

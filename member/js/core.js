@@ -30,9 +30,9 @@ function markPinRequired(userId) { try { localStorage.setItem(MEMBER_PIN_REQUIRE
 function clearPinRequired() { try { localStorage.removeItem(MEMBER_PIN_REQUIRED_KEY); } catch (e) { /* nothing to clear */ } }
 function pinRequiredFor(userId) { try { return localStorage.getItem(MEMBER_PIN_REQUIRED_KEY) === userId; } catch (e) { return false; } }
 const MEMBER_SELECT = '*, tiers(name, rank)';
-const TAB_TITLES = { card: 'LVBC', activity: 'Activity', badges: 'My Badges', membership: 'Membership', rewards: 'Rewards', leaderboard: 'Leaderboard', tap: 'On Tap', events: 'Events', profile: 'My Profile' };
+const TAB_TITLES = { card: 'LVBC', activity: 'Activity', badges: 'My Badges', membership: 'Membership', store: 'Store & Tickets', rewards: 'Rewards', leaderboard: 'Leaderboard', tap: 'On Tap', events: 'Events', profile: 'My Profile' };
 const TAB_LOADERS = {
-  card: () => renderCard(), activity: () => loadActivity(), badges: () => loadBadgesPage(), membership: () => loadMembership(), rewards: () => renderRewards(),
+  card: () => renderCard(), activity: () => loadActivity(), badges: () => loadBadgesPage(), membership: () => loadMembership(), store: () => loadStore(), rewards: () => renderRewards(),
   leaderboard: () => loadLeaderboard(), tap: () => loadTapList(), events: () => loadEvents(), profile: () => populateProfile(),
 };
 

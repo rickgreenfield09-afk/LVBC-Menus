@@ -112,6 +112,29 @@ export default async function handler(req, res) {
   }
 
   const obj = (event.data && event.data.object) || {};
+
+  // A paid store checkout (event ticket / merch pre-order, api/store-checkout.js).
+  if (event.type === 'checkout.session.completed' && obj.mode === 'payment') {
+    const orderId = obj.metadata && obj.metadata.order_id;
+    if (!orderId || obj.payment_status !== 'paid') return res.status(200).json({ ok: true, skipped: 'not a paid store order' });
+    try {
+      const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/store_complete_order', {
+        method: 'POST',
+        headers: serviceHeaders(),
+        body: JSON.stringify({
+          p_order: orderId,
+          p_payment_intent: typeof obj.payment_intent === 'string' ? obj.payment_intent : null,
+          p_tax_cents: obj.total_details ? obj.total_details.amount_tax : 0,
+          p_total_cents: obj.amount_total,
+        }),
+      });
+      if (!r.ok) throw new Error('Could not save order: ' + (await r.text()));
+      return res.status(200).json({ ok: true });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   let subscriptionId = null;
   if (event.type === 'checkout.session.completed') subscriptionId = obj.mode === 'subscription' ? obj.subscription : null;
   else if (event.type.startsWith('customer.subscription.')) subscriptionId = obj.id;

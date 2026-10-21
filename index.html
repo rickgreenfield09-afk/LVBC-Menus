@@ -84,7 +84,7 @@
       <button class="nav-btn" onclick="showScreen('schedule', this); loadSchedule()">Schedule</button>
       <button class="nav-btn" onclick="showScreen('inventory', this); loadInventory()">Inventory</button>
       <button class="nav-btn" onclick="showScreen('members', this); loadMembers()">Members</button>
-      <button class="nav-btn" onclick="showScreen('payments', this)">Payments</button>
+      <button class="nav-btn" onclick="showScreen('payments', this); loadPayments()">Payments</button>
       <button class="nav-btn" id="nav-btn-marketing" style="display:none;" onclick="showScreen('marketing', this); loadMarketing()">Marketing <span class="badge badge-teal" id="bingo-nav-ready" style="display:none;margin-left:4px;"></span></button>
       <button class="nav-btn" id="nav-btn-admin" style="display:none;" onclick="showScreen('admin', this); loadAdmin()">Admin</button>
       <!-- Reports tab added when its .js file lands -->
@@ -1029,9 +1029,15 @@
         <div class="card"><div class="card-title">Dashboard</div><div class="card-sub">Coming soon.</div></div>
       </div>
 
-      <!-- PAYMENTS SCREEN (placeholder) -->
+      <!-- PAYMENTS SCREEN (js/payments.js) -->
       <div class="screen" id="screen-payments">
-        <div class="card"><div class="card-title">Payments</div><div class="card-sub">Coming soon.</div></div>
+        <div class="sub-tabs">
+          <button class="sub-tab active" id="pay-view-orders" onclick="setPaymentsView('orders')">Orders</button>
+          <button class="sub-tab" id="pay-view-items" onclick="setPaymentsView('items')">Items</button>
+          <button class="sub-tab" id="pay-view-plans" onclick="setPaymentsView('plans')">Memberships</button>
+          <button class="sub-tab" id="pay-view-settings" onclick="setPaymentsView('settings')">Settings</button>
+        </div>
+        <div id="pay-body"><div class="loading">Loading...</div></div>
       </div>
 
       <!-- MENU SCREEN -->
@@ -1333,6 +1339,7 @@
   <script src="js/assignments.js"></script>
   <script src="js/offsite.js"></script>
   <script src="js/members.js"></script>
+  <script src="js/payments.js"></script>
   <script src="js/bingo.js"></script>
   <script src="js/trivia.js"></script>
 </body>

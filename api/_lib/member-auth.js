@@ -8,6 +8,28 @@
 
 import { serviceHeaders } from './staff-auth.js';
 
+// Like requireMember, but for pages open to anyone: returns the member
+// when a valid member token came with the request, else null — without
+// sending a response either way. (An expired token just means "guest".)
+export async function optionalMember(req) {
+  const token = (req.headers.authorization || '').replace('Bearer ', '');
+  const { SUPABASE_URL, SUPABASE_ANON_KEY } = process.env;
+  if (!token || !SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+
+  const userRes = await fetch(SUPABASE_URL + '/auth/v1/user', {
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + token },
+  });
+  const user = await userRes.json();
+  if (!userRes.ok || !user || !user.id) return null;
+
+  const memRes = await fetch(
+    SUPABASE_URL + '/rest/v1/members?select=id,name,email,stripe_customer_id&auth_user_id=eq.' + user.id,
+    { headers: serviceHeaders() }
+  );
+  const rows = await memRes.json();
+  return memRes.ok && rows.length ? rows[0] : null;
+}
+
 // Confirms the caller is a signed-in member using their own token and
 // returns their members row (read with the service role, so the
 // stripe_customer_id column is included). Sends the error response and
