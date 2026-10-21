@@ -17,6 +17,7 @@ const SHELL = [
   '/member/js/activity.js',
   '/member/js/menus.js',
   '/member/js/profile.js',
+  '/member/js/membership.js',
   '/config.js',
 ];
 const CDN_HOSTS = ['unpkg.com', 'cdnjs.cloudflare.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
@@ -34,6 +35,7 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   const sameOrigin = url.origin === self.location.origin;
+  // js.stripe.com isn't in CDN_HOSTS on purpose: payment code is never cached.
   if (sameOrigin ? url.pathname.startsWith('/api/') : !CDN_HOSTS.includes(url.hostname)) return;
 
   event.respondWith(
