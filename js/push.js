@@ -74,6 +74,20 @@ function pushAlert(msg, isError) {
   el.style.color = isError ? 'var(--red)' : 'var(--teal)';
 }
 
+// Sends right away through api/send-push.js. Returns { sent, failed } or
+// { error } — never throws. Also used by bingo.js when a game is printed.
+async function sendPushNow({ title, body, url = '', audience }) {
+  const headers = await pushAuthHeaders();
+  if (!headers) return { error: 'Your session expired — please sign in again.' };
+  try {
+    const res = await fetch('/api/send-push', { method: 'POST', headers, body: JSON.stringify({ title, body, url, audience }) });
+    const data = await res.json();
+    return res.ok ? data : { error: data.error || 'Could not send.' };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
 async function sendPush() {
   const title = document.getElementById('push-title').value.trim();
   const body = document.getElementById('push-body').value.trim();

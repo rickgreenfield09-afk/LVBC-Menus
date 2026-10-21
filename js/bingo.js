@@ -1086,6 +1086,7 @@ async function printBingoGame() {
   if (!confirm('Print ' + sheets + ' sheets for ' + bingoFmtDate(eventDate) + '?\n\n'
     + pls.map((p, i) => 'Round ' + (i + 1) + ': ' + p.title).join('\n')
     + '\n\nThese 3 playlists will be marked as used today and return to rotation on ' + readyAgain + '.'
+    + '\n\nA push notification announcing the 3 categories will also go out to members and staff right now.'
     + (overrides.length ? '\n\n⚠ Admin override: ' + overrides.map((p) => p.title).join(', ') + ' is still inside its 90 days.' : ''))) return;
 
   const btn = document.getElementById('bingo-print-btn');
@@ -1105,15 +1106,37 @@ async function printBingoGame() {
     document.getElementById('bingo-game-output').innerHTML = '<div style="font-weight:500;margin-bottom:4px;">Game for ' + escHtml(bingoFmtDate(eventDate)) + ' is ready.</div>'
       + '<div style="font-size:12px;color:var(--sub);margin-bottom:14px;">' + sheets + ' sheets · ' + pls.map((p) => escHtml(p.title)).join(' · ') + '</div>'
       + bingoOutputButtons(gameId)
-      + '<div id="bingo-email-status" style="font-size:12px;margin-top:12px;"></div>';
+      + '<div id="bingo-email-status" style="font-size:12px;margin-top:12px;"></div>'
+      + '<div id="bingo-push-status" style="font-size:12px;margin-top:6px;"></div>';
     await bingoLoadPlaylists();
     document.getElementById('bingo-game-rounds').innerHTML = '';
     renderBingoRounds();
     // Runs in the background; its status shows under the buttons.
     emailBingoGameMaterials(gameId, 'bingo-email-status');
+    announceBingoByPush(eventDate, pls, 'bingo-push-status');
   } finally {
     btn.disabled = false; btn.textContent = 'Print Game';
   }
+}
+
+// Push to members and staff announcing the night's three categories (the
+// round playlists), sent when a game is printed (api/send-push.js). Says
+// "tonight" only when the game is today. A failure here never undoes the
+// print — it just shows under the buttons.
+async function announceBingoByPush(eventDate, pls, statusElId) {
+  const status = (msg, isError) => {
+    const el = document.getElementById(statusElId);
+    if (el) { el.textContent = msg; el.style.color = isError ? 'var(--red)' : 'var(--teal)'; }
+  };
+  const when = eventDate === bingoToday() ? 'tonight' : 'on ' + bingoFmtDate(eventDate);
+  const verb = eventDate === bingoToday() ? "Tonight's" : "That night's";
+  const result = await sendPushNow({
+    title: 'Music bingo is ' + when + ' at 6:00 pm!',
+    body: verb + ' categories are:\n' + pls.map((p) => p.title.slice(0, 50)).join('\n'),
+    audience: 'both',
+  });
+  if (result.error) status('Push notification not sent: ' + result.error, true);
+  else status('Push notification sent to ' + result.sent + ' device(s).');
 }
 
 // Emails PDFs of the card sheets, slideshow and call sheet to everyone

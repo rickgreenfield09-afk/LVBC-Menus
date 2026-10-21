@@ -1,6 +1,6 @@
 {
-  "name": "LVBC Staff",
-  "short_name": "LVBC Staff",
+  "name": "Lago Vista Brewing Co",
+  "short_name": "Lago Vista Brewing Co",
   "description": "Schedule, open shifts and inventory counts for LVBC staff.",
   "id": "/mobile/",
   "start_url": "/mobile/",
