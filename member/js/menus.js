@@ -89,7 +89,18 @@ function coffeeListHtml() {
 }
 
 // ── EVENTS ───────────────────────────────────────────────
-function eventCardHtml(e) {
+// items: store items tied to events (store_catalog), so an event with
+// something to buy gets a button straight to it.
+function eventCardHtml(e, items) {
+  const linked = (items || []).filter((it) => e.event_id && it.event_id === e.event_id);
+  const buy = linked.map((it) => {
+    const soldOut = it.quantity_limit && it.sold >= it.quantity_limit;
+    return '<div class="event-store"' + (soldOut ? '' : ' onclick="openStoreItem(\'' + it.id + '\')"') + '>'
+      + (it.image_urls && it.image_urls[0] ? '<img src="' + escHtml(it.image_urls[0]) + '" alt="">' : '')
+      + '<div class="event-store-name">' + escHtml(it.name) + '<div class="event-meta">' + money(it.price_cents / 100) + (it.kind === 'event' ? ' per ticket' : '') + '</div></div>'
+      + '<div class="event-store-go">' + (soldOut ? 'Sold out' : (it.kind === 'event' ? 'Get tickets' : 'Pre-order') + ' &rarr;') + '</div></div>';
+  }).join('');
+
   const d = new Date(e.event_date + 'T12:00:00');
   const type = EVENT_TYPE_LABELS[e.event_type] || '';
   const meta = [d.toLocaleDateString('en-US', { weekday: 'long' }), fmtTime(e.start_time) + (e.end_time ? ' – ' + fmtTime(e.end_time) : '')].filter(Boolean).join(' · ');
@@ -99,11 +110,16 @@ function eventCardHtml(e) {
     + '<div class="event-meta">' + escHtml(meta) + '</div>'
     + (type && type !== e.name ? '<div class="event-meta">' + escHtml(type) + '</div>' : '')
     + (e.points ? '<div class="event-pts">+' + e.points + ' pts for attending</div>' : '')
-    + (e.is_beer_release ? '<span class="event-release-badge">Beer Release</span>' : '') + '</div></div>';
+    + (e.is_beer_release ? '<span class="event-release-badge">Beer Release</span>' : '') + buy + '</div></div>';
 }
 
 async function loadEvents() {
-  const { data, error } = await window.supabase.rpc('member_upcoming_events', { p_days: 60 });
+  // the store is optional here: if it can't load, events still show
+  const [{ data, error }, store] = await Promise.all([
+    window.supabase.rpc('member_upcoming_events', { p_days: 60 }),
+    window.supabase.rpc('store_catalog'),
+  ]);
+  const items = (store.data || []).filter((it) => it.event_id);
   const soonEl = document.getElementById('events-soon-list');
   const laterEl = document.getElementById('events-later-list');
   if (error) { soonEl.innerHTML = '<div class="empty">Could not load events</div>'; laterEl.innerHTML = ''; return; }
@@ -114,6 +130,6 @@ async function loadEvents() {
   const soon = data.filter((e) => e.event_date <= cut);
   // further out, the weekly regulars would just repeat — show the one-offs
   const later = data.filter((e) => e.event_date > cut && !e.recurring);
-  soonEl.innerHTML = soon.length ? soon.map(eventCardHtml).join('') : '<div class="empty">Nothing scheduled in the next two weeks</div>';
-  laterEl.innerHTML = later.length ? later.map(eventCardHtml).join('') : '<div class="empty">No special events scheduled yet</div>';
+  soonEl.innerHTML = soon.length ? soon.map((e) => eventCardHtml(e, items)).join('') : '<div class="empty">Nothing scheduled in the next two weeks</div>';
+  laterEl.innerHTML = later.length ? later.map((e) => eventCardHtml(e, items)).join('') : '<div class="empty">No special events scheduled yet</div>';
 }

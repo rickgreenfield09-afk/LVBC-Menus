@@ -516,3 +516,7 @@
   .bingo-radio{width:14px;height:14px;border-radius:50%;border:2px solid var(--muted);flex-shrink:0;display:inline-block;vertical-align:middle;}
   .bingo-radio.on{border-color:var(--teal);background:radial-gradient(var(--teal) 45%,transparent 50%);}
   .bingo-paste-skip{display:flex;align-items:center;gap:10px;padding:6px 4px;font-size:12px;color:var(--sub);cursor:pointer;}
+
+  /* no up/down steppers on number inputs */
+  input[type=number]{-moz-appearance:textfield;appearance:textfield;}
+  input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}

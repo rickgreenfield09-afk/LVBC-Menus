@@ -18,6 +18,7 @@
 
 let storeCheckout = null;
 let storeDiscountPct = 0;   // the member's tier discount on merch
+let storeFocusItem = null;  // an item to scroll to once the page has drawn (set by the Events page)
 
 function storeEl() { return document.getElementById('store-content'); }
 
@@ -43,6 +44,17 @@ async function loadStore() {
   const tickets = renderStoreTickets(orders.data);
   storeEl().innerHTML = tickets + renderStoreItems(catalog.data, !tickets);
   orders.data.forEach(drawTicketQr);
+  if (storeFocusItem) {
+    const el = document.getElementById('store-item-' + storeFocusItem);
+    storeFocusItem = null;
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+// Called from the Events page: open the store at one item.
+function openStoreItem(itemId) {
+  storeFocusItem = itemId;
+  showTab('store');
 }
 
 // ── MY TICKETS ───────────────────────────────────────────
@@ -92,7 +104,8 @@ function renderStoreItems(items, first) {
     const pct = memberDiscountPct(i);
     const price = pct ? Math.round(i.price_cents * (100 - pct) / 100) : i.price_cents;
     const options = Array.from({ length: maxQty }, (_, n) => '<option value="' + (n + 1) + '">' + (n + 1) + '</option>').join('');
-    return '<div class="plan-card">'
+    return '<div class="plan-card" id="store-item-' + i.id + '">'
+      + (i.image_urls && i.image_urls.length ? '<div class="item-imgs">' + i.image_urls.map((u) => '<img src="' + escHtml(u) + '" alt="">').join('') + '</div>' : '')
       + '<div class="plan-name">' + escHtml(i.name) + '</div>'
       + '<div class="plan-price">' + money(price / 100)
       + (pct ? '<small> member price (<s>' + money(i.price_cents / 100) + '</s>)</small>' : '<small> each' + (i.taxable ? ' + tax' : '') + '</small>') + '</div>'

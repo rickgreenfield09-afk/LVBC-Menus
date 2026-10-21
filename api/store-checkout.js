@@ -76,6 +76,11 @@ export default async function handler(req, res) {
   if (!reserveRes.ok) return res.status(409).json({ error: reserved.message || 'Could not start checkout.' });
 
   try {
+    // The item's pictures show on Stripe's checkout page and receipts.
+    const imgRes = await fetch(SUPABASE_URL + '/rest/v1/store_items?select=image_urls&id=eq.' + encodeURIComponent(body.item_id), { headers });
+    const imgRows = await imgRes.json();
+    const images = imgRes.ok && imgRows.length ? (imgRows[0].image_urls || []).filter((u) => /^https:\/\//.test(u)) : [];
+
     const lineItem = {
       quantity,
       price_data: {
@@ -84,6 +89,7 @@ export default async function handler(req, res) {
         product_data: {
           name: reserved.name + (reserved.discount_pct ? ' (member price)' : ''),
           ...(reserved.description ? { description: reserved.description } : {}),
+          ...(images.length ? { images } : {}),
         },
       },
     };

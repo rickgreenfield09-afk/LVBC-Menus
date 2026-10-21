@@ -31,6 +31,8 @@ let payOrders = [];
 let payFilterItem = '';
 let payFilterText = '';
 let payEditItem = null;   // the item open in the form, or null for a new one
+let payEvents = [];       // events an item can be tied to
+let payImgs = [null, null]; // the form's two picture slots: { url } already saved, or { file, preview } just chosen
 let payTicket = null;     // the order a scan just found
 let payScanner = null;
 
@@ -239,24 +241,76 @@ function payCloseScanner() {
 
 // ── ITEMS ────────────────────────────────────────────────
 async function payRenderItems() {
-  const { data } = await window.supabase.from('store_orders').select('item_id, quantity').eq('status', 'paid');
+  const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
+  const [{ data }, evts] = await Promise.all([
+    window.supabase.from('store_orders').select('item_id, quantity').eq('status', 'paid'),
+    window.supabase.from('events').select('id, event_name, event_date').gte('event_date', weekAgo).order('event_date'),
+  ]);
   if (payView !== 'items') return;
+  payEvents = evts.data || [];
   const sold = {};
   (data || []).forEach((o) => { sold[o.item_id] = (sold[o.item_id] || 0) + o.quantity; });
 
   const list = payItems.length ? '<div class="table-wrap">' + payItems.map((i) =>
-    '<div class="reward-admin-row"' + (i.is_active ? '' : ' style="opacity:0.5;"') + '><div style="min-width:0;">'
-    + '<div style="font-weight:500;font-size:13px;">' + escHtml(i.name) + ' <span class="badge ' + (i.kind === 'event' ? 'badge-purple' : 'badge-amber') + '">' + (i.kind === 'event' ? 'Event' : 'Merch') + '</span>'
+    '<div class="reward-admin-row"' + (i.is_active ? '' : ' style="opacity:0.5;"') + '><div style="display:flex;align-items:center;gap:12px;min-width:0;">'
+    + (i.image_urls && i.image_urls[0] ? '<img src="' + escHtml(i.image_urls[0]) + '" alt="" style="width:44px;height:44px;border-radius:6px;object-fit:cover;flex-shrink:0;">' : '')
+    + '<div style="min-width:0;"><div style="font-weight:500;font-size:13px;">' + escHtml(i.name) + ' <span class="badge ' + (i.kind === 'event' ? 'badge-purple' : 'badge-amber') + '">' + (i.kind === 'event' ? 'Event' : 'Merch') + '</span>'
     + (i.taxable ? ' <span class="badge badge-muted">+ tax</span>' : '') + '</div>'
     + '<div style="font-size:11px;color:var(--muted);font-family:\'DM Mono\',monospace;margin-top:2px;">' + payMoney(i.price_cents)
     + ' · sold ' + (sold[i.id] || 0) + (i.quantity_limit ? ' / ' + i.quantity_limit : '')
-    + (i.event_at ? ' · ' + payDate(i.event_at) : '') + '</div></div>'
+    + (i.event_at ? ' · ' + payDate(i.event_at) : '')
+    + (i.event_id ? ' · tied to ' + escHtml((payEvents.find((e) => e.id === i.event_id) || {}).event_name || 'an event') : '') + '</div></div></div>'
     + '<div style="display:flex;gap:8px;">'
     + (payIsAdmin() ? '<button class="btn btn-sm btn-secondary" onclick="payToggleItem(\'' + i.id + '\')">' + (i.is_active ? 'Hide' : 'Show') + '</button>'
       + '<button class="btn btn-sm btn-secondary" onclick="payEditItemOpen(\'' + i.id + '\')">Edit</button>' : '')
     + '</div></div>').join('') + '</div>' : '<div class="loading">No items yet</div>';
 
   payBody(list + (payIsAdmin() ? payItemForm() : '<div class="card-sub" style="margin-top:12px;">Only admins can add or change items.</div>'));
+  if (payIsAdmin()) payDrawImgs();
+}
+
+// ── ITEM PICTURES ────────────────────────────────────────
+function payResetImgs(item) {
+  payImgs = [0, 1].map((n) => (item && item.image_urls && item.image_urls[n] ? { url: item.image_urls[n] } : null));
+}
+
+function payDrawImgs() {
+  const el = document.getElementById('pay-i-imgs');
+  if (!el) return;
+  el.innerHTML = payImgs.map((img, n) => img
+    ? '<div style="display:inline-block;margin-right:12px;text-align:center;"><img src="' + escHtml(img.preview || img.url) + '" alt="" style="width:96px;height:96px;border-radius:8px;object-fit:cover;display:block;">'
+      + '<button class="btn btn-sm btn-secondary" style="margin-top:6px;" onclick="payRemoveImg(' + n + ')">Remove</button></div>'
+    : '<label class="btn btn-sm btn-secondary" style="display:inline-block;margin-right:12px;cursor:pointer;">Add picture<input type="file" accept="image/*" style="display:none;" onchange="payPickImg(' + n + ', this)"></label>').join('');
+}
+
+function payPickImg(n, input) {
+  const file = input.files[0];
+  if (!file) return;
+  payImgs[n] = { file, preview: URL.createObjectURL(file) };
+  payDrawImgs();
+}
+
+function payRemoveImg(n) {
+  payImgs[n] = null;
+  payDrawImgs();
+}
+
+// Uploads the newly chosen pictures to assets/store/<item id>/ and
+// returns the public URLs of every picture the item should keep.
+// (invResizePhoto is in locations.js.)
+async function payUploadImgs(itemId) {
+  const urls = [];
+  for (let n = 0; n < payImgs.length; n++) {
+    const img = payImgs[n];
+    if (!img) continue;
+    if (img.url) { urls.push(img.url); continue; }
+    const blob = await invResizePhoto(img.file);
+    const path = 'store/' + itemId + '/' + Date.now() + '-' + n + '.jpg';
+    const { error } = await window.supabase.storage.from('assets').upload(path, blob, { contentType: 'image/jpeg' });
+    if (error) throw new Error('Picture upload failed: ' + error.message);
+    urls.push(window.supabase.storage.from('assets').getPublicUrl(path).data.publicUrl);
+  }
+  return urls;
 }
 
 function payItemForm() {
@@ -267,19 +321,30 @@ function payItemForm() {
     + payField('Price ($ each)', '<input class="admin-input" type="number" step="0.01" min="0.5" id="pay-i-price" value="' + (i.price_cents === '' ? '' : (i.price_cents / 100).toFixed(2)) + '">')
     + payField('Quantity Available', '<input class="admin-input" type="number" min="1" id="pay-i-limit" value="' + (i.quantity_limit || '') + '" placeholder="unlimited">')
     + payField('Max Per Order', '<input class="admin-input" type="number" min="1" id="pay-i-max" value="' + i.max_per_order + '">')
+    + payField('Tied to Event', '<select class="admin-select" id="pay-i-event-id" onchange="payLinkEvent(this.value)"><option value="">None</option>'
+      + payEvents.map((e) => '<option value="' + e.id + '"' + (e.id === i.event_id ? ' selected' : '') + '>' + escHtml(e.event_name) + ' — ' + payDate(e.event_date) + '</option>').join('') + '</select>')
     + payField('Event Date / Time', '<input class="admin-input" type="datetime-local" id="pay-i-event" value="' + payLocalInput(i.event_at) + '">')
     + payField('Sales Close', '<input class="admin-input" type="datetime-local" id="pay-i-close" value="' + payLocalInput(i.sales_close_at) + '">')
+    + payField('Pictures (up to 2)', '<div id="pay-i-imgs"></div>', true)
     + payField('Description', '<textarea class="admin-input" id="pay-i-desc" rows="2">' + escHtml(i.description || '') + '</textarea>', true)
     + payField('Pickup / Arrival Notes', '<input class="admin-input" type="text" id="pay-i-pickup" value="' + escHtml(i.pickup_notes || '') + '" placeholder="e.g. Pick up at the bar during Maifest">', true)
     + '</div>'
     + '<div class="checkbox-row"><input type="checkbox" id="pay-i-tax"' + (i.taxable ? ' checked' : '') + '><label for="pay-i-tax">Charge sales tax (merch)</label></div>'
     + '<div class="checkbox-row"><input type="checkbox" id="pay-i-active"' + (i.is_active ? ' checked' : '') + '><label for="pay-i-active">On sale</label></div>'
     + '<div style="display:flex;gap:8px;"><button class="btn btn-primary" onclick="paySaveItem()">' + (payEditItem ? 'Save Changes' : 'Add Item') + '</button>'
-    + (payEditItem ? '<button class="btn btn-secondary" onclick="payEditItem = null; payRenderItems()">Cancel</button>' : '') + '</div></div>';
+    + (payEditItem ? '<button class="btn btn-secondary" onclick="payEditItem = null; payResetImgs(null); payRenderItems()">Cancel</button>' : '') + '</div></div>';
+}
+
+// Picking an event fills in the date if the item doesn't have one yet.
+function payLinkEvent(eventId) {
+  const evt = payEvents.find((e) => e.id === eventId);
+  const dateEl = document.getElementById('pay-i-event');
+  if (evt && !dateEl.value) dateEl.value = payLocalInput(evt.event_date);
 }
 
 function payEditItemOpen(id) {
   payEditItem = payItems.find((i) => i.id === id) || null;
+  payResetImgs(payEditItem);
   payRenderItems();
   document.getElementById('pay-body').scrollTop = 1e6;
   window.scrollTo(0, document.body.scrollHeight);
@@ -301,12 +366,17 @@ async function paySaveItem() {
     sales_close_at: v('pay-i-close') ? new Date(v('pay-i-close')).toISOString() : null,
     pickup_notes: v('pay-i-pickup').trim() || null,
     is_active: document.getElementById('pay-i-active').checked,
+    event_id: v('pay-i-event-id') || null,
   };
-  const q = payEditItem ? window.supabase.from('store_items').update(row).eq('id', payEditItem.id) : window.supabase.from('store_items').insert(row);
+  // a new item gets its id up front so its pictures can be filed under it
+  const itemId = payEditItem ? payEditItem.id : crypto.randomUUID();
+  try { row.image_urls = await payUploadImgs(itemId); } catch (e) { toast(e.message, true); return; }
+  const q = payEditItem ? window.supabase.from('store_items').update(row).eq('id', itemId) : window.supabase.from('store_items').insert({ ...row, id: itemId });
   const { error } = await q;
   if (error) { toast(error.message, true); return; }
   toast(payEditItem ? 'Item saved' : 'Item added');
   payEditItem = null;
+  payResetImgs(null);
   loadPayments();
 }
 

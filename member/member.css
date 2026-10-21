@@ -371,3 +371,15 @@
   .checkout-mount { margin-top: 14px; border-radius: 14px; overflow: hidden; background: #fff; }
   .ticket-qr { margin-top: 14px; }
   .ticket-qr .qr-container { margin: 0 auto; }
+
+  /* no up/down steppers on number inputs */
+  input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+  input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+  /* STORE PICTURES + EVENT BUY BUTTON */
+  .item-imgs { display: flex; gap: 8px; margin-bottom: 14px; }
+  .item-imgs img { flex: 1 1 0; min-width: 0; max-height: 220px; object-fit: cover; border-radius: 10px; }
+  .event-store { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 8px 10px; background: var(--bg-raised); border: 1px solid var(--border); border-radius: 10px; cursor: pointer; }
+  .event-store img { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
+  .event-store-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; }
+  .event-store-go { color: var(--accent-teal); font-size: 12px; font-weight: 700; white-space: nowrap; }
