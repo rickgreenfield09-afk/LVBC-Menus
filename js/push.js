@@ -18,6 +18,7 @@ async function pushAuthHeaders() {
 }
 
 function loadPush() {
+  document.getElementById('push-preview-icon').src = window.LVBC_CONFIG.SUPABASE_URL + '/storage/v1/object/public/assets/lvbc-logo.png';
   loadPushStatus();
   loadPushHistory();
   updatePushPreview();

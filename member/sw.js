@@ -58,10 +58,9 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('push', (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch (e) { /* not JSON */ }
-  event.waitUntil(self.registration.showNotification(data.title || 'Las Vegas Brewing Co.', {
+  event.waitUntil(self.registration.showNotification(data.title || 'Lago Vista Brewing Company', {
     body: data.body || '',
-    icon: '/mobile/icons/icon-192.png',
-    badge: '/mobile/icons/icon-192.png',
+    icon: 'https://opatyodqtfrytgosqxom.supabase.co/storage/v1/object/public/assets/lvbc-logo.png',
     data: { url: data.url || '/member/' },
   }));
 });
