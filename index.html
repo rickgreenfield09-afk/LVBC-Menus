@@ -79,15 +79,15 @@
     </header>
 
     <nav>
+      <button class="nav-btn" onclick="showScreen('dashboard', this)">Dashboard</button>
       <button class="nav-btn active" onclick="showScreen('menu', this); loadMenu()">Menus</button>
       <button class="nav-btn" onclick="showScreen('schedule', this); loadSchedule()">Schedule</button>
       <button class="nav-btn" onclick="showScreen('inventory', this); loadInventory()">Inventory</button>
       <button class="nav-btn" onclick="showScreen('members', this); loadMembers()">Members</button>
-      <button class="nav-btn" id="nav-btn-assignments" style="display:none;" onclick="showScreen('assignments', this); loadAssignments()">Assignments</button>
-      <button class="nav-btn" onclick="showScreen('games', this); loadGames()">Games <span class="badge badge-teal" id="bingo-nav-ready" style="display:none;margin-left:4px;"></span></button>
-      <button class="nav-btn" id="nav-btn-marketing" style="display:none;" onclick="showScreen('marketing', this); loadMarketing()">Marketing</button>
+      <button class="nav-btn" onclick="showScreen('payments', this)">Payments</button>
+      <button class="nav-btn" id="nav-btn-marketing" style="display:none;" onclick="showScreen('marketing', this); loadMarketing()">Marketing <span class="badge badge-teal" id="bingo-nav-ready" style="display:none;margin-left:4px;"></span></button>
       <button class="nav-btn" id="nav-btn-admin" style="display:none;" onclick="showScreen('admin', this); loadAdmin()">Admin</button>
-      <!-- Dashboard, Reports tabs added as their .js files land -->
+      <!-- Reports tab added when its .js file lands -->
     </nav>
 
     <!-- PROFILE MODAL -->
@@ -482,8 +482,13 @@
         </div>
       </div>
 
-      <!-- ADMIN SCREEN -->
+      <!-- ADMIN SCREEN: Staff + Assignments sub-pages -->
       <div class="screen" id="screen-admin">
+        <div class="sub-tabs">
+          <button class="sub-tab active" id="admintab-btn-staff" onclick="setAdminTab('staff', this)">Staff</button>
+          <button class="sub-tab" id="admintab-btn-assignments" onclick="setAdminTab('assignments', this)">Assignments</button>
+        </div>
+        <div class="sub-sec active" id="admintab-staff">
         <div class="grid-2">
           <div class="grid2-col">
             <div class="menu-col-header">
@@ -539,10 +544,9 @@
             <div id="staff-list"><div class="loading">Loading...</div></div>
           </div>
         </div>
-      </div>
-
-      <!-- ASSIGNMENTS SCREEN (js/assignments.js; the Events page is js/offsite.js) -->
-      <div class="screen" id="screen-assignments">
+        </div>
+        <!-- ASSIGNMENTS (js/assignments.js; the Events page is js/offsite.js) -->
+        <div class="sub-sec" id="admintab-assignments">
         <div class="sub-tabs">
           <button class="sub-tab active" id="asg-view-dashboard" onclick="setAssignmentsView('dashboard')">Dashboard</button>
           <button class="sub-tab" id="asg-view-inventory" onclick="setAssignmentsView('inventory')">Inventory</button>
@@ -551,7 +555,9 @@
           <button class="sub-tab" id="asg-view-events" onclick="setAssignmentsView('events')">Events</button>
         </div>
         <div id="asg-body"><div class="loading">Loading...</div></div>
+        </div>
       </div>
+
 
       <!-- MEMBERS SCREEN (js/members.js) -->
       <div class="screen" id="screen-members">
@@ -648,8 +654,194 @@
         </div>
       </div>
 
-      <!-- GAMES SCREEN: Bingo (its own sub-tabs, below) + Trivia -->
-      <div class="screen" id="screen-games">
+
+      <!-- MARKETING SCREEN -->
+      <div class="screen" id="screen-marketing">
+        <div class="sub-tabs">
+          <button class="sub-tab active" id="marketingtab-btn-dashboard" onclick="setMarketingTab('dashboard', this)">Dashboard</button>
+          <button class="sub-tab" id="marketingtab-btn-campaigns" onclick="setMarketingTab('campaigns', this)">Campaigns</button>
+          <button class="sub-tab" id="marketingtab-btn-audience" onclick="setMarketingTab('audience', this)">Audience</button>
+          <button class="sub-tab" id="marketingtab-btn-games" onclick="setMarketingTab('games', this)">Games</button>
+          <button class="sub-tab" id="marketingtab-btn-settings" onclick="setMarketingTab('settings', this)">Settings</button>
+        </div>
+
+        <!-- DASHBOARD -->
+        <div class="sub-sec active" id="marketingtab-dashboard">
+          <div class="section-label" style="margin-top:0;">Overview</div>
+          <div class="grid-2" style="grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;">
+            <div class="card">
+              <div class="card-title">Subscribers</div>
+              <div class="card-value" id="mkt-kpi-subscribers">&ndash;</div>
+              <div class="card-sub" id="mkt-kpi-subscribers-sub"></div>
+            </div>
+            <div class="card">
+              <div class="card-title">Campaigns Sent</div>
+              <div class="card-value" id="mkt-kpi-sent">&ndash;</div>
+            </div>
+            <div class="card">
+              <div class="card-title">Avg Open Rate</div>
+              <div class="card-value teal" id="mkt-kpi-open">&ndash;</div>
+            </div>
+            <div class="card">
+              <div class="card-title">Avg Click Rate</div>
+              <div class="card-value teal" id="mkt-kpi-click">&ndash;</div>
+            </div>
+          </div>
+
+          <div class="section-label">Subscribers by Topic</div>
+          <div class="grid-2" style="grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;" id="mkt-topic-breakdown"><div class="loading">Loading...</div></div>
+
+          <div class="section-label">Recent Campaigns</div>
+          <div id="mkt-recent-campaigns"><div class="loading">Loading...</div></div>
+        </div>
+
+        <!-- CAMPAIGNS -->
+        <div class="sub-sec" id="marketingtab-campaigns">
+          <div class="grid-2">
+            <div class="grid2-col">
+              <div class="menu-col-header">
+                <div class="section-label" style="margin:0;" id="mkt-composer-label">New Campaign</div>
+                <button class="btn btn-sm btn-secondary" id="mkt-composer-cancel" style="visibility:hidden;" onclick="cancelCampaignEdit()">&#10005; Cancel Edit</button>
+              </div>
+              <div class="card">
+                <div class="form-group" style="margin-bottom:16px;">
+                  <label class="form-label">Subject</label>
+                  <input class="form-input" style="width:100%;" type="text" id="mkt-camp-subject" placeholder="e.g. New Fall Release is Here">
+                </div>
+                <div class="form-group" style="margin-bottom:16px;">
+                  <label class="form-label">Audience</label>
+                  <select class="form-select" style="width:100%;" id="mkt-camp-topic">
+                    <option value="">All Subscribers</option>
+                  </select>
+                </div>
+                <div class="form-row" style="margin-bottom:16px;">
+                  <div class="form-group">
+                    <label class="form-label">Campaign Start</label>
+                    <input class="form-input" style="width:100%;" type="date" id="mkt-camp-starts">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Campaign End</label>
+                    <input class="form-input" style="width:100%;" type="date" id="mkt-camp-ends">
+                  </div>
+                </div>
+                <div class="form-group" style="margin-bottom:16px;">
+                  <label class="form-label">Message</label>
+                  <div id="mkt-camp-editor" style="background:#fff;border-radius:0 0 6px 6px;min-height:200px;color:#111;"></div>
+                </div>
+                <div id="mkt-composer-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
+                <div class="form-row" style="margin-bottom:8px;">
+                  <button class="btn btn-secondary" onclick="saveCampaignDraft()">Save Draft</button>
+                  <button class="btn btn-secondary" onclick="sendCampaignTest()">Send Test to Me</button>
+                </div>
+                <button class="btn btn-primary" style="width:100%;margin-bottom:16px;" onclick="sendCampaignNow()">Send to Audience Now</button>
+                <div class="form-row" style="align-items:end;margin-bottom:0;">
+                  <div class="form-group">
+                    <label class="form-label">Schedule For</label>
+                    <input class="form-input" style="width:100%;" type="datetime-local" id="mkt-camp-schedule-at">
+                  </div>
+                  <button class="btn btn-secondary" onclick="scheduleCampaignSend()">Schedule Send</button>
+                </div>
+              </div>
+            </div>
+            <div class="grid2-col">
+              <div class="menu-col-header">
+                <div class="section-label" style="margin:0;">Campaigns</div>
+              </div>
+              <div id="mkt-campaigns-list"><div class="loading">Loading...</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AUDIENCE -->
+        <div class="sub-sec" id="marketingtab-audience">
+          <div class="grid-2">
+            <div class="grid2-col">
+              <div class="menu-col-header">
+                <div class="section-label" style="margin:0;">Topics</div>
+              </div>
+              <div class="card" style="margin-bottom:16px;">
+                <div class="form-row" style="grid-template-columns:2fr 1fr;margin-bottom:0;">
+                  <div class="form-group">
+                    <label class="form-label">New Topic Name</label>
+                    <input class="form-input" style="width:100%;" type="text" id="mkt-new-topic-name" placeholder="e.g. Beer Club">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">&nbsp;</label>
+                    <button class="btn btn-primary" style="width:100%;" onclick="addMarketingTopic()">Add Topic</button>
+                  </div>
+                </div>
+              </div>
+              <div id="mkt-topics-list"><div class="loading">Loading...</div></div>
+            </div>
+            <div class="grid2-col">
+              <div class="menu-col-header">
+                <div class="section-label" style="margin:0;">Subscribers</div>
+              </div>
+              <div class="card" style="margin-bottom:16px;">
+                <div class="form-group" style="margin-bottom:12px;">
+                  <label class="form-label">Add Subscribers</label>
+                  <textarea class="form-input" style="width:100%;min-height:80px;" id="mkt-sub-emails" placeholder="One per line: jane@example.com or jane@example.com, Jane Doe"></textarea>
+                </div>
+                <div class="form-group" style="margin-bottom:12px;">
+                  <label class="form-label">Also Subscribe To (optional)</label>
+                  <div class="badge-picker" id="mkt-sub-topic-picker"><span style="font-size:12px;color:var(--muted);">No topics yet</span></div>
+                </div>
+                <div id="mkt-sub-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
+                <button class="btn btn-primary" style="width:100%;" onclick="addSubscribersDirect()">Add Subscribers</button>
+              </div>
+              <div id="mkt-subscribers-list"><div class="loading">Loading...</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CAMPAIGN DETAIL MODAL -->
+        <div id="campaign-detail-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:500;align-items:center;justify-content:center;">
+          <div class="card" style="width:1100px;max-width:95vw;height:88vh;display:flex;flex-direction:column;">
+            <div class="menu-col-header" style="flex-shrink:0;">
+              <div class="section-label" style="margin:0;" id="campaign-detail-title">Campaign</div>
+              <button class="btn btn-sm btn-secondary" onclick="closeCampaignDetailModal()">&#10005; Close</button>
+            </div>
+            <div style="flex:1;overflow-y:auto;display:grid;grid-template-columns:320px 1fr;gap:20px;">
+              <div>
+                <div id="campaign-detail-info"><div class="loading">Loading...</div></div>
+                <button class="btn btn-secondary btn-sm" id="campaign-detail-cancel-schedule" style="display:none;width:100%;margin-bottom:20px;" onclick="cancelCampaignSchedule()">Cancel Schedule (back to draft)</button>
+                <div class="section-label" style="margin-top:0;">Delivery Stats</div>
+                <div id="campaign-detail-stats"></div>
+              </div>
+              <div>
+                <div class="section-label" style="margin-top:0;">Message Preview</div>
+                <iframe id="campaign-detail-preview" style="width:100%;height:calc(100% - 30px);border:1px solid var(--border);border-radius:6px;background:#fff;"></iframe>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TOPIC SUBSCRIBERS MODAL -->
+        <div id="topic-subscribers-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:500;align-items:center;justify-content:center;">
+          <div class="card" style="width:480px;max-width:90vw;max-height:80vh;overflow-y:auto;">
+            <div class="menu-col-header">
+              <div class="section-label" style="margin:0;" id="topic-modal-title">Topic</div>
+              <button class="btn btn-sm btn-secondary" onclick="closeTopicSubscribersModal()">&#10005; Close</button>
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+              <label class="form-label">Add Subscribers</label>
+              <textarea class="form-input" style="width:100%;min-height:90px;" id="topic-modal-emails" placeholder="One per line: jane@example.com or jane@example.com, Jane Doe"></textarea>
+            </div>
+            <div id="topic-modal-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
+            <button class="btn btn-primary" style="width:100%;margin-bottom:20px;" onclick="addSubscribersToTopic()">Add to This Audience</button>
+            <div class="section-label" style="margin-top:0;">Current Subscribers (<span id="topic-modal-count">0</span>)</div>
+            <div id="topic-modal-subscribers-list"><div class="loading">Loading...</div></div>
+          </div>
+        </div>
+
+        <!-- SETTINGS -->
+        <div class="sub-sec" id="marketingtab-settings">
+          <div class="section-label" style="margin-top:0;">Connection Status</div>
+          <div class="table-wrap" id="mkt-settings-status"><div class="loading">Loading...</div></div>
+        </div>
+        <!-- GAMES: Bingo (its own sub-tabs, below) + Trivia -->
+        <div class="sub-sec" id="marketingtab-games">
+      <div id="screen-games">
         <div class="sub-tabs">
           <button class="sub-tab active" id="gamestab-btn-bingo" onclick="setGamesTab('bingo', this)">Bingo</button>
           <button class="sub-tab" id="gamestab-btn-trivia" onclick="setGamesTab('trivia', this)">Trivia</button>
@@ -829,190 +1021,17 @@
       </div>
         </div><!-- /gamestab-bingo -->
       </div><!-- /screen-games -->
-
-      <!-- MARKETING SCREEN -->
-      <div class="screen" id="screen-marketing">
-        <div class="sub-tabs">
-          <button class="sub-tab active" id="marketingtab-btn-dashboard" onclick="setMarketingTab('dashboard', this)">Dashboard</button>
-          <button class="sub-tab" id="marketingtab-btn-campaigns" onclick="setMarketingTab('campaigns', this)">Campaigns</button>
-          <button class="sub-tab" id="marketingtab-btn-audience" onclick="setMarketingTab('audience', this)">Audience</button>
-          <button class="sub-tab" id="marketingtab-btn-settings" onclick="setMarketingTab('settings', this)">Settings</button>
         </div>
+      </div>
 
-        <!-- DASHBOARD -->
-        <div class="sub-sec active" id="marketingtab-dashboard">
-          <div class="section-label" style="margin-top:0;">Overview</div>
-          <div class="grid-2" style="grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;">
-            <div class="card">
-              <div class="card-title">Subscribers</div>
-              <div class="card-value" id="mkt-kpi-subscribers">&ndash;</div>
-              <div class="card-sub" id="mkt-kpi-subscribers-sub"></div>
-            </div>
-            <div class="card">
-              <div class="card-title">Campaigns Sent</div>
-              <div class="card-value" id="mkt-kpi-sent">&ndash;</div>
-            </div>
-            <div class="card">
-              <div class="card-title">Avg Open Rate</div>
-              <div class="card-value teal" id="mkt-kpi-open">&ndash;</div>
-            </div>
-            <div class="card">
-              <div class="card-title">Avg Click Rate</div>
-              <div class="card-value teal" id="mkt-kpi-click">&ndash;</div>
-            </div>
-          </div>
+      <!-- DASHBOARD SCREEN (placeholder) -->
+      <div class="screen" id="screen-dashboard">
+        <div class="card"><div class="card-title">Dashboard</div><div class="card-sub">Coming soon.</div></div>
+      </div>
 
-          <div class="section-label">Subscribers by Topic</div>
-          <div class="grid-2" style="grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;" id="mkt-topic-breakdown"><div class="loading">Loading...</div></div>
-
-          <div class="section-label">Recent Campaigns</div>
-          <div id="mkt-recent-campaigns"><div class="loading">Loading...</div></div>
-        </div>
-
-        <!-- CAMPAIGNS -->
-        <div class="sub-sec" id="marketingtab-campaigns">
-          <div class="grid-2">
-            <div class="grid2-col">
-              <div class="menu-col-header">
-                <div class="section-label" style="margin:0;" id="mkt-composer-label">New Campaign</div>
-                <button class="btn btn-sm btn-secondary" id="mkt-composer-cancel" style="visibility:hidden;" onclick="cancelCampaignEdit()">&#10005; Cancel Edit</button>
-              </div>
-              <div class="card">
-                <div class="form-group" style="margin-bottom:16px;">
-                  <label class="form-label">Subject</label>
-                  <input class="form-input" style="width:100%;" type="text" id="mkt-camp-subject" placeholder="e.g. New Fall Release is Here">
-                </div>
-                <div class="form-group" style="margin-bottom:16px;">
-                  <label class="form-label">Audience</label>
-                  <select class="form-select" style="width:100%;" id="mkt-camp-topic">
-                    <option value="">All Subscribers</option>
-                  </select>
-                </div>
-                <div class="form-row" style="margin-bottom:16px;">
-                  <div class="form-group">
-                    <label class="form-label">Campaign Start</label>
-                    <input class="form-input" style="width:100%;" type="date" id="mkt-camp-starts">
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label">Campaign End</label>
-                    <input class="form-input" style="width:100%;" type="date" id="mkt-camp-ends">
-                  </div>
-                </div>
-                <div class="form-group" style="margin-bottom:16px;">
-                  <label class="form-label">Message</label>
-                  <div id="mkt-camp-editor" style="background:#fff;border-radius:0 0 6px 6px;min-height:200px;color:#111;"></div>
-                </div>
-                <div id="mkt-composer-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
-                <div class="form-row" style="margin-bottom:8px;">
-                  <button class="btn btn-secondary" onclick="saveCampaignDraft()">Save Draft</button>
-                  <button class="btn btn-secondary" onclick="sendCampaignTest()">Send Test to Me</button>
-                </div>
-                <button class="btn btn-primary" style="width:100%;margin-bottom:16px;" onclick="sendCampaignNow()">Send to Audience Now</button>
-                <div class="form-row" style="align-items:end;margin-bottom:0;">
-                  <div class="form-group">
-                    <label class="form-label">Schedule For</label>
-                    <input class="form-input" style="width:100%;" type="datetime-local" id="mkt-camp-schedule-at">
-                  </div>
-                  <button class="btn btn-secondary" onclick="scheduleCampaignSend()">Schedule Send</button>
-                </div>
-              </div>
-            </div>
-            <div class="grid2-col">
-              <div class="menu-col-header">
-                <div class="section-label" style="margin:0;">Campaigns</div>
-              </div>
-              <div id="mkt-campaigns-list"><div class="loading">Loading...</div></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- AUDIENCE -->
-        <div class="sub-sec" id="marketingtab-audience">
-          <div class="grid-2">
-            <div class="grid2-col">
-              <div class="menu-col-header">
-                <div class="section-label" style="margin:0;">Topics</div>
-              </div>
-              <div class="card" style="margin-bottom:16px;">
-                <div class="form-row" style="grid-template-columns:2fr 1fr;margin-bottom:0;">
-                  <div class="form-group">
-                    <label class="form-label">New Topic Name</label>
-                    <input class="form-input" style="width:100%;" type="text" id="mkt-new-topic-name" placeholder="e.g. Beer Club">
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label">&nbsp;</label>
-                    <button class="btn btn-primary" style="width:100%;" onclick="addMarketingTopic()">Add Topic</button>
-                  </div>
-                </div>
-              </div>
-              <div id="mkt-topics-list"><div class="loading">Loading...</div></div>
-            </div>
-            <div class="grid2-col">
-              <div class="menu-col-header">
-                <div class="section-label" style="margin:0;">Subscribers</div>
-              </div>
-              <div class="card" style="margin-bottom:16px;">
-                <div class="form-group" style="margin-bottom:12px;">
-                  <label class="form-label">Add Subscribers</label>
-                  <textarea class="form-input" style="width:100%;min-height:80px;" id="mkt-sub-emails" placeholder="One per line: jane@example.com or jane@example.com, Jane Doe"></textarea>
-                </div>
-                <div class="form-group" style="margin-bottom:12px;">
-                  <label class="form-label">Also Subscribe To (optional)</label>
-                  <div class="badge-picker" id="mkt-sub-topic-picker"><span style="font-size:12px;color:var(--muted);">No topics yet</span></div>
-                </div>
-                <div id="mkt-sub-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
-                <button class="btn btn-primary" style="width:100%;" onclick="addSubscribersDirect()">Add Subscribers</button>
-              </div>
-              <div id="mkt-subscribers-list"><div class="loading">Loading...</div></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- CAMPAIGN DETAIL MODAL -->
-        <div id="campaign-detail-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:500;align-items:center;justify-content:center;">
-          <div class="card" style="width:1100px;max-width:95vw;height:88vh;display:flex;flex-direction:column;">
-            <div class="menu-col-header" style="flex-shrink:0;">
-              <div class="section-label" style="margin:0;" id="campaign-detail-title">Campaign</div>
-              <button class="btn btn-sm btn-secondary" onclick="closeCampaignDetailModal()">&#10005; Close</button>
-            </div>
-            <div style="flex:1;overflow-y:auto;display:grid;grid-template-columns:320px 1fr;gap:20px;">
-              <div>
-                <div id="campaign-detail-info"><div class="loading">Loading...</div></div>
-                <button class="btn btn-secondary btn-sm" id="campaign-detail-cancel-schedule" style="display:none;width:100%;margin-bottom:20px;" onclick="cancelCampaignSchedule()">Cancel Schedule (back to draft)</button>
-                <div class="section-label" style="margin-top:0;">Delivery Stats</div>
-                <div id="campaign-detail-stats"></div>
-              </div>
-              <div>
-                <div class="section-label" style="margin-top:0;">Message Preview</div>
-                <iframe id="campaign-detail-preview" style="width:100%;height:calc(100% - 30px);border:1px solid var(--border);border-radius:6px;background:#fff;"></iframe>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- TOPIC SUBSCRIBERS MODAL -->
-        <div id="topic-subscribers-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:500;align-items:center;justify-content:center;">
-          <div class="card" style="width:480px;max-width:90vw;max-height:80vh;overflow-y:auto;">
-            <div class="menu-col-header">
-              <div class="section-label" style="margin:0;" id="topic-modal-title">Topic</div>
-              <button class="btn btn-sm btn-secondary" onclick="closeTopicSubscribersModal()">&#10005; Close</button>
-            </div>
-            <div class="form-group" style="margin-bottom:12px;">
-              <label class="form-label">Add Subscribers</label>
-              <textarea class="form-input" style="width:100%;min-height:90px;" id="topic-modal-emails" placeholder="One per line: jane@example.com or jane@example.com, Jane Doe"></textarea>
-            </div>
-            <div id="topic-modal-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
-            <button class="btn btn-primary" style="width:100%;margin-bottom:20px;" onclick="addSubscribersToTopic()">Add to This Audience</button>
-            <div class="section-label" style="margin-top:0;">Current Subscribers (<span id="topic-modal-count">0</span>)</div>
-            <div id="topic-modal-subscribers-list"><div class="loading">Loading...</div></div>
-          </div>
-        </div>
-
-        <!-- SETTINGS -->
-        <div class="sub-sec" id="marketingtab-settings">
-          <div class="section-label" style="margin-top:0;">Connection Status</div>
-          <div class="table-wrap" id="mkt-settings-status"><div class="loading">Loading...</div></div>
-        </div>
+      <!-- PAYMENTS SCREEN (placeholder) -->
+      <div class="screen" id="screen-payments">
+        <div class="card"><div class="card-title">Payments</div><div class="card-sub">Coming soon.</div></div>
       </div>
 
       <!-- MENU SCREEN -->

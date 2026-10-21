@@ -1,5 +1,5 @@
 // admin.js
-// Screen: #screen-admin — add/edit staff and their role + scheduling
+// Screen: #screen-admin — Staff and Assignments sub-pages. Staff: add/edit staff and their role + scheduling
 // access. Only rendered for window.currentStaff.role === 'admin' (nav
 // button is hidden otherwise in app-core.js) and enforced server-side
 // by the "admin manage roster" RLS policy on staff_profiles plus the
@@ -11,8 +11,22 @@ let staffRoster = [], selStaff = null, staffEditMode = false;
 // if that lookup isn't available — then no "No login" badges show.
 let staffLoginIds = null;
 
+// Admin screen: Staff roster + Assignments sub-pages. Non-admin schedulers only get Assignments.
 async function loadAdmin() {
-  await loadStaffRoster();
+  const isAdmin = window.currentStaff && window.currentStaff.role === 'admin';
+  const staffBtn = document.getElementById('admintab-btn-staff');
+  if (staffBtn) staffBtn.style.display = isAdmin ? '' : 'none';
+  const tab = isAdmin ? 'staff' : 'assignments';
+  setAdminTab(tab, document.getElementById('admintab-btn-' + tab));
+}
+
+function setAdminTab(tab, btn) {
+  document.querySelectorAll('#screen-admin > .sub-tabs .sub-tab').forEach((b) => b.classList.remove('active'));
+  document.querySelectorAll('#screen-admin > .sub-sec').forEach((s) => s.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.getElementById('admintab-' + tab).classList.add('active');
+  if (tab === 'staff') loadStaffRoster();
+  else if (tab === 'assignments') loadAssignments();
 }
 
 async function loadStaffRoster() {

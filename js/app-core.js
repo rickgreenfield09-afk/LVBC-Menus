@@ -195,12 +195,11 @@ function renderLoggedIn() {
   document.getElementById('app-shell').style.display = 'flex';
   document.getElementById('staff-name-badge').textContent = window.currentStaff.name;
   const adminNavBtn = document.getElementById('nav-btn-admin');
-  if (adminNavBtn) adminNavBtn.style.display = window.currentStaff.role === 'admin' ? '' : 'none';
+  // Admin holds Staff (admins only) and Assignments, which is managed by whoever builds the schedule
+  // — same rule as canSchedule() in schedule.js.
+  if (adminNavBtn) adminNavBtn.style.display = (window.currentStaff.role === 'admin' || window.currentStaff.can_schedule) ? '' : 'none';
   const marketingNavBtn = document.getElementById('nav-btn-marketing');
   if (marketingNavBtn) marketingNavBtn.style.display = window.currentStaff.role === 'admin' ? '' : 'none';
-  // Assignments is managed by whoever builds the schedule — same rule as canSchedule() in schedule.js.
-  const assignmentsNavBtn = document.getElementById('nav-btn-assignments');
-  if (assignmentsNavBtn) assignmentsNavBtn.style.display = (window.currentStaff.role === 'admin' || window.currentStaff.can_schedule) ? '' : 'none';
   if (typeof loadDashboard === 'function') loadDashboard();
   if (typeof loadMenu === 'function') loadMenu();
   if (typeof refreshBingoNavBadge === 'function') refreshBingoNavBadge();

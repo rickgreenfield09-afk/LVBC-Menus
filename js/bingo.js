@@ -32,7 +32,7 @@ let bingoEditSongs = [];
 let bingoEditPatternId = null;
 let bingoPatternCells = new Set();
 
-// Games screen: Bingo (this file) and Trivia (trivia.js) as sub-pages.
+// Games sub-page of Marketing: Bingo (this file) and Trivia (trivia.js) as sub-pages.
 function loadGames() {
   setGamesTab('bingo', document.getElementById('gamestab-btn-bingo'));
 }
@@ -525,8 +525,8 @@ function bingoHandleSpotifyReturn() {
   history.replaceState(null, '', window.location.pathname);
   if (result === 'connected') toast('Spotify connected');
   else toast('Spotify connection failed: ' + (params.get('reason') || 'unknown error'), true);
-  const navBtn = Array.from(document.querySelectorAll('.nav-btn')).find((b) => b.textContent.trim().startsWith('Games'));
-  if (navBtn) { showScreen('games', navBtn); loadGames(); }
+  const navBtn = document.getElementById('nav-btn-marketing');
+  if (navBtn) { showScreen('marketing', navBtn); setMarketingTab('games', document.getElementById('marketingtab-btn-games')); }
 }
 
 // Spotify titles often carry release noise ("- Remastered 2011",
