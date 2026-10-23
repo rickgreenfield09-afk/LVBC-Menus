@@ -33,6 +33,8 @@ let invOpenOrdersCache = [];
 let invRefDataLoaded = false;
 let invItemEditId = { consumables: null, snacks: null, coffee: null, wine: null, merchandise: null };
 let invItemPhotoFile = {}; // category -> image chosen in the form, uploaded on save
+let invItemPhotoRemove = {}; // category -> true when the saved photo should be deleted on save
+let invWineMenuCache = [];
 let invSelectedVendorId = null;
 let invVendorItemEditId = null;
 
@@ -152,20 +154,22 @@ function invOrderCellHtml(itemType, itemId, color, vendorItemId, cat) {
 
 // ── DASHBOARD ────────────────────────────────────
 async function loadInventoryDashboard() {
-  await Promise.all([invEnsureRefData(), invLoadLocations()]);
+  await Promise.all([invEnsureRefData(), invLoadLocations(), invLoadWineMenu()]);
   const { data: items } = await window.supabase.from('inventory_items').select('*');
   invItemsCache = items || [];
+  // Wine/N/A items archived on the menu are zeroed on purpose; keep them out of the rollups.
+  const live = invItemsCache.filter((i) => invWineMenuStatus(i) !== 'archived');
   await invLoadOpenOrders();
 
   const cardsEl = document.getElementById('inv-dash-category-cards');
   const categoryCards = INV_ITEM_CATEGORIES.map((cat) => {
-    const rows = invItemsCache.filter((i) => i.category === cat);
+    const rows = live.filter((i) => i.category === cat);
     return invDashCardHtml(INV_CATEGORY_LABELS[cat], rows.map((i) => invStatusColor(i.percent_remaining, i.low_threshold, i.critical_threshold)));
   });
   cardsEl.innerHTML = categoryCards.join('') + await invDashMerchCardHtml();
 
   const needsAttention = [];
-  invItemsCache.forEach((i) => {
+  live.forEach((i) => {
     const color = invStatusColor(i.percent_remaining, i.low_threshold, i.critical_threshold);
     if (color !== 'ok') needsAttention.push({ itemType: 'item', id: i.id, cat: i.category, name: i.name, location: invLocationPath(i.location_id) || i.location, valueLabel: i.percent_remaining + '%', color, vendorItemId: i.vendor_item_id, sortValue: i.percent_remaining });
   });
@@ -237,8 +241,10 @@ function ensureCategoryTemplateBuilt(cat) {
     + '<div class="form-row">'
     + '<div class="form-group"><label class="form-label">Location Note</label><input class="form-input" style="width:100%;" type="text" id="inv-' + cat + '-location" placeholder="optional, e.g. top shelf"></div>'
     + '<div class="form-group"><label class="form-label">Photo</label><div style="display:flex;align-items:center;gap:10px;"><span id="inv-' + cat + '-photo-preview">' + invPhotoThumbHtml(null) + '</span>'
-    + '<button class="btn btn-sm btn-secondary" type="button" onclick="pickItemPhoto(\'' + cat + '\')">Choose Photo</button></div></div>'
+    + '<button class="btn btn-sm btn-secondary" type="button" onclick="pickItemPhoto(\'' + cat + '\')">Choose Photo</button>'
+    + '<button class="btn btn-sm btn-secondary" type="button" id="inv-' + cat + '-photo-remove" style="display:none;" onclick="removeItemPhoto(\'' + cat + '\')">Remove Photo</button></div></div>'
     + '</div>'
+    + (cat === 'wine' ? '<div class="form-group" style="margin-bottom:16px;"><label class="form-label">Menu Item (Menus &gt; Wine &amp; N/A)</label><select class="form-select" style="width:100%;" id="inv-wine-menu-item"><option value="">None (not on the menu)</option></select></div>' : '')
     + '<div class="form-group" style="margin-bottom:16px;"><label class="form-label">Vendor Item (for reorder)</label><select class="form-select" style="width:100%;" id="inv-' + cat + '-vendor-item"><option value="">None linked</option></select></div>'
     + '<div id="inv-' + cat + '-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:\'DM Mono\',monospace;"></div>'
     + '<button class="btn btn-primary" style="width:100%;" id="inv-' + cat + '-save-btn" onclick="saveItem(\'' + cat + '\')">Add Item</button>'
@@ -250,19 +256,54 @@ function ensureCategoryTemplateBuilt(cat) {
   el.dataset.built = '1';
 }
 
+async function invLoadWineMenu() {
+  const { data } = await window.supabase.from('wine_menu').select('id,name,status,display_group').order('name');
+  invWineMenuCache = data || [];
+}
+function invWineMenuStatus(item) {
+  const m = item.wine_menu_id && invWineMenuCache.find((w) => w.id === item.wine_menu_id);
+  return m ? m.status : null;
+}
+// Menu items already tied to another row are left out so two rows can't share one.
+function invWineMenuOptions(selectedId) {
+  const taken = new Set(invItemsCache.filter((i) => i.wine_menu_id && i.wine_menu_id !== selectedId).map((i) => i.wine_menu_id));
+  return '<option value="">None (not on the menu)</option>' + invWineMenuCache
+    .filter((w) => w.id === selectedId || (w.status !== 'archived' && !taken.has(w.id)))
+    .map((w) => '<option value="' + w.id + '"' + (w.id === selectedId ? ' selected' : '') + '>' + escHtml(w.name) + (w.display_group ? ' \u2014 ' + escHtml(w.display_group) : '') + (w.status === 'archived' ? ' (archived)' : '') + '</option>').join('');
+}
+
+function invSetItemPhotoBtn(cat, show) {
+  document.getElementById('inv-' + cat + '-photo-remove').style.display = show ? '' : 'none';
+}
+
+// Clears the photo from the form; a photo that was already saved is deleted when the item is saved.
+function removeItemPhoto(cat) {
+  const editRow = invItemEditId[cat] && invItemsCache.find((x) => x.id === invItemEditId[cat]);
+  invItemPhotoFile[cat] = null;
+  invItemPhotoRemove[cat] = !!(editRow && editRow.photo_url);
+  document.getElementById('inv-' + cat + '-photo-preview').innerHTML = invPhotoThumbHtml(null);
+  invSetItemPhotoBtn(cat, false);
+}
+
 function pickItemPhoto(cat) {
   invPickPhoto((file) => {
     invItemPhotoFile[cat] = file;
+    invItemPhotoRemove[cat] = false;
+    invSetItemPhotoBtn(cat, true);
     document.getElementById('inv-' + cat + '-photo-preview').innerHTML = invPhotoThumbHtml(URL.createObjectURL(file));
   });
 }
 
 async function loadInventoryCategory(cat) {
-  await Promise.all([invEnsureRefData(), invLoadLocations()]);
+  await Promise.all([invEnsureRefData(), invLoadLocations(), cat === 'wine' ? invLoadWineMenu() : null]);
   const { data, error } = await window.supabase.from('inventory_items').select('*');
   if (error) { toast(error.message, true); return; }
   invItemsCache = data || [];
   await invLoadOpenOrders();
+  if (cat === 'wine') {
+    const editRow = invItemEditId.wine && invItemsCache.find((x) => x.id === invItemEditId.wine);
+    document.getElementById('inv-wine-menu-item').innerHTML = invWineMenuOptions(editRow ? editRow.wine_menu_id : null);
+  }
   document.getElementById('inv-' + cat + '-vendor-item').innerHTML = invVendorItemOptions(null, cat);
   if (!invItemEditId[cat]) document.getElementById('inv-' + cat + '-location-id').innerHTML = invLocationOptions(null);
   renderItemsTable(cat);
@@ -270,16 +311,19 @@ async function loadInventoryCategory(cat) {
 
 function renderItemsTable(cat) {
   const el = document.getElementById('inv-' + cat + '-list');
-  const rows = invItemsCache.filter((i) => i.category === cat).sort((a, b) => a.percent_remaining - b.percent_remaining);
+  const rows = invItemsCache.filter((i) => i.category === cat)
+    .sort((a, b) => ((invWineMenuStatus(a) === 'archived') - (invWineMenuStatus(b) === 'archived')) || a.percent_remaining - b.percent_remaining);
   if (!rows.length) { el.innerHTML = '<div class="loading">No items yet — add one on the left.</div>'; return; }
   const trs = rows.map((i) => {
     const color = invStatusColor(i.percent_remaining, i.low_threshold, i.critical_threshold);
+    const menuStatus = invWineMenuStatus(i);
+    const archived = menuStatus === 'archived';
     const sub = [i.subcategory, invLocationPath(i.location_id), i.location].filter(Boolean).map(escHtml).join(' &middot; ');
     return '<tr>'
       + '<td style="width:1%;">' + invPhotoThumbHtml(i.photo_url, i.name) + '</td>'
-      + '<td style="font-weight:500;">' + escHtml(i.name) + (sub ? '<div style="font-size:11px;color:var(--sub);">' + sub + '</div>' : '') + '<div style="margin-top:2px;">' + invVendorItemLabel(i.vendor_item_id) + '</div></td>'
-      + '<td style="white-space:nowrap;">' + invStatusBadge(color) + '<div style="margin-top:6px;"><input class="form-input" style="width:60px;padding:6px 8px;" type="number" min="0" max="100" id="inv-pct-' + i.id + '" value="' + i.percent_remaining + '"> % <button class="btn btn-sm btn-secondary" onclick="saveItemPercent(\'' + cat + '\',\'' + i.id + '\')">Save</button></div></td>'
-      + '<td>' + invOrderCellHtml('item', i.id, color, i.vendor_item_id, cat) + '</td>'
+      + '<td style="font-weight:500;">' + escHtml(i.name) + (menuStatus === 'off' ? ' <span class="badge badge-amber">Off menu</span>' : '') + (sub ? '<div style="font-size:11px;color:var(--sub);">' + sub + '</div>' : '') + '<div style="margin-top:2px;">' + invVendorItemLabel(i.vendor_item_id) + '</div></td>'
+      + '<td style="white-space:nowrap;">' + (archived ? '<span class="badge badge-muted">Archived</span>' : invStatusBadge(color)) + '<div style="margin-top:6px;"><input class="form-input" style="width:60px;padding:6px 8px;" type="number" min="0" max="100" id="inv-pct-' + i.id + '" value="' + i.percent_remaining + '"> % <button class="btn btn-sm btn-secondary" onclick="saveItemPercent(\'' + cat + '\',\'' + i.id + '\')">Save</button></div></td>'
+      + '<td>' + (archived ? '<span style="font-size:11px;color:var(--muted);">\u2014</span>' : invOrderCellHtml('item', i.id, color, i.vendor_item_id, cat)) + '</td>'
       + '<td style="white-space:nowrap;"><button class="btn btn-sm btn-secondary" onclick="editItem(\'' + cat + '\',\'' + i.id + '\')">Edit</button> <button class="btn btn-sm btn-danger" onclick="deleteItem(\'' + cat + '\',\'' + i.id + '\')">Delete</button></td>'
       + '</tr>';
   }).join('');
@@ -312,11 +356,15 @@ async function saveItem(cat) {
     last_checked_at: new Date().toISOString(),
     last_checked_by: window.currentStaff.id,
   };
+  if (cat === 'wine') payload.wine_menu_id = invVal('inv-wine-menu-item') || null;
   const editId = invItemEditId[cat];
+  const removePhoto = !!(editId && invItemPhotoRemove[cat] && !invItemPhotoFile[cat]);
+  if (removePhoto) payload.photo_url = null;
   const { data: saved, error } = editId
     ? await window.supabase.from('inventory_items').update(payload).eq('id', editId).select().single()
     : await window.supabase.from('inventory_items').insert(payload).select().single();
   if (error) { invAlert('inv-' + cat + '-alert', error.message, true); return; }
+  if (removePhoto) await window.supabase.storage.from('assets').remove(['inventory/items/' + saved.id + '.jpg']); // best effort; the link is already cleared
   // The photo is keyed by the item's id, so a new item has to exist before it can be uploaded.
   if (invItemPhotoFile[cat]) {
     try {
@@ -338,6 +386,9 @@ function editItem(cat, id) {
   invSetVal('inv-' + cat + '-location', i.location || '');
   document.getElementById('inv-' + cat + '-location-id').innerHTML = invLocationOptions(i.location_id);
   invItemPhotoFile[cat] = null;
+  invItemPhotoRemove[cat] = false;
+  invSetItemPhotoBtn(cat, !!i.photo_url);
+  if (cat === 'wine') document.getElementById('inv-wine-menu-item').innerHTML = invWineMenuOptions(i.wine_menu_id);
   document.getElementById('inv-' + cat + '-photo-preview').innerHTML = invPhotoThumbHtml(i.photo_url, i.name);
   invSetVal('inv-' + cat + '-percent', i.percent_remaining);
   invSetVal('inv-' + cat + '-low', i.low_threshold);
@@ -356,6 +407,9 @@ function cancelItemEdit(cat) {
   invSetVal('inv-' + cat + '-location', '');
   document.getElementById('inv-' + cat + '-location-id').innerHTML = invLocationOptions(null);
   invItemPhotoFile[cat] = null;
+  invItemPhotoRemove[cat] = false;
+  invSetItemPhotoBtn(cat, false);
+  if (cat === 'wine') document.getElementById('inv-wine-menu-item').innerHTML = invWineMenuOptions(null);
   document.getElementById('inv-' + cat + '-photo-preview').innerHTML = invPhotoThumbHtml(null);
   invSetVal('inv-' + cat + '-percent', 100);
   invSetVal('inv-' + cat + '-low', 50);

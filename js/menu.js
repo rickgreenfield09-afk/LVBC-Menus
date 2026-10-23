@@ -506,7 +506,11 @@ function wineAlert(msg, isError) {
 }
 
 async function archiveWine(id, name) {
-  if (!confirm('Archive ' + name + '?')) return;
+  // Archiving zeroes the linked inventory (database trigger), so say so first.
+  const { data: linked } = await window.supabase.from('inventory_items').select('percent_remaining').eq('wine_menu_id', id);
+  const stock = (linked || []).find((r) => r.percent_remaining > 0);
+  const warning = stock ? ' It still has ' + stock.percent_remaining + '% in inventory, and archiving will zero out that remaining stock.' : '';
+  if (!confirm('Archive ' + name + '?' + warning)) return;
   const { error } = await window.supabase.from('wine_menu').update({ status: 'archived' }).eq('id', id);
   if (error) { toast('Error', true); return; }
   toast(name + ' archived');

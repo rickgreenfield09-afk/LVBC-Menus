@@ -1357,12 +1357,14 @@ create table inventory_order_log (
 
 create index inventory_order_log_item_idx on inventory_order_log (item_type, item_id);
 
--- Turning a wine/N/A menu item Off zeroes its inventory level (see
--- migration_024); turning it back On leaves it for a recount.
+-- Wine/N/A menu <-> inventory (migrations 024 and 049). Off or
+-- Archived zeroes the inventory level; turning back On leaves it for a
+-- recount. A new menu item gets a 100% inventory row (adopting an
+-- unlinked row of the same name), and a rename carries over.
 create or replace function zero_inventory_when_menu_off()
 returns trigger as $$
 begin
-  if new.status = 'off' and old.status is distinct from 'off' then
+  if new.status in ('off', 'archived') and old.status is distinct from new.status then
     update inventory_items
     set percent_remaining = 0, last_checked_at = now()
     where wine_menu_id = new.id;
@@ -1374,6 +1376,38 @@ $$ language plpgsql security definer;
 create trigger wine_menu_off_zeroes_inventory
   after update of status on wine_menu
   for each row execute function zero_inventory_when_menu_off();
+
+create or replace function sync_inventory_with_wine_menu()
+returns trigger as $$
+declare
+  adopt_id uuid;
+begin
+  if tg_op = 'UPDATE' and new.name is distinct from old.name then
+    update inventory_items set name = new.name where wine_menu_id = new.id;
+  end if;
+
+  if new.status <> 'archived'
+     and not exists (select 1 from inventory_items where wine_menu_id = new.id) then
+    select id into adopt_id
+    from inventory_items
+    where category = 'wine' and wine_menu_id is null and lower(name) = lower(new.name)
+    order by created_at
+    limit 1;
+
+    if adopt_id is not null then
+      update inventory_items set wine_menu_id = new.id where id = adopt_id;
+    else
+      insert into inventory_items (category, subcategory, name, percent_remaining, wine_menu_id)
+      values ('wine', new.display_group, new.name, 100, new.id);
+    end if;
+  end if;
+  return new;
+end;
+$$ language plpgsql security definer;
+
+create trigger wine_menu_syncs_inventory
+  after insert or update of name, status on wine_menu
+  for each row execute function sync_inventory_with_wine_menu();
 
 -- ---------- MERCHANDISE INVENTORY (see migration_034 + 036 for the full rationale) ----------
 -- Counted in actual units. Shape is product > style (color + design,

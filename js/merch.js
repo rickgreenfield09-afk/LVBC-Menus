@@ -223,7 +223,8 @@ function merchStyleRowsHtml(p, s, sizes) {
     html += '<tr class="' + rowClass + (i ? ' merch-loc-row' : ' merch-style-first') + '">';
     if (i === 0) {
       html += '<td rowspan="' + (locKeys.length + (locKeys.length > 1 ? 1 : 0)) + '" class="merch-photo-cell">'
-        + '<button class="merch-photo-btn" title="' + (s.photo_url ? 'Replace photo' : 'Add photo') + '" onclick="pickMerchStylePhoto(\'' + s.id + '\')">' + invPhotoThumbHtml(s.photo_url, p.name + ' ' + merchStyleLabel(s)) + '</button></td>'
+        + '<button class="merch-photo-btn" title="' + (s.photo_url ? 'Replace photo' : 'Add photo') + '" onclick="pickMerchStylePhoto(\'' + s.id + '\')">' + invPhotoThumbHtml(s.photo_url, p.name + ' ' + merchStyleLabel(s)) + '</button>'
+        + (s.photo_url ? '<button class="merch-link" style="display:block;margin-top:4px;" onclick="removeMerchStylePhoto(\'' + s.id + '\')">remove photo</button>' : '') + '</td>'
         + '<td rowspan="' + (locKeys.length + (locKeys.length > 1 ? 1 : 0)) + '">' + escHtml(merchStyleLabel(s)) + (retired ? ' <span class="badge badge-muted">Retired</span>' : '')
         + flagged.map((v) => '<div class="merch-verify">&#9888; Needs verification' + (v.size ? ' (' + escHtml(v.size) + ')' : '') + (v.verification_note ? ': ' + escHtml(v.verification_note) : '') + '</div>').join('') + '</td>';
     }
@@ -329,6 +330,16 @@ function pickMerchStylePhoto(styleId) {
       renderMerchList();
     } catch (e) { toast('Photo did not upload: ' + e.message, true); }
   });
+}
+
+async function removeMerchStylePhoto(styleId) {
+  if (!confirm('Remove this photo?')) return;
+  const { error } = await window.supabase.from('inventory_merch_styles').update({ photo_url: null }).eq('id', styleId);
+  if (error) { toast('Could not remove the photo: ' + error.message, true); return; }
+  await window.supabase.storage.from('assets').remove(['inventory/merch/' + styleId + '.jpg']); // best effort; the link is already cleared
+  merchStyles.find((s) => s.id === styleId).photo_url = null;
+  toast('Photo removed');
+  renderMerchList();
 }
 
 // A product is retired exactly when every one of its styles is.
