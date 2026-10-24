@@ -20,6 +20,9 @@
 // write a reason, the sheet closes with nothing applied to inventory
 // (close_count_sheet(), migration_051), and the person who sent it gets
 // your message as a push (api/notify-count-sheet.js, event 'closed').
+//
+// The "count for you" push opens straight onto its sheet: its link is
+// #count=<sheet id> (see showCountSheets() in core.js).
 // Depends on: window.supabase, window.currentStaff, toast(), escHtml(),
 // toDateStr(), readJson(), writeJson() (core.js), mMyStaffIds,
 // resolveMyStaffIds() (schedule.js), mPhotoHtml() (inventory.js),
@@ -34,6 +37,7 @@ let mSheetLines = {};    // sheet id -> lines
 let mSheetWas = {};      // item id | "variantId|locationId" -> what inventory has now
 let mSheetCreators = {}; // staff id -> name, for the people who built my sheets
 let mSheetOpenId = null;
+let mPendingSheetId = null; // a push linked straight to this sheet; opened once the list has loaded
 let mSheetFlushing = false;
 let mSheetFlushTimer = null;
 
@@ -86,6 +90,12 @@ async function loadMySheets() {
   renderMySheets();
   if (mSheetOpenId) {
     if (mSheets.some((s) => s.id === mSheetOpenId)) paintSheet(); else mSheetClose();
+  }
+  if (mPendingSheetId) {
+    const id = mPendingSheetId;
+    mPendingSheetId = null;
+    if (mSheets.some((s) => s.id === id)) openMySheet(id);
+    else toast('That count sheet isn\u2019t open any more.', true);
   }
   mSheetFlush();
 }

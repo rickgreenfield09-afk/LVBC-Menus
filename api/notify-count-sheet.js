@@ -8,6 +8,9 @@
 //                                        they closed it from the phone
 //                                        without counting (migration_051)
 //
+// The assignment push links to /mobile/#count=<sheet id>, which opens that
+// sheet straight away (mobile/js/core.js, showCountSheets).
+//
 // Called by the Run Inventory screen after a sheet is created,
 // reassigned or resent, and by the phone app when a count is closed.
 // Only the recipient's own devices are pushed (audience 'staff', matched
@@ -83,7 +86,7 @@ export default async function handler(req, res) {
     payload = {
       title: 'Inventory count for you',
       body: (sheet.title + (count ? ' — ' + count + ' to count' : '') + '. Open the app to start.').slice(0, 200),
-      url: '/mobile/#count',
+      url: '/mobile/#count=' + sheet.id,
     };
   }
 

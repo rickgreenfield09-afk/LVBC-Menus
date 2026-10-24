@@ -213,14 +213,20 @@ function renderLoggedIn() {
   updateOfflineBar();
   // Land on today's shift, or on the inventory tab when a count-sheet push brought us here.
   showTab('tasks', document.querySelector('.m-tabbar .nav-btn'));
-  if (location.hash === '#count') showCountSheets();
+  if (/^#count/.test(location.hash)) showCountSheets();
   else loadMySheets();
 }
 
+// A count-sheet push links to #count=<sheet id>: land on the Inventory
+// tab and open that sheet (loadMySheets finishes the job once the sheet
+// list is in). A bare #count just lands on the tab.
 function showCountSheets() {
+  const m = location.hash.match(/^#count=([0-9a-f-]{36})/i);
+  if (m) mPendingSheetId = m[1];
+  history.replaceState(null, '', location.pathname + location.search);
   showTab('inventory', document.querySelectorAll('.m-tabbar .nav-btn')[2]);
 }
-window.addEventListener('hashchange', () => { if (location.hash === '#count' && window.currentStaff) showCountSheets(); });
+window.addEventListener('hashchange', () => { if (/^#count/.test(location.hash) && window.currentStaff) showCountSheets(); });
 
 function renderLoggedOut(msg) {
   document.getElementById('app-shell').style.display = 'none';
