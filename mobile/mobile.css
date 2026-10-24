@@ -179,6 +179,11 @@
   .m-sheet .m-cs-ctl .m-pct{font-size:30px;}
   .m-cs-val{font-size:30px;}
   .m-cs-same{height:48px;font-size:14px;padding:0 6px;}
+  .m-cs-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;}
+  .m-dialog{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,0.72);display:flex;align-items:center;justify-content:center;padding:16px;}
+  .m-dialog-card{width:100%;max-width:420px;}
+  .m-dialog-text{width:100%;min-height:96px;resize:vertical;font-family:'DM Sans',sans-serif;font-size:15px;}
+  .m-dialog-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;}
   .m-cs-size{margin-top:10px;}
   .m-cs-size-name{font-size:13px;font-weight:500;display:flex;align-items:baseline;gap:8px;}
   .m-cs-size-name span{font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);font-weight:400;}

@@ -13,8 +13,10 @@
 // Percent items whose wine menu item is archived are left out — they're
 // zeroed on purpose.
 //
-// Open sheets can be reassigned, resent, or cancelled; anything counted
-// on a cancelled sheet is never applied.
+// Open sheets can be reassigned, resent, or withdrawn; anything counted
+// on a withdrawn sheet is never applied. A sheet the counter cancelled
+// from their phone (with a reason, migration_051) shows that reason here
+// and can be reassigned, which reopens it.
 // Depends on: window.supabase, window.currentStaff, toast(), escHtml()
 // (js/menu.js), INV_CATEGORY_LABELS, invLoadWineMenu/invWineMenuStatus
 // (inventory.js), invLoadLocations/invLocationPath/invLocationsFlat
@@ -22,7 +24,7 @@
 
 const CS_PERCENT_CATEGORIES = ['consumables', 'snacks', 'coffee', 'wine'];
 const CS_NO_LOCATION = 'No location set';
-const CS_STATUS_BADGE = { assigned: ['badge-amber', 'Out for counting'], submitted: ['badge-teal', 'Submitted'], cancelled: ['badge-muted', 'Cancelled'] };
+const CS_STATUS_BADGE = { assigned: ['badge-amber', 'Out for counting'], submitted: ['badge-teal', 'Submitted'], cancelled: ['badge-muted', 'Withdrawn'], closed: ['badge-red', 'Cancelled by counter'] };
 
 let csStaff = [];
 let csItems = [];
@@ -447,7 +449,7 @@ function setCsFilter(f) {
 
 function renderCsList() {
   const el = document.getElementById('cs-list');
-  ['assigned', 'submitted', 'cancelled', 'all'].forEach((f) => {
+  ['assigned', 'submitted', 'closed', 'cancelled', 'all'].forEach((f) => {
     const b = document.getElementById('cs-filter-' + f);
     if (b) b.classList.toggle('active', f === csFilter);
   });
@@ -459,9 +461,12 @@ function renderCsList() {
   const trs = rows.map((s) => {
     const [cls, label] = CS_STATUS_BADGE[s.status];
     const p = csProgress[s.id];
-    const when = s.status === 'submitted' && s.submitted_at ? 'Submitted ' + csShortDate(s.submitted_at) : 'Sent ' + csShortDate(s.assigned_at || s.created_at);
+    const when = s.status === 'submitted' && s.submitted_at ? 'Submitted ' + csShortDate(s.submitted_at)
+      : s.status === 'closed' && s.closed_at ? 'Cancelled ' + csShortDate(s.closed_at)
+      : 'Sent ' + csShortDate(s.assigned_at || s.created_at);
     return '<tr style="cursor:pointer;" onclick="openCsDetail(\'' + s.id + '\')">'
-      + '<td style="font-weight:500;">' + escHtml(s.title) + '<div style="font-size:11px;color:var(--sub);">' + escHtml(when) + '</div></td>'
+      + '<td style="font-weight:500;">' + escHtml(s.title) + '<div style="font-size:11px;color:var(--sub);">' + escHtml(when) + '</div>'
+      + (s.status === 'closed' && s.close_reason ? '<div style="font-size:11px;color:var(--red);">\u201c' + escHtml(s.close_reason) + '\u201d</div>' : '') + '</td>'
       + '<td style="font-size:12px;color:var(--sub);">' + escHtml(csStaffName(s.assigned_to)) + '</td>'
       + '<td style="font-family:\'DM Mono\',monospace;font-size:12px;white-space:nowrap;">' + (p ? p.counted + ' / ' + p.total : '—') + '</td>'
       + '<td><span class="badge ' + cls + '">' + label + '</span></td></tr>';
@@ -501,15 +506,18 @@ async function renderCsDetail() {
     + '<span style="font-size:12px;color:var(--sub);">' + escHtml(csStaffName(s.assigned_to)) + ' · sent ' + escHtml(csShortDate(s.assigned_at || s.created_at))
     + (s.submitted_at ? ' · submitted ' + escHtml(csShortDate(s.submitted_at)) : '') + '</span></div>'
     + (s.notes ? '<div class="card" style="margin-bottom:14px;font-size:13px;color:var(--sub);">' + escHtml(s.notes) + '</div>' : '')
+    + (s.status === 'closed' ? '<div class="card" style="margin-bottom:14px;border-color:rgba(224,82,82,0.4);"><div style="font-size:12px;color:var(--sub);margin-bottom:4px;">'
+      + escHtml(csStaffName(s.closed_by || s.assigned_to)) + ' cancelled this count' + (s.closed_at ? ' \u00b7 ' + escHtml(csShortDate(s.closed_at)) : '') + '</div>'
+      + '<div style="font-size:14px;">\u201c' + escHtml(s.close_reason || '') + '\u201d</div></div>' : '')
     + '<div style="font-size:12px;color:var(--sub);margin-bottom:10px;">' + counted + ' of ' + lines.length + ' counted'
-    + (s.status === 'submitted' ? ' — counted lines were applied to inventory.' : s.status === 'cancelled' ? ' — nothing was applied.' : '') + '</div>';
+    + (s.status === 'submitted' ? ' — counted lines were applied to inventory.' : s.status === 'cancelled' || s.status === 'closed' ? ' — nothing was applied.' : '') + '</div>';
 
-  if (s.status === 'assigned') {
+  if (s.status === 'assigned' || s.status === 'closed') {
     body += '<div class="card" style="margin-bottom:16px;"><div class="form-row" style="grid-template-columns:2fr 1fr 1fr;align-items:end;margin-bottom:0;">'
       + '<div class="form-group"><label class="form-label">Reassign to</label><select class="form-select" style="width:100%;" id="cs-reassign">'
       + csStaff.map((x) => '<option value="' + x.id + '"' + (x.id === s.assigned_to ? ' selected' : '') + '>' + escHtml(x.name) + '</option>').join('') + '</select></div>'
-      + '<button class="btn btn-secondary" onclick="csReassign()">Reassign</button>'
-      + '<button class="btn btn-secondary" onclick="csResend()">Resend Push</button></div></div>';
+      + '<button class="btn btn-secondary" onclick="csReassign()">' + (s.status === 'closed' ? 'Reassign &amp; Reopen' : 'Reassign') + '</button>'
+      + (s.status === 'assigned' ? '<button class="btn btn-secondary" onclick="csResend()">Resend Push</button>' : '<span></span>') + '</div></div>';
   }
 
   let trs = '';
@@ -532,7 +540,7 @@ async function renderCsDetail() {
 
   const actions = s.status === 'assigned'
     ? '<button class="btn btn-danger" onclick="csCancelSheet()">Cancel This Sheet</button>'
-    : s.status === 'cancelled' ? '<button class="btn btn-danger" onclick="csDeleteSheet()">Delete</button>' : '';
+    : s.status === 'cancelled' || s.status === 'closed' ? '<button class="btn btn-danger" onclick="csDeleteSheet()">Delete</button>' : '';
   body += actions ? '<div style="margin-top:16px;display:flex;gap:10px;">' + actions + '</div>' : '';
 
   document.getElementById('cs-detail-title').textContent = s.title;
@@ -543,8 +551,10 @@ async function csReassign() {
   const s = csSheets.find((x) => x.id === csDetailId);
   const to = document.getElementById('cs-reassign').value;
   if (!s || !to) return;
-  if (to === s.assigned_to) { toast('Already assigned to ' + csStaffName(to)); return; }
-  const { error } = await window.supabase.from('inventory_count_sheets').update({ assigned_to: to, assigned_at: new Date().toISOString() }).eq('id', s.id);
+  if (s.status === 'assigned' && to === s.assigned_to) { toast('Already assigned to ' + csStaffName(to)); return; }
+  // Reassigning a sheet the counter cancelled reopens it for the new person.
+  const { error } = await window.supabase.from('inventory_count_sheets')
+    .update({ assigned_to: to, assigned_at: new Date().toISOString(), status: 'assigned', close_reason: null, closed_at: null, closed_by: null }).eq('id', s.id);
   if (error) { toast(error.message, true); return; }
   await csNotify(s.id, to);
   await loadCsSheets();

@@ -2644,12 +2644,16 @@ create table inventory_count_sheets (
   title text not null check (length(trim(title)) > 0),
   notes text,
   assigned_to uuid references staff_profiles(id) on delete set null,
-  status text not null default 'assigned' check (status in ('assigned','submitted','cancelled')),
+  status text not null default 'assigned' check (status in ('assigned','submitted','cancelled','closed')),
   created_by uuid references staff_profiles(id) on delete set null,
   created_at timestamptz not null default now(),
   assigned_at timestamptz not null default now(),
   submitted_at timestamptz,
-  submitted_by uuid references staff_profiles(id) on delete set null
+  submitted_by uuid references staff_profiles(id) on delete set null,
+  -- the counter cancelled it from their phone, with a reason — see migration_051
+  close_reason text,
+  closed_at timestamptz,
+  closed_by uuid references staff_profiles(id) on delete set null
 );
 
 create index inventory_count_sheets_assigned_idx on inventory_count_sheets (assigned_to, status);
@@ -2730,6 +2734,23 @@ begin
   set status = 'submitted', submitted_at = now(), submitted_by = auth.uid()
   where id = s.id;
   return applied;
+end;
+$$ language plpgsql security definer;
+
+create or replace function close_count_sheet(p_sheet_id uuid, p_reason text)
+returns void as $$
+declare
+  s inventory_count_sheets;
+begin
+  if not is_staff() then raise exception 'Not allowed'; end if;
+  if length(trim(coalesce(p_reason, ''))) < 3 then raise exception 'Please say why you are closing this count'; end if;
+  select * into s from inventory_count_sheets where id = p_sheet_id for update;
+  if not found then raise exception 'Count sheet not found'; end if;
+  if s.status <> 'assigned' then raise exception 'This count sheet is already %', s.status; end if;
+
+  update inventory_count_sheets
+  set status = 'closed', close_reason = left(trim(p_reason), 240), closed_at = now(), closed_by = auth.uid()
+  where id = s.id;
 end;
 $$ language plpgsql security definer;
 

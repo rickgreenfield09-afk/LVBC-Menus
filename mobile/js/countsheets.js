@@ -15,6 +15,11 @@
 // Like the other counts, each tap goes into a localStorage queue and
 // syncs from there, so a walk-in with no signal doesn't lose anything.
 // Submitting needs a connection.
+//
+// Cancel Count (top of an open sheet) is for when you can't do it: you
+// write a reason, the sheet closes with nothing applied to inventory
+// (close_count_sheet(), migration_051), and the person who sent it gets
+// your message as a push (api/notify-count-sheet.js, event 'closed').
 // Depends on: window.supabase, window.currentStaff, toast(), escHtml(),
 // toDateStr(), readJson(), writeJson() (core.js), mMyStaffIds,
 // resolveMyStaffIds() (schedule.js), mPhotoHtml() (inventory.js),
@@ -27,6 +32,7 @@ const M_SHEET_PCT_STEP = 5;
 let mSheets = [];        // sheets assigned to me and still open
 let mSheetLines = {};    // sheet id -> lines
 let mSheetWas = {};      // item id | "variantId|locationId" -> what inventory has now
+let mSheetCreators = {}; // staff id -> name, for the people who built my sheets
 let mSheetOpenId = null;
 let mSheetFlushing = false;
 let mSheetFlushTimer = null;
@@ -47,10 +53,16 @@ async function loadMySheets() {
     const cached = readJson(M_SHEETS_KEY);
     if (!cached) return;
     ({ sheets: mSheets, lines: mSheetLines, was: mSheetWas } = cached);
+    mSheetCreators = cached.creators || {};
   } else {
     mSheets = sheets || [];
     mSheetLines = {};
     mSheetWas = {};
+    const creatorIds = [...new Set(mSheets.map((s) => s.created_by).filter(Boolean))];
+    if (creatorIds.length) {
+      const { data: people } = await window.supabase.from('staff_profiles').select('id,name').in('id', creatorIds);
+      (people || []).forEach((p) => { mSheetCreators[p.id] = p.name; });
+    }
     if (mSheets.length) {
       const { data: lines } = await window.supabase.from('inventory_count_sheet_lines')
         .select('*').in('sheet_id', mSheets.map((s) => s.id)).order('sort_order');
@@ -65,7 +77,7 @@ async function loadMySheets() {
       (items.data || []).forEach((i) => { mSheetWas[i.id] = i.percent_remaining; });
       (stock.data || []).forEach((r) => { mSheetWas[r.variant_id + '|' + (r.location_id || '')] = r.unit_count; });
     }
-    writeJson(M_SHEETS_KEY, { sheets: mSheets, lines: mSheetLines, was: mSheetWas });
+    writeJson(M_SHEETS_KEY, { sheets: mSheets, lines: mSheetLines, was: mSheetWas, creators: mSheetCreators });
   }
   // Counts still waiting to sync win over whatever the server last had.
   const queue = mSheetQueue();
@@ -168,7 +180,8 @@ function paintSheet() {
   el.innerHTML = '<div class="m-sheet-body">'
     + '<div class="m-sheet-title">' + escHtml(sheet.title) + '</div>'
     + (sheet.notes ? '<div class="m-sheet-note">' + escHtml(sheet.notes) + '</div>' : '')
-    + '<div class="m-rec-done" style="margin:10px 0 0;color:' + (p.counted === p.total ? 'var(--teal)' : 'var(--amber)') + ';">' + p.counted + ' of ' + p.total + ' counted</div>'
+    + '<div class="m-cs-head"><div class="m-rec-done" style="color:' + (p.counted === p.total ? 'var(--teal)' : 'var(--amber)') + ';">' + p.counted + ' of ' + p.total + ' counted</div>'
+    + '<button class="btn btn-sm btn-secondary" onclick="mSheetCancelDialog(\'' + sheet.id + '\')">Cancel Count</button></div>'
     + html + '</div>'
     + '<div class="m-sheet-actions"><button class="btn btn-secondary" onclick="mSheetClose()">Close</button>'
     + '<button class="btn btn-primary" onclick="mSheetSubmit(\'' + sheet.id + '\')">Submit Count</button></div>';
@@ -192,7 +205,7 @@ function mSheetSet(lineId, value) {
   const queue = mSheetQueue();
   queue[l.id] = { value: l.counted_value, at: l.counted_at };
   writeJson(M_SHEET_QUEUE_KEY, queue);
-  writeJson(M_SHEETS_KEY, { sheets: mSheets, lines: mSheetLines, was: mSheetWas });
+  writeJson(M_SHEETS_KEY, { sheets: mSheets, lines: mSheetLines, was: mSheetWas, creators: mSheetCreators });
 }
 
 function mSheetStep(lineId, delta) {
@@ -261,6 +274,66 @@ async function mSheetSubmit(sheetId) {
   await loadMySheets();
   if (typeof loadInventoryCount === 'function') loadInventoryCount();
   if (typeof mTasksRefresh === 'function') mTasksRefresh();
+}
+
+// ── CANCEL THE COUNT ─────────────────────────────
+function mSheetCancelDialog(sheetId) {
+  const sheet = mSheets.find((s) => s.id === sheetId);
+  if (!sheet) return;
+  const who = mSheetCreators[sheet.created_by] || 'the person who sent it';
+  const d = document.createElement('div');
+  d.id = 'm-cancel-dialog';
+  d.className = 'm-dialog';
+  d.innerHTML = '<div class="card m-dialog-card">'
+    + '<div class="m-sheet-title" style="font-size:24px;">Cancel this count?</div>'
+    + '<p class="m-item-sub" style="margin:8px 0 12px;line-height:1.45;">Tell ' + escHtml(who) + ' why you can\u2019t count it. They\u2019ll get your message, and nothing in inventory changes.</p>'
+    + '<textarea class="admin-input m-dialog-text" id="m-cancel-reason" rows="4" maxlength="240" placeholder="e.g. The cellar is locked and I don\u2019t have the key"></textarea>'
+    + '<div id="m-cancel-err" class="m-login-error"></div>'
+    + '<div class="m-dialog-actions"><button class="btn btn-secondary" onclick="mSheetCancelDialogClose()">Back</button>'
+    + '<button class="btn btn-danger" id="m-cancel-send" onclick="mSheetCancelSend(\'' + sheetId + '\')">Cancel Count</button></div></div>';
+  document.body.appendChild(d);
+  document.getElementById('m-cancel-reason').focus();
+}
+
+function mSheetCancelDialogClose() {
+  const d = document.getElementById('m-cancel-dialog');
+  if (d) d.remove();
+}
+
+async function mSheetCancelSend(sheetId) {
+  const sheet = mSheets.find((s) => s.id === sheetId);
+  const reason = document.getElementById('m-cancel-reason').value.trim();
+  const err = document.getElementById('m-cancel-err');
+  const btn = document.getElementById('m-cancel-send');
+  if (reason.length < 3) { err.textContent = 'Please add a short reason.'; return; }
+  if (!navigator.onLine) { err.textContent = 'You need a connection to cancel this. Try again when you have signal.'; return; }
+  btn.disabled = true;
+  err.textContent = '';
+
+  const { error } = await window.supabase.rpc('close_count_sheet', { p_sheet_id: sheetId, p_reason: reason });
+  if (error) { err.textContent = error.message; btn.disabled = false; return; }
+
+  // Counts staged on it were never applied; stop them syncing.
+  const queue = mSheetQueue();
+  (mSheetLines[sheetId] || []).forEach((l) => { delete queue[l.id]; });
+  writeJson(M_SHEET_QUEUE_KEY, queue);
+  mSheetCancelDialogClose();
+  mSheetClose();
+
+  const who = (sheet && mSheetCreators[sheet.created_by]) || 'The sender';
+  let told = false;
+  try {
+    const { data: { session } } = await window.supabase.auth.getSession();
+    const res = await fetch('/api/notify-count-sheet', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token },
+      body: JSON.stringify({ sheet_id: sheetId, event: 'closed' }),
+    });
+    const data = await res.json().catch(() => ({}));
+    told = res.ok && data.sent > 0;
+  } catch (e) { /* the reason is on the sheet either way */ }
+  toast(told ? 'Count cancelled \u2014 ' + who + ' has been told' : 'Count cancelled. ' + who + ' will see your message on the sheet.');
+  await loadMySheets();
 }
 
 window.addEventListener('online', mSheetFlush);
