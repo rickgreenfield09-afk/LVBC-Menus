@@ -167,7 +167,7 @@ function renderCsItemList() {
     const added = csCart.items.has(i.id);
     const btn = whole ? '<span class="cs-count">In cart</span>'
       : '<button class="btn btn-sm ' + (added ? 'btn-secondary' : 'btn-primary') + '" onclick="csToggleItem(\'' + i.id + '\')">' + (added ? '&#10003; Added' : '+ Add') + '</button>';
-    return '<div class="cs-row"><div class="cs-row-name">' + escHtml(i.name) + (i.subcategory ? ' <span class="cs-count">' + escHtml(i.subcategory) + '</span>' : '') + '</div>' + btn + '</div>';
+    return '<div class="cs-row"><div class="cs-row-main">' + invPhotoThumbHtml(i.photo_url, i.name) + '<div class="cs-row-name">' + escHtml(i.name) + (i.subcategory ? ' <span class="cs-count">' + escHtml(i.subcategory) + '</span>' : '') + '</div></div>' + btn + '</div>';
   }).join('') : '<div class="loading">' + (csSearch ? 'Nothing matches that.' : 'No items yet.') + '</div>';
   el.scrollTop = top;
 }
@@ -217,8 +217,8 @@ function csMerchPanelHtml() {
     html += '<div class="cs-crumbs"><button class="merch-link" onclick="csMerchBack()">&lsaquo; Types</button> / ' + escHtml(MERCH_TYPE_LABELS[csMerchType] || csMerchType) + '</div>'
       + '<div class="cs-step">2 &middot; Choose a style</div>' + ts.map((s) => {
         const inCart = csCart.merch.filter((e) => e.styleId === s.id);
-        return '<div class="cs-row"><div class="cs-row-name">' + escHtml(csMerchStyleLabel(s))
-          + (inCart.length ? ' <span class="cs-count">in cart</span>' : '') + '</div>'
+        return '<div class="cs-row"><div class="cs-row-main">' + invPhotoThumbHtml(s.photo_url, csMerchStyleLabel(s)) + '<div class="cs-row-name">' + escHtml(csMerchStyleLabel(s))
+          + (inCart.length ? ' <span class="cs-count">in cart</span>' : '') + '</div></div>'
           + '<button class="btn btn-sm btn-primary" onclick="csPickMerchStyle(\'' + s.id + '\')">Sizes &rsaquo;</button></div>';
       }).join('');
     return html + '</div>';
@@ -228,6 +228,8 @@ function csMerchPanelHtml() {
   const variants = csMerchVariantsOf(csMerchStyleId);
   const existing = csMerchEntry(csMerchStyleId, csMerchLoc);
   html += '<div class="cs-crumbs"><button class="merch-link" onclick="csMerchBack()">&lsaquo; ' + escHtml(MERCH_TYPE_LABELS[csMerchType] || 'Back') + '</button> / ' + escHtml(csMerchStyleLabel(style)) + '</div>'
+    + '<div class="cs-style-head"><div class="cs-thumb-lg">' + invPhotoThumbHtml(style.photo_url, csMerchStyleLabel(style)) + '</div><div><div class="cs-style-name">' + escHtml(csMerchStyleLabel(style)) + '</div>'
+    + '<div class="cs-count">' + variants.length + ' size' + (variants.length === 1 ? '' : 's') + '</div></div></div>'
     + '<div class="cs-step">3 &middot; Choose the sizes to count</div>'
     + '<div class="cs-chips">' + variants.map((v) => '<button class="cs-chip' + (csMerchSizes.has(v.id) ? ' on' : '') + '" onclick="csToggleSize(\'' + v.id + '\')">' + escHtml(csSizeLabel(v)) + '</button>').join('') + '</div>'
     + '<div style="display:flex;gap:14px;margin:8px 0 12px;"><button class="merch-link" onclick="csSelectSizes(true)">all sizes</button><button class="merch-link" onclick="csSelectSizes(false)">none</button></div>'
@@ -299,7 +301,7 @@ function renderCsCart() {
     rows += '<div class="cs-cart-row"><div><strong>' + escHtml(INV_CATEGORY_LABELS[cat]) + '</strong> <span class="cs-count">everything &middot; ' + n + (merch ? ' sizes' : ' items') + '</span></div>' + x('csRemoveCat(\'' + cat + '\')') + '</div>';
   });
   csItems.filter((i) => csCart.items.has(i.id)).sort((a, b) => a.name.localeCompare(b.name)).forEach((i) => {
-    rows += '<div class="cs-cart-row"><div>' + escHtml(i.name) + ' <span class="cs-count">' + escHtml(INV_CATEGORY_LABELS[i.category]) + '</span></div>' + x('csToggleItem(\'' + i.id + '\')') + '</div>';
+    rows += '<div class="cs-cart-row"><div class="cs-row-main">' + invPhotoThumbHtml(i.photo_url, i.name) + '<div>' + escHtml(i.name) + ' <span class="cs-count">' + escHtml(INV_CATEGORY_LABELS[i.category]) + '</span></div></div>' + x('csToggleItem(\'' + i.id + '\')') + '</div>';
   });
   csCart.merch.forEach((e) => {
     const style = csMerch.styles.find((s) => s.id === e.styleId);
@@ -307,7 +309,7 @@ function renderCsCart() {
     const all = csMerchVariantsOf(e.styleId);
     const picked = all.filter((v) => e.variantIds.has(v.id));
     const sizes = picked.length === all.length ? 'all sizes' : picked.map(csSizeLabel).join(', ');
-    rows += '<div class="cs-cart-row"><div>' + escHtml(csMerchStyleLabel(style)) + '<div class="cs-count">' + escHtml(sizes) + ' &middot; ' + (e.locId ? escHtml(invLocationPath(e.locId)) : 'where it’s stocked now') + '</div></div>'
+    rows += '<div class="cs-cart-row"><div class="cs-row-main">' + invPhotoThumbHtml(style.photo_url, csMerchStyleLabel(style)) + '<div>' + escHtml(csMerchStyleLabel(style)) + '<div class="cs-count">' + escHtml(sizes) + ' &middot; ' + (e.locId ? escHtml(invLocationPath(e.locId)) : 'where it’s stocked now') + '</div></div></div>'
       + x('csRemoveMerchEntry(\'' + e.key + '\')') + '</div>';
   });
   document.getElementById('cs-cart').innerHTML = rows
@@ -531,8 +533,8 @@ async function renderCsDetail() {
       result = escHtml(unit(l, l.before_value)) + ' &rarr; <strong>' + escHtml(unit(l, l.counted_value)) + '</strong> '
         + (d === 0 ? '<span style="color:var(--muted);">no change</span>' : '<span style="color:' + (d > 0 ? 'var(--teal)' : 'var(--red)') + ';">' + (d > 0 ? '+' : '') + d + (l.kind === 'percent' ? ' pts' : '') + '</span>');
     } else result = '<strong>' + escHtml(unit(l, l.counted_value)) + '</strong>';
-    trs += '<tr><td style="font-weight:500;">' + escHtml(l.label) + (l.size ? ' <span style="color:var(--sub);font-weight:400;">' + escHtml(l.size) + '</span>' : '')
-      + (l.detail ? '<div style="font-size:11px;color:var(--sub);">' + escHtml(l.detail) + '</div>' : '') + '</td>'
+    trs += '<tr><td style="font-weight:500;"><div class="cs-row-main">' + invPhotoThumbHtml(l.photo_url, l.label) + '<div>' + escHtml(l.label) + (l.size ? ' <span style="color:var(--sub);font-weight:400;">' + escHtml(l.size) + '</span>' : '')
+      + (l.detail ? '<div style="font-size:11px;color:var(--sub);">' + escHtml(l.detail) + '</div>' : '') + '</div></div></td>'
       + '<td>' + (l.kind === 'percent' ? '<span style="font-size:11px;color:var(--muted);">%</span>' : '<span style="font-size:11px;color:var(--muted);">units</span>') + '</td>'
       + '<td style="font-size:13px;">' + result + '</td></tr>';
   });

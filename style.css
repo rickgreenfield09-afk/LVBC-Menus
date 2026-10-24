@@ -530,6 +530,11 @@
   .cs-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--border);font-size:13px;}
   .cs-row:first-child{border-top:none;}
   .cs-row-name{min-width:0;}
+  .cs-row-main{display:flex;align-items:center;gap:10px;min-width:0;}
+  .cs-row .inv-thumb,.cs-cart-row .inv-thumb,.cs-row-main .inv-thumb{width:40px;height:40px;}
+  .cs-style-head{display:flex;align-items:center;gap:14px;margin:6px 0 12px;}
+  .cs-thumb-lg .inv-thumb{width:96px;height:96px;}
+  .cs-style-name{font-size:15px;font-weight:500;margin-bottom:2px;}
   .cs-step{font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin:4px 0 6px;}
   .cs-crumbs{font-size:12px;color:var(--sub);margin-bottom:8px;}
   .cs-note{font-size:13px;color:var(--sub);}
