@@ -46,7 +46,7 @@ window.currentStaff = null;
 const M_PROFILE_KEY = 'lvbc-mobile-profile';
 // "tasks" is the My Shift page; its id predates the rename.
 const M_TAB_TITLES = { tasks: 'My Shift', schedule: 'Schedule', inventory: 'Inventory', team: 'Team' };
-const M_TAB_LOADERS = { tasks: () => loadTasks(), schedule: () => loadSchedule(), inventory: () => loadInventoryCount(), team: () => loadTeam() };
+const M_TAB_LOADERS = { tasks: () => loadTasks(), schedule: () => loadSchedule(), inventory: () => { loadInventoryCount(); loadMySheets(); }, team: () => loadTeam() };
 
 // ── AUTH ─────────────────────────────────────────────────
 async function checkSession() {
@@ -211,9 +211,16 @@ function renderLoggedIn() {
   document.getElementById('app-shell').style.display = 'flex';
   document.getElementById('staff-name-badge').textContent = window.currentStaff.name;
   updateOfflineBar();
-  // Land on today's shift.
+  // Land on today's shift, or on the inventory tab when a count-sheet push brought us here.
   showTab('tasks', document.querySelector('.m-tabbar .nav-btn'));
+  if (location.hash === '#count') showCountSheets();
+  else loadMySheets();
 }
+
+function showCountSheets() {
+  showTab('inventory', document.querySelectorAll('.m-tabbar .nav-btn')[2]);
+}
+window.addEventListener('hashchange', () => { if (location.hash === '#count' && window.currentStaff) showCountSheets(); });
 
 function renderLoggedOut(msg) {
   document.getElementById('app-shell').style.display = 'none';

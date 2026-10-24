@@ -46,6 +46,31 @@ export async function requireAdmin(req, res) {
   return { id: caller.id, token };
 }
 
+// Same as requireAdmin but any signed-in staff member passes.
+export async function requireStaff(req, res) {
+  const token = (req.headers.authorization || '').replace('Bearer ', '');
+  if (!token) { res.status(401).json({ error: 'Missing auth token' }); return null; }
+
+  const { SUPABASE_URL, SUPABASE_ANON_KEY } = process.env;
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    res.status(500).json({ error: 'Missing SUPABASE_URL/SUPABASE_ANON_KEY/SUPABASE_SERVICE_ROLE_KEY env vars.' });
+    return null;
+  }
+
+  const callerRes = await fetch(SUPABASE_URL + '/auth/v1/user', {
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + token },
+  });
+  const caller = await callerRes.json();
+  if (!callerRes.ok || !caller || !caller.id) { res.status(401).json({ error: 'Could not verify session' }); return null; }
+
+  const profRes = await fetch(SUPABASE_URL + '/rest/v1/staff_profiles?select=id&id=eq.' + caller.id, {
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + token },
+  });
+  const prof = await profRes.json();
+  if (!profRes.ok || !prof || !prof.length) { res.status(403).json({ error: 'Staff only.' }); return null; }
+  return { id: caller.id, token };
+}
+
 // The Auth admin API has no filter-by-email, so page through every
 // user. Fine at brewery-roster scale.
 export async function findAuthUserByEmail(email) {

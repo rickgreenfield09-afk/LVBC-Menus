@@ -575,6 +575,7 @@
       <div class="screen" id="screen-inventory">
         <div class="sub-tabs">
           <button class="sub-tab active" id="inventorytab-btn-dashboard" onclick="setInventoryTab('dashboard', this)">Dashboard</button>
+          <button class="sub-tab" id="inventorytab-btn-run" onclick="setInventoryTab('run', this)">Run Inventory</button>
           <button class="sub-tab" id="inventorytab-btn-consumables" onclick="setInventoryTab('consumables', this)">Consumables</button>
           <button class="sub-tab" id="inventorytab-btn-snacks" onclick="setInventoryTab('snacks', this)">Snacks</button>
           <button class="sub-tab" id="inventorytab-btn-coffee" onclick="setInventoryTab('coffee', this)">Coffee</button>
@@ -596,6 +597,60 @@
         </div>
 
         <!-- CONSUMABLES / SNACKS / COFFEE / WINE (shared template); MERCHANDISE is built by js/merch.js -->
+        <!-- RUN INVENTORY (count sheets; js/countsheets.js) -->
+        <div class="sub-sec" id="inventorytab-run">
+          <div class="grid-2">
+            <div class="grid2-col">
+              <div class="menu-col-header"><div class="section-label" style="margin:0;">Build a Count Sheet</div></div>
+              <div class="card">
+                <div class="form-row">
+                  <div class="form-group"><label class="form-label">Sheet Name</label><input class="form-input" style="width:100%;" type="text" id="cs-title"></div>
+                  <div class="form-group"><label class="form-label">Assign To</label><select class="form-select" style="width:100%;" id="cs-assignee"><option value="">Choose who counts it</option></select></div>
+                </div>
+                <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Note for the counter (optional)</label><input class="form-input" style="width:100%;" type="text" id="cs-notes" placeholder="e.g. Cellar first, then the taproom"></div>
+
+                <label class="form-label">Include whole categories</label>
+                <div class="cs-box" id="cs-categories" style="margin-bottom:16px;"></div>
+
+                <label class="form-label">Or pick specific items</label>
+                <input class="form-input" style="width:100%;margin-bottom:8px;" type="text" id="cs-search" placeholder="Search items and merch" oninput="csSetSearch(this.value)">
+                <div class="cs-box cs-picker" id="cs-picker" style="margin-bottom:12px;"></div>
+                <div class="form-group" style="margin-bottom:16px;">
+                  <label class="form-label">Count picked merch at</label>
+                  <select class="form-select" style="width:100%;" id="cs-merch-loc" onchange="renderCsSummary()"><option value="">Where it&rsquo;s stocked now</option></select>
+                </div>
+
+                <div id="cs-summary" style="font-size:13px;color:var(--sub);margin-bottom:12px;"></div>
+                <div id="cs-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
+                <button class="btn btn-primary" style="width:100%;" id="cs-create-btn" onclick="csCreateSheet()">Create &amp; Send to Phone</button>
+              </div>
+            </div>
+            <div class="grid2-col">
+              <div class="menu-col-header">
+                <div class="section-label" style="margin:0;">Count Sheets</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                  <button class="tap-toggle-btn active" id="cs-filter-assigned" onclick="setCsFilter('assigned')">Out</button>
+                  <button class="tap-toggle-btn" id="cs-filter-submitted" onclick="setCsFilter('submitted')">Submitted</button>
+                  <button class="tap-toggle-btn" id="cs-filter-cancelled" onclick="setCsFilter('cancelled')">Cancelled</button>
+                  <button class="tap-toggle-btn" id="cs-filter-all" onclick="setCsFilter('all')">All</button>
+                  <button class="btn btn-secondary btn-sm" onclick="loadCsSheets()">Refresh</button>
+                </div>
+              </div>
+              <div id="cs-list"><div class="loading">Loading...</div></div>
+            </div>
+          </div>
+
+          <div id="cs-detail-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:500;align-items:center;justify-content:center;">
+            <div class="card" style="width:760px;max-width:95vw;max-height:90vh;overflow-y:auto;">
+              <div class="menu-col-header">
+                <div class="section-label" style="margin:0;" id="cs-detail-title">Count Sheet</div>
+                <button class="btn btn-sm btn-secondary" onclick="closeCsDetail()">&#10005; Close</button>
+              </div>
+              <div id="cs-detail-body"></div>
+            </div>
+          </div>
+        </div>
+
         <div class="sub-sec" id="inventorytab-consumables"></div>
         <div class="sub-sec" id="inventorytab-snacks"></div>
         <div class="sub-sec" id="inventorytab-coffee"></div>
@@ -1379,6 +1434,7 @@
   <script src="js/marketing.js"></script>
   <script src="js/push.js"></script>
   <script src="js/inventory.js"></script>
+  <script src="js/countsheets.js"></script>
   <script src="js/locations.js"></script>
   <script src="js/merch.js"></script>
   <script src="js/menu.js"></script>

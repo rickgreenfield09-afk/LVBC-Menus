@@ -171,3 +171,14 @@
   .m-team-send{position:sticky;bottom:calc(64px + env(safe-area-inset-bottom));padding-top:8px;}
   .m-team-send .btn{display:block;width:100%;text-align:center;text-decoration:none;}
   .m-team-send .btn:disabled{opacity:0.5;}
+  /* Count sheets (js/countsheets.js) */
+  .m-nav-dot{display:inline-block;min-width:16px;padding:0 5px;margin-left:4px;border-radius:8px;background:var(--amber);color:#111;font-size:10px;line-height:16px;font-family:'DM Mono',monospace;vertical-align:middle;}
+  .m-sheet-card{display:flex;align-items:center;gap:12px;margin-bottom:10px;}
+  .m-sheet .m-cs-card{align-items:flex-start;margin-bottom:10px;}
+  .m-cs-ctl{grid-template-columns:48px 1fr 48px;margin-top:8px;}
+  .m-sheet .m-cs-ctl .m-pct{font-size:30px;}
+  .m-cs-val{font-size:30px;}
+  .m-cs-same{height:48px;font-size:14px;padding:0 6px;}
+  .m-cs-size{margin-top:10px;}
+  .m-cs-size-name{font-size:13px;font-weight:500;display:flex;align-items:baseline;gap:8px;}
+  .m-cs-size-name span{font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);font-weight:400;}

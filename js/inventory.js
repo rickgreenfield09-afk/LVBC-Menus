@@ -48,6 +48,7 @@ function setInventoryTab(tab, btn) {
   if (btn) btn.classList.add('active');
   document.getElementById('inventorytab-' + tab).classList.add('active');
   if (tab === 'dashboard') loadInventoryDashboard();
+  else if (tab === 'run') loadRunInventory();
   else if (INV_ITEM_CATEGORIES.includes(tab)) { ensureCategoryTemplateBuilt(tab); loadInventoryCategory(tab); }
   else if (tab === 'merchandise') loadMerch();
   else if (tab === 'locations') loadInventoryLocations();
