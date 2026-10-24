@@ -1,6 +1,7 @@
 // countsheets.js
 // Screen: Inventory > Run Inventory (migration_050). Build a one-off
-// count sheet from whole categories and/or hand-picked items and merch,
+// count sheet with a shopping-cart flow: add whole categories and/or
+// hand-picked items and merch sizes to the cart,
 // assign it to an employee, and it shows up on their phone
 // (mobile/js/countsheets.js) with a push notification. They count every
 // line and submit; submit_count_sheet() then applies the counts to live
@@ -30,9 +31,12 @@ let csSheets = [];
 let csProgress = {};            // sheet id -> { total, counted } for sheets still out
 let csFilter = 'assigned';      // list filter: assigned | submitted | cancelled | all
 let csSearch = '';
-let csSelCats = new Set();
-let csSelItems = new Set();
-let csSelStyles = new Set();
+let csCart = { cats: new Set(), items: new Set(), merch: [] };  // see the BUILDER section
+let csPanel = null;          // category whose add panel is open
+let csMerchType = null;      // merch flow: a type, then a style, then its sizes
+let csMerchStyleId = null;
+let csMerchSizes = new Set();
+let csMerchLoc = '';
 let csDetailId = null;
 
 async function csAuthHeaders() {
@@ -51,7 +55,7 @@ async function loadRunInventory() {
   const [staff, items, products, styles, variants, stock] = await Promise.all([
     window.supabase.from('staff_profiles').select('id,name,show_in_roster').order('name'),
     window.supabase.from('inventory_items').select('id,name,category,subcategory,location,location_id,photo_url,wine_menu_id'),
-    window.supabase.from('inventory_merch_products').select('id,name').eq('status', 'active'),
+    window.supabase.from('inventory_merch_products').select('id,name,product_type').eq('status', 'active'),
     window.supabase.from('inventory_merch_styles').select('id,product_id,color,design,photo_url').eq('status', 'active'),
     window.supabase.from('inventory_merch_variants').select('id,style_id,size,size_sort').order('size_sort'),
     window.supabase.from('inventory_merch_stock').select('variant_id,location_id'),
@@ -66,14 +70,16 @@ async function loadRunInventory() {
   if (csStaff.some((s) => s.id === prev)) sel.value = prev;
   const titleEl = document.getElementById('cs-title');
   if (!titleEl.value) titleEl.value = 'Inventory count — ' + new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  document.getElementById('cs-merch-loc').innerHTML = '<option value="">Where it’s stocked now</option>'
-    + invLocationsFlat().map((l) => '<option value="' + l.id + '">' + escHtml(l.path) + '</option>').join('');
 
   renderCsBuilder();
   await loadCsSheets();
 }
 
-// ── BUILDER ──────────────────────────────────────
+// ── BUILDER (cart) ───────────────────────────────
+// Category buttons open a panel to add items to the cart. Merchandise
+// goes type > style > sizes (and where to count them). The cart holds
+// whole categories, single items, and merch style/size picks; the sheet
+// is built from it when you press Create.
 function csMerchStyleLabel(s) {
   const p = csMerch.products.find((x) => x.id === s.product_id);
   const detail = [s.color, s.design].filter(Boolean).join(' · ');
@@ -84,85 +90,253 @@ function csMerchStyleList() {
   const live = new Set(csMerch.products.map((p) => p.id));
   return csMerch.styles.filter((s) => live.has(s.product_id)).sort((a, b) => csMerchStyleLabel(a).localeCompare(csMerchStyleLabel(b)));
 }
+function csMerchTypeOf(style) {
+  const p = csMerch.products.find((x) => x.id === style.product_id);
+  return p ? p.product_type : 'other';
+}
+function csMerchVariantsOf(styleId) { return csMerch.variants.filter((v) => v.style_id === styleId); }
+function csSizeLabel(v) { return v.size || 'One size'; }
+function csMerchKey(styleId, locId) { return styleId + '|' + (locId || ''); }
+function csMerchEntry(styleId, locId) { return csCart.merch.find((e) => e.key === csMerchKey(styleId, locId)); }
 
-function csToggleCat(cat, on) {
-  if (on) csSelCats.add(cat); else csSelCats.delete(cat);
-  renderCsBuilder();
+function csResetCart() {
+  csCart = { cats: new Set(), items: new Set(), merch: [] };
+  csPanel = null; csMerchType = null; csMerchStyleId = null; csMerchSizes = new Set(); csMerchLoc = ''; csSearch = '';
 }
-function csToggleItem(id, on) {
-  if (on) csSelItems.add(id); else csSelItems.delete(id);
-  renderCsBuilder();
-}
-function csToggleStyle(id, on) {
-  if (on) csSelStyles.add(id); else csSelStyles.delete(id);
-  renderCsBuilder();
-}
-function csSetSearch(v) {
-  csSearch = v.trim().toLowerCase();
-  renderCsPicker();
-}
+function csClearCart() { csResetCart(); renderCsBuilder(); }
 
 function renderCsBuilder() {
-  const merchStyles = csMerchStyleList();
-  const merchSizes = csMerch.variants.filter((v) => merchStyles.some((s) => s.id === v.style_id)).length;
-  document.getElementById('cs-categories').innerHTML = CS_PERCENT_CATEGORIES.concat('merchandise').map((cat) => {
-    const n = cat === 'merchandise' ? merchStyles.length : csItems.filter((i) => i.category === cat).length;
-    const unit = cat === 'merchandise' ? 'style' : 'item';
-    return '<label class="cs-check"><input type="checkbox"' + (csSelCats.has(cat) ? ' checked' : '') + ' onchange="csToggleCat(\'' + cat + '\', this.checked)"> '
-      + escHtml(INV_CATEGORY_LABELS[cat]) + ' <span class="cs-count">' + n + ' ' + unit + (n === 1 ? '' : 's') + (cat === 'merchandise' ? ', ' + merchSizes + ' sizes' : '') + '</span></label>';
-  }).join('');
-  renderCsPicker();
+  renderCsCatButtons();
+  renderCsPanel();
+  renderCsCart();
   renderCsSummary();
 }
 
-function renderCsPicker() {
-  const match = (text) => !csSearch || text.toLowerCase().includes(csSearch);
-  let html = '';
-  CS_PERCENT_CATEGORIES.filter((cat) => !csSelCats.has(cat)).forEach((cat) => {
-    const rows = csItems.filter((i) => i.category === cat && match(i.name + ' ' + (i.subcategory || ''))).sort((a, b) => a.name.localeCompare(b.name));
-    if (!rows.length) return;
-    html += '<div class="cs-pick-head">' + escHtml(INV_CATEGORY_LABELS[cat]) + '</div>'
-      + rows.map((i) => '<label class="cs-check"><input type="checkbox"' + (csSelItems.has(i.id) ? ' checked' : '') + ' onchange="csToggleItem(\'' + i.id + '\', this.checked)"> '
-        + escHtml(i.name) + (i.subcategory ? ' <span class="cs-count">' + escHtml(i.subcategory) + '</span>' : '') + '</label>').join('');
-  });
-  if (!csSelCats.has('merchandise')) {
-    const rows = csMerchStyleList().filter((s) => match(csMerchStyleLabel(s)));
-    if (rows.length) {
-      html += '<div class="cs-pick-head">Merchandise</div>'
-        + rows.map((s) => '<label class="cs-check"><input type="checkbox"' + (csSelStyles.has(s.id) ? ' checked' : '') + ' onchange="csToggleStyle(\'' + s.id + '\', this.checked)"> '
-          + escHtml(csMerchStyleLabel(s)) + '</label>').join('');
-    }
+// What's in the cart for a category, as a short badge: "All" or a count.
+function csCartBadge(cat) {
+  if (csCart.cats.has(cat)) return 'All';
+  if (cat === 'merchandise') return csCart.merch.length || '';
+  return csItems.filter((i) => i.category === cat && csCart.items.has(i.id)).length || '';
+}
+
+function renderCsCatButtons() {
+  document.getElementById('cs-cat-btns').innerHTML = CS_PERCENT_CATEGORIES.concat('merchandise').map((cat) => {
+    const n = csCartBadge(cat);
+    return '<button class="tap-toggle-btn' + (csPanel === cat ? ' active' : '') + '" onclick="csTogglePanel(\'' + cat + '\')">'
+      + escHtml(INV_CATEGORY_LABELS[cat]) + (n ? ' <span class="cs-badge">' + n + '</span>' : '') + '</button>';
+  }).join('');
+}
+
+function csTogglePanel(cat) {
+  csPanel = csPanel === cat ? null : cat;
+  csSearch = ''; csMerchType = null; csMerchStyleId = null;
+  renderCsBuilder();
+}
+
+function renderCsPanel() {
+  const el = document.getElementById('cs-panel');
+  if (!csPanel) { el.innerHTML = ''; return; }
+  if (csPanel === 'merchandise') { el.innerHTML = csMerchPanelHtml(); return; }
+  const cat = csPanel;
+  const label = INV_CATEGORY_LABELS[cat];
+  const count = csItems.filter((i) => i.category === cat).length;
+  const whole = csCart.cats.has(cat);
+  el.innerHTML = '<div class="cs-panel"><div class="cs-panel-head"><div><strong>' + escHtml(label) + '</strong> <span class="cs-count">' + count + ' item' + (count === 1 ? '' : 's') + '</span></div>'
+    + (whole ? '<button class="btn btn-sm btn-secondary" onclick="csRemoveCat(\'' + cat + '\')">Remove whole category</button>'
+      : '<button class="btn btn-sm btn-primary"' + (count ? '' : ' disabled') + ' onclick="csAddCat(\'' + cat + '\')">Add all ' + count + '</button>') + '</div>'
+    + '<input class="form-input" style="width:100%;margin-bottom:8px;" type="text" id="cs-search" placeholder="Search ' + escHtml(label.toLowerCase()) + '" value="' + escHtml(csSearch) + '" oninput="csSetSearch(this.value)">'
+    + '<div class="cs-list" id="cs-items-list"></div></div>';
+  renderCsItemList();
+}
+
+function csSetSearch(v) {
+  csSearch = v.trim().toLowerCase();
+  renderCsItemList();
+}
+
+function renderCsItemList() {
+  const el = document.getElementById('cs-items-list');
+  if (!el || !csPanel || csPanel === 'merchandise') return;
+  const top = el.scrollTop;
+  const whole = csCart.cats.has(csPanel);
+  const rows = csItems.filter((i) => i.category === csPanel && (!csSearch || (i.name + ' ' + (i.subcategory || '')).toLowerCase().includes(csSearch)))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  el.innerHTML = rows.length ? rows.map((i) => {
+    const added = csCart.items.has(i.id);
+    const btn = whole ? '<span class="cs-count">In cart</span>'
+      : '<button class="btn btn-sm ' + (added ? 'btn-secondary' : 'btn-primary') + '" onclick="csToggleItem(\'' + i.id + '\')">' + (added ? '&#10003; Added' : '+ Add') + '</button>';
+    return '<div class="cs-row"><div class="cs-row-name">' + escHtml(i.name) + (i.subcategory ? ' <span class="cs-count">' + escHtml(i.subcategory) + '</span>' : '') + '</div>' + btn + '</div>';
+  }).join('') : '<div class="loading">' + (csSearch ? 'Nothing matches that.' : 'No items yet.') + '</div>';
+  el.scrollTop = top;
+}
+
+function csToggleItem(id) {
+  if (csCart.items.has(id)) csCart.items.delete(id); else csCart.items.add(id);
+  renderCsItemList();
+  renderCsCatButtons();
+  renderCsCart();
+  renderCsSummary();
+}
+
+function csAddCat(cat) {
+  csCart.cats.add(cat);
+  if (cat === 'merchandise') csCart.merch = [];
+  else csItems.filter((i) => i.category === cat).forEach((i) => csCart.items.delete(i.id));
+  renderCsBuilder();
+}
+function csRemoveCat(cat) {
+  csCart.cats.delete(cat);
+  renderCsBuilder();
+}
+
+// ── merchandise: type > style > sizes ──
+function csMerchPanelHtml() {
+  const styles = csMerchStyleList();
+  const sizeTotal = csMerch.variants.filter((v) => styles.some((s) => s.id === v.style_id)).length;
+  const whole = csCart.cats.has('merchandise');
+  let html = '<div class="cs-panel"><div class="cs-panel-head"><div><strong>Merchandise</strong> <span class="cs-count">' + styles.length + ' styles, ' + sizeTotal + ' sizes</span></div>'
+    + (whole ? '<button class="btn btn-sm btn-secondary" onclick="csRemoveCat(\'merchandise\')">Remove all merchandise</button>'
+      : '<button class="btn btn-sm btn-primary"' + (styles.length ? '' : ' disabled') + ' onclick="csAddCat(\'merchandise\')">Add all merchandise</button>') + '</div>';
+  if (whole) return html + '<div class="cs-note">Every style and size is in the cart.</div></div>';
+
+  if (!csMerchType) {
+    const types = Object.keys(MERCH_TYPE_LABELS).filter((t) => styles.some((s) => csMerchTypeOf(s) === t));
+    html += '<div class="cs-step">1 &middot; Choose a type</div>' + (types.length ? types.map((t) => {
+      const ts = styles.filter((s) => csMerchTypeOf(s) === t);
+      return '<div class="cs-row"><div class="cs-row-name">' + escHtml(MERCH_TYPE_LABELS[t]) + ' <span class="cs-count">' + ts.length + ' style' + (ts.length === 1 ? '' : 's') + '</span></div>'
+        + '<div style="display:flex;gap:6px;"><button class="btn btn-sm btn-secondary" onclick="csAddMerchType(\'' + t + '\')">Add all</button>'
+        + '<button class="btn btn-sm btn-primary" onclick="csPickMerchType(\'' + t + '\')">Choose &rsaquo;</button></div></div>';
+    }).join('') : '<div class="loading">No merchandise yet.</div>');
+    return html + '</div>';
   }
-  document.getElementById('cs-picker').innerHTML = html || '<div class="loading">' + (csSearch ? 'Nothing matches that.' : 'Every category is already included.') + '</div>';
+
+  if (!csMerchStyleId) {
+    const ts = styles.filter((s) => csMerchTypeOf(s) === csMerchType);
+    html += '<div class="cs-crumbs"><button class="merch-link" onclick="csMerchBack()">&lsaquo; Types</button> / ' + escHtml(MERCH_TYPE_LABELS[csMerchType] || csMerchType) + '</div>'
+      + '<div class="cs-step">2 &middot; Choose a style</div>' + ts.map((s) => {
+        const inCart = csCart.merch.filter((e) => e.styleId === s.id);
+        return '<div class="cs-row"><div class="cs-row-name">' + escHtml(csMerchStyleLabel(s))
+          + (inCart.length ? ' <span class="cs-count">in cart</span>' : '') + '</div>'
+          + '<button class="btn btn-sm btn-primary" onclick="csPickMerchStyle(\'' + s.id + '\')">Sizes &rsaquo;</button></div>';
+      }).join('');
+    return html + '</div>';
+  }
+
+  const style = csMerch.styles.find((s) => s.id === csMerchStyleId);
+  const variants = csMerchVariantsOf(csMerchStyleId);
+  const existing = csMerchEntry(csMerchStyleId, csMerchLoc);
+  html += '<div class="cs-crumbs"><button class="merch-link" onclick="csMerchBack()">&lsaquo; ' + escHtml(MERCH_TYPE_LABELS[csMerchType] || 'Back') + '</button> / ' + escHtml(csMerchStyleLabel(style)) + '</div>'
+    + '<div class="cs-step">3 &middot; Choose the sizes to count</div>'
+    + '<div class="cs-chips">' + variants.map((v) => '<button class="cs-chip' + (csMerchSizes.has(v.id) ? ' on' : '') + '" onclick="csToggleSize(\'' + v.id + '\')">' + escHtml(csSizeLabel(v)) + '</button>').join('') + '</div>'
+    + '<div style="display:flex;gap:14px;margin:8px 0 12px;"><button class="merch-link" onclick="csSelectSizes(true)">all sizes</button><button class="merch-link" onclick="csSelectSizes(false)">none</button></div>'
+    + '<div class="form-group" style="margin-bottom:12px;"><label class="form-label">Count at</label><select class="form-select" style="width:100%;" onchange="csSetMerchLoc(this.value)">'
+    + '<option value="">Where it’s stocked now</option>'
+    + invLocationsFlat().map((l) => '<option value="' + l.id + '"' + (l.id === csMerchLoc ? ' selected' : '') + '>' + escHtml(l.path) + '</option>').join('') + '</select></div>'
+    + '<button class="btn btn-primary" style="width:100%;"' + (csMerchSizes.size ? '' : ' disabled') + ' onclick="csAddMerchStyle()">'
+    + (existing ? 'Update cart' : 'Add ' + csMerchSizes.size + ' size' + (csMerchSizes.size === 1 ? '' : 's') + ' to cart') + '</button></div>';
+  return html;
+}
+
+function csPickMerchType(t) { csMerchType = t; csMerchStyleId = null; renderCsPanel(); }
+function csPickMerchStyle(id) {
+  csMerchStyleId = id;
+  csMerchLoc = '';
+  const existing = csMerchEntry(id, '');
+  csMerchSizes = new Set(existing ? existing.variantIds : csMerchVariantsOf(id).map((v) => v.id));
+  renderCsPanel();
+}
+function csMerchBack() {
+  if (csMerchStyleId) csMerchStyleId = null; else csMerchType = null;
+  renderCsPanel();
+}
+function csToggleSize(id) {
+  if (csMerchSizes.has(id)) csMerchSizes.delete(id); else csMerchSizes.add(id);
+  renderCsPanel();
+}
+function csSelectSizes(all) {
+  csMerchSizes = new Set(all ? csMerchVariantsOf(csMerchStyleId).map((v) => v.id) : []);
+  renderCsPanel();
+}
+function csSetMerchLoc(v) {
+  csMerchLoc = v;
+  const existing = csMerchEntry(csMerchStyleId, v);
+  if (existing) csMerchSizes = new Set(existing.variantIds);
+  renderCsPanel();
+}
+
+function csSetMerchEntry(styleId, locId, variantIds) {
+  const existing = csMerchEntry(styleId, locId);
+  if (existing) existing.variantIds = new Set(variantIds);
+  else csCart.merch.push({ key: csMerchKey(styleId, locId), styleId, locId: locId || '', variantIds: new Set(variantIds) });
+}
+function csAddMerchStyle() {
+  if (!csMerchSizes.size) return;
+  csSetMerchEntry(csMerchStyleId, csMerchLoc, csMerchSizes);
+  csMerchStyleId = null;
+  renderCsBuilder();
+  toast('Added to cart');
+}
+function csAddMerchType(t) {
+  csMerchStyleList().filter((s) => csMerchTypeOf(s) === t).forEach((s) => csSetMerchEntry(s.id, '', csMerchVariantsOf(s.id).map((v) => v.id)));
+  renderCsBuilder();
+  toast('Added every ' + (MERCH_TYPE_LABELS[t] || t).toLowerCase() + ' style to the cart');
+}
+function csRemoveMerchEntry(key) {
+  csCart.merch = csCart.merch.filter((e) => e.key !== key);
+  renderCsBuilder();
+}
+
+// ── the cart ──
+function renderCsCart() {
+  let rows = '';
+  const x = (onclick) => '<button class="cs-x" aria-label="Remove" onclick="' + onclick + '">&times;</button>';
+
+  [...csCart.cats].forEach((cat) => {
+    const merch = cat === 'merchandise';
+    const n = merch ? csMerch.variants.filter((v) => csMerchStyleList().some((s) => s.id === v.style_id)).length : csItems.filter((i) => i.category === cat).length;
+    rows += '<div class="cs-cart-row"><div><strong>' + escHtml(INV_CATEGORY_LABELS[cat]) + '</strong> <span class="cs-count">everything &middot; ' + n + (merch ? ' sizes' : ' items') + '</span></div>' + x('csRemoveCat(\'' + cat + '\')') + '</div>';
+  });
+  csItems.filter((i) => csCart.items.has(i.id)).sort((a, b) => a.name.localeCompare(b.name)).forEach((i) => {
+    rows += '<div class="cs-cart-row"><div>' + escHtml(i.name) + ' <span class="cs-count">' + escHtml(INV_CATEGORY_LABELS[i.category]) + '</span></div>' + x('csToggleItem(\'' + i.id + '\')') + '</div>';
+  });
+  csCart.merch.forEach((e) => {
+    const style = csMerch.styles.find((s) => s.id === e.styleId);
+    if (!style) return;
+    const all = csMerchVariantsOf(e.styleId);
+    const picked = all.filter((v) => e.variantIds.has(v.id));
+    const sizes = picked.length === all.length ? 'all sizes' : picked.map(csSizeLabel).join(', ');
+    rows += '<div class="cs-cart-row"><div>' + escHtml(csMerchStyleLabel(style)) + '<div class="cs-count">' + escHtml(sizes) + ' &middot; ' + (e.locId ? escHtml(invLocationPath(e.locId)) : 'where it’s stocked now') + '</div></div>'
+      + x('csRemoveMerchEntry(\'' + e.key + '\')') + '</div>';
+  });
+  document.getElementById('cs-cart').innerHTML = rows
+    ? '<div class="cs-cart-scroll">' + rows + '</div>'
+    : '<div class="cs-empty">Your cart is empty. Pick a category above and add what you want counted.</div>';
 }
 
 // One line per thing to count, in walking order: by location, then name.
 function csBuildLines() {
   const lines = [];
-  const seenItems = new Set();
-  csItems.filter((i) => csSelCats.has(i.category) || csSelItems.has(i.id)).forEach((i) => {
-    if (seenItems.has(i.id)) return;
-    seenItems.add(i.id);
-    lines.push({
-      kind: 'percent', item_id: i.id, label: i.name,
-      detail: [i.subcategory, INV_CATEGORY_LABELS[i.category]].filter(Boolean).join(' · '),
-      group_label: invLocationPath(i.location_id) || i.location || CS_NO_LOCATION,
-      photo_url: i.photo_url, _sort: i.name,
-    });
-  });
+  const seen = new Set();
+  const add = (key, line) => { if (!seen.has(key)) { seen.add(key); lines.push(line); } };
 
-  const overrideLoc = document.getElementById('cs-merch-loc').value || null;
-  const styleIds = csSelCats.has('merchandise') ? csMerchStyleList().map((s) => s.id) : [...csSelStyles];
-  styleIds.forEach((styleId) => {
-    const style = csMerch.styles.find((s) => s.id === styleId);
+  csItems.filter((i) => csCart.cats.has(i.category) || csCart.items.has(i.id)).forEach((i) => add('p|' + i.id, {
+    kind: 'percent', item_id: i.id, label: i.name,
+    detail: [i.subcategory, INV_CATEGORY_LABELS[i.category]].filter(Boolean).join(' · '),
+    group_label: invLocationPath(i.location_id) || i.location || CS_NO_LOCATION,
+    photo_url: i.photo_url, _sort: i.name,
+  }));
+
+  const entries = csCart.cats.has('merchandise')
+    ? csMerchStyleList().map((s) => ({ styleId: s.id, locId: '', variantIds: null }))
+    : csCart.merch;
+  entries.forEach((e) => {
+    const style = csMerch.styles.find((s) => s.id === e.styleId);
     if (!style) return;
-    // The location override only applies to hand-picked styles, not the whole category.
-    const useOverride = overrideLoc && !csSelCats.has('merchandise');
-    csMerch.variants.filter((v) => v.style_id === styleId).forEach((v) => {
+    csMerchVariantsOf(e.styleId).filter((v) => !e.variantIds || e.variantIds.has(v.id)).forEach((v) => {
       const stocked = [...new Set(csMerch.stock.filter((r) => r.variant_id === v.id && r.location_id).map((r) => r.location_id))];
-      const locs = useOverride ? [overrideLoc] : (stocked.length ? stocked : [null]);
-      locs.forEach((locId) => lines.push({
-        kind: 'units', variant_id: v.id, location_id: locId, label: csMerchStyleLabel(style), size: v.size || 'One size',
+      const locs = e.locId ? [e.locId] : (stocked.length ? stocked : [null]);
+      locs.forEach((locId) => add('u|' + v.id + '|' + (locId || ''), {
+        kind: 'units', variant_id: v.id, location_id: locId, label: csMerchStyleLabel(style), size: csSizeLabel(v),
         detail: null, group_label: (locId && invLocationPath(locId)) || CS_NO_LOCATION, photo_url: style.photo_url,
         _sort: csMerchStyleLabel(style) + '\u0000' + String(v.size_sort).padStart(4, '0'),
       }));
@@ -182,7 +356,7 @@ function renderCsSummary() {
   const sizes = lines.filter((l) => l.kind === 'units').length;
   document.getElementById('cs-summary').textContent = lines.length
     ? lines.length + ' line' + (lines.length === 1 ? '' : 's') + ' to count' + (items && sizes ? ' (' + items + ' items, ' + sizes + ' merch sizes)' : '')
-    : 'Nothing selected yet — tick a category or pick items below.';
+    : 'Nothing in the cart yet.';
 }
 
 function csAlert(msg, isError) {
@@ -217,7 +391,7 @@ async function csCreateSheet() {
         throw lineErr;
       }
     }
-    csSelCats = new Set(); csSelItems = new Set(); csSelStyles = new Set();
+    csResetCart();
     document.getElementById('cs-notes').value = '';
     document.getElementById('cs-title').value = 'Inventory count — ' + new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     renderCsBuilder();

@@ -609,17 +609,17 @@
                 </div>
                 <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Note for the counter (optional)</label><input class="form-input" style="width:100%;" type="text" id="cs-notes" placeholder="e.g. Cellar first, then the taproom"></div>
 
-                <label class="form-label">Include whole categories</label>
-                <div class="cs-box" id="cs-categories" style="margin-bottom:16px;"></div>
+                <label class="form-label">Add to cart</label>
+                <div class="cs-cat-btns" id="cs-cat-btns"></div>
+                <div id="cs-panel"></div>
+              </div>
 
-                <label class="form-label">Or pick specific items</label>
-                <input class="form-input" style="width:100%;margin-bottom:8px;" type="text" id="cs-search" placeholder="Search items and merch" oninput="csSetSearch(this.value)">
-                <div class="cs-box cs-picker" id="cs-picker" style="margin-bottom:12px;"></div>
-                <div class="form-group" style="margin-bottom:16px;">
-                  <label class="form-label">Count picked merch at</label>
-                  <select class="form-select" style="width:100%;" id="cs-merch-loc" onchange="renderCsSummary()"><option value="">Where it&rsquo;s stocked now</option></select>
+              <div class="card" style="margin-top:16px;">
+                <div class="menu-col-header" style="margin-bottom:8px;">
+                  <div class="section-label" style="margin:0;">Cart</div>
+                  <button class="merch-link" onclick="csClearCart()">clear cart</button>
                 </div>
-
+                <div id="cs-cart"></div>
                 <div id="cs-summary" style="font-size:13px;color:var(--sub);margin-bottom:12px;"></div>
                 <div id="cs-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
                 <button class="btn btn-primary" style="width:100%;" id="cs-create-btn" onclick="csCreateSheet()">Create &amp; Send to Phone</button>

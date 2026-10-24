@@ -521,11 +521,25 @@
   input[type=number]{-moz-appearance:textfield;appearance:textfield;}
   input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
   /* Inventory > Run Inventory (count sheets) */
-  .cs-box{background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:8px 12px;}
-  .cs-picker{max-height:260px;overflow-y:auto;}
-  .cs-check{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px;cursor:pointer;}
-  .cs-check input{flex-shrink:0;}
   .cs-count{font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);}
-  .cs-pick-head{font-size:10px;font-family:'DM Mono',monospace;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin:10px 0 2px;}
-  .cs-pick-head:first-child{margin-top:2px;}
+  .cs-cat-btns{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;}
+  .cs-badge{display:inline-block;min-width:16px;padding:0 5px;margin-left:4px;border-radius:8px;background:var(--teal);color:#111;font-size:10px;line-height:16px;text-align:center;}
+  .cs-panel{background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:12px;}
+  .cs-panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;}
+  .cs-list{max-height:280px;overflow-y:auto;}
+  .cs-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--border);font-size:13px;}
+  .cs-row:first-child{border-top:none;}
+  .cs-row-name{min-width:0;}
+  .cs-step{font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin:4px 0 6px;}
+  .cs-crumbs{font-size:12px;color:var(--sub);margin-bottom:8px;}
+  .cs-note{font-size:13px;color:var(--sub);}
+  .cs-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
+  .cs-chip{padding:9px 16px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--sub);font-family:'DM Mono',monospace;font-size:13px;cursor:pointer;}
+  .cs-chip.on{border-color:var(--teal);background:rgba(42,184,166,0.1);color:var(--teal);}
+  .cs-cart-scroll{max-height:240px;overflow-y:auto;margin-bottom:12px;}
+  .cs-cart-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--border);font-size:13px;}
+  .cs-cart-row:first-child{border-top:none;}
+  .cs-x{background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1;padding:0 4px;}
+  .cs-x:hover{color:var(--red);}
+  .cs-empty{font-size:13px;color:var(--muted);padding:6px 0 12px;}
   .cs-group-row{background:var(--raised);font-size:10px;font-family:'DM Mono',monospace;color:var(--muted);letter-spacing:2px;text-transform:uppercase;padding:6px 16px;}
