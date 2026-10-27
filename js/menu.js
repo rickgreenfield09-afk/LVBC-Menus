@@ -1203,20 +1203,39 @@ function genFlipPolicies() {
 }
 function genFlipPending(what) { genStatus(what + ' will be added once the Policies border is approved.'); }
 
-// ---- Flip Menus: beer cards (single line border, white background, two different beers per sheet) ----
+// ---- Flip Menus: beer cards (glass-brick tile border, logo at the bottom, two different beers per sheet) ----
+// Teal subway-tile frame like the taproom wall: tiles in running bond, clipped to a ring around the card.
+function flipBrickBorderSvg() {
+  const W = 550, H = 850, m = 12, band = 48, tw = 48, th = 24, gap = 3;
+  const colors = ['#0f7a68', '#12856f', '#0c6f5f', '#168a74', '#0e7563'];
+  const x0 = m, y0 = m, x1 = W - m, y1 = H - m, ix0 = x0 + band, iy0 = y0 + band, ix1 = x1 - band, iy1 = y1 - band;
+  let tiles = '';
+  for (let r = 0, y = y0; y < y1; r++, y += th) {
+    for (let x = x0 - (r % 2 ? tw / 2 : 0), c = 0; x < x1; x += tw, c++) {
+      if (x >= ix0 - 0.5 && x + tw <= ix1 + 0.5 && y >= iy0 - 0.5 && y + th <= iy1 + 0.5) continue;
+      const col = colors[(r * 7 + c * 3 + (r % 3)) % colors.length];
+      tiles += '<rect x="' + (x + gap / 2) + '" y="' + (y + gap / 2) + '" width="' + (tw - gap) + '" height="' + (th - gap) + '" rx="3" fill="' + col + '"/>'
+        + '<rect x="' + (x + gap / 2 + 2) + '" y="' + (y + gap / 2 + 1.5) + '" width="' + (tw - gap - 4) + '" height="5" rx="2.5" fill="#fff" opacity="0.2"/>';
+    }
+  }
+  const ring = 'M' + x0 + ',' + y0 + 'H' + x1 + 'V' + y1 + 'H' + x0 + 'Z M' + ix0 + ',' + iy0 + 'V' + iy1 + 'H' + ix1 + 'V' + iy0 + 'Z';
+  return '<svg class="flip-border" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none"><defs><clipPath id="ring"><path clip-rule="evenodd" d="' + ring + '"/></clipPath></defs>'
+    + '<g clip-path="url(#ring)"><rect x="' + x0 + '" y="' + y0 + '" width="' + (x1 - x0) + '" height="' + (y1 - y0) + '" fill="#d6e9e4"/>' + tiles + '</g></svg>';
+}
 const FLIP_BEER_CSS = 'body{flex-direction:column;align-items:center;}.page{page-break-after:always;margin-bottom:12px;}@media print{body{display:block;}.page{margin:0;}.page:last-child{page-break-after:auto;}}'
-  + '.flip-line{position:absolute;inset:0.2in;border:1.5px solid #1d1d1b;border-radius:10px;}.flip-inner{top:0.45in;bottom:0.45in;left:0.5in;right:0.5in;}'
-  + '.flip-beer-name{font-size:31px;font-weight:700;line-height:1.1;margin-bottom:8px;}.flip-beer-meta{font-size:15px;font-weight:400;color:#3a3530;margin-bottom:16px;}'
-  + '.flip-beer-photo{width:3.3in;height:4.1in;object-fit:cover;border-radius:8px;flex-shrink:0;}.flip-beer-photo-empty{width:3.3in;height:4.1in;border:1.5px dashed #bbb;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#aaa;font-size:13px;flex-shrink:0;}'
-  + '.flip-beer-desc{font-size:13px;line-height:1.5;margin-top:16px;color:#2a2a28;overflow:hidden;}';
+  + '.flip-inner{top:0.78in;bottom:0.72in;left:0.78in;right:0.78in;}'
+  + '.flip-beer-name{font-size:30px;font-weight:700;line-height:1.1;margin-bottom:6px;}.flip-beer-meta{font-size:14px;font-weight:400;color:#3a3530;margin-bottom:12px;}'
+  + '.flip-beer-photo{width:3.1in;height:3.5in;object-fit:cover;border-radius:8px;flex-shrink:0;}.flip-beer-photo-empty{width:3.1in;height:3.5in;border:1.5px dashed #bbb;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#aaa;font-size:13px;flex-shrink:0;}'
+  + '.flip-beer-desc{font-size:12.5px;line-height:1.45;margin-top:12px;color:#2a2a28;overflow:hidden;}.flip-beer-logo{height:0.62in;width:auto;margin-top:auto;padding-top:8px;flex-shrink:0;}';
 function flipBeerInner(b) {
   const meta = [b.style, b.abv ? b.abv + '% ABV' : '', b.price ? fmtP(b.price) : ''].filter(Boolean).map((s) => escHtml(String(s))).join(' &nbsp;·&nbsp; ');
   const photo = b.image_url ? '<img class="flip-beer-photo" src="' + escHtml(b.image_url) + '">' : '<div class="flip-beer-photo-empty">Beer photo</div>';
   return '<div class="flip-beer-name">' + escHtml(b.name || '') + '</div><div class="flip-beer-meta">' + meta + '</div>' + photo
-    + '<div class="flip-beer-desc">' + escHtml(b.long_description || b.description || '') + '</div>';
+    + '<div class="flip-beer-desc">' + escHtml(b.long_description || b.description || '') + '</div>'
+    + '<img class="flip-beer-logo" src="' + flipAsset('lvbc-arch-logo.png') + '">';
 }
 function flipBeerSlot(b) {
-  return '<div class="half-slot">' + (b ? '<div class="half-card"><div class="flip-line"></div><div class="flip-inner">' + flipBeerInner(b) + '</div></div>' : '') + '</div>';
+  return '<div class="half-slot">' + (b ? '<div class="half-card">' + flipBrickBorderSvg() + '<div class="flip-inner">' + flipBeerInner(b) + '</div></div>' : '') + '</div>';
 }
 function buildFlipBeerHtml(beerList) {
   // A single beer prints twice on its sheet; otherwise two different beers share each sheet.
