@@ -1130,49 +1130,16 @@ function genFridgeLabels() {
 
 // ---------- Flip Menus (half-sheet table flip-card inserts) ----------
 const FLIP_FONT_LINK = '<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">';
-const FLIP_COLORS = { green: '#1f8a5b', teal: '#0e7a5c', yellow: '#f2c94c', blue: '#8ec5ea', orange: '#f0935f' };
+function flipStatus(msg) { const el = document.getElementById('flip-status'); if (el) el.textContent = msg; }
 function flipAsset(name) { return new URL('assets/' + name, window.location.href).href; }
 
-// Wavy colored border on all four sides. Card is 550x850 units (5.5x8.5in). Each edge is a run of touching
-// shapes in edge-local coords (u along the edge, v depth inward): b bulge, w wave, r/l ramps, q/p quarter-rounds.
-function flipBorderSvg() {
-  const c = FLIP_COLORS, W = 550, H = 850, G = c.green, T = c.teal, Y = c.yellow, B = c.blue, O = c.orange;
-  const f = (n) => Math.round(n * 10) / 10;
-  const shape = (type, u0, u1, d, map) => {
-    const L = u1 - u0, p = (u, v) => f(map(u, v)[0]) + ',' + f(map(u, v)[1]);
-    let inner;
-    if (type === 'b') inner = 'C' + p(u1, d * 1.33) + ' ' + p(u0, d * 1.33) + ' ' + p(u0, 0);
-    else if (type === 'w') inner = 'L' + p(u1, d * 0.55) + ' C' + p(u1 - L * 0.4, d * 1.6) + ' ' + p(u0 + L * 0.4, 0) + ' ' + p(u0, d * 0.55);
-    else if (type === 'r') inner = 'L' + p(u1, d) + ' C' + p(u1 - L * 0.5, d) + ' ' + p(u0 + L * 0.5, d * 0.15) + ' ' + p(u0, d * 0.15);
-    else if (type === 'l') inner = 'L' + p(u1, d * 0.15) + ' C' + p(u1 - L * 0.5, d * 0.15) + ' ' + p(u0 + L * 0.5, d) + ' ' + p(u0, d);
-    else if (type === 'q') inner = 'L' + p(u1, d) + ' C' + p(u1 - d * 0.552, d) + ' ' + p(u0, d * 0.552) + ' ' + p(u0, 0);
-    else inner = 'L' + p(u1, 0) + ' C' + p(u1, d * 0.552) + ' ' + p(u0 + d * 0.552, d) + ' ' + p(u0, d);
-    // b: start at (u0,0) curve to (u1,0); others: edge line then inner curve back.
-    return type === 'b' ? 'M' + p(u0, 0) + ' C' + p(u0, d * 1.33) + ' ' + p(u1, d * 1.33) + ' ' + p(u1, 0) + 'Z' : 'M' + p(u0, 0) + ' L' + p(u1, 0) + ' ' + inner + 'Z';
-  };
-  const run = (segs, from, to, map) => {
-    let u = from;
-    return segs.map((s, i) => {
-      const u1 = i === segs.length - 1 ? to : u + s[1], out = '<path fill="' + s[3] + '" d="' + shape(s[0], u, u1, s[2], map) + '"/>';
-      u = u1; return out;
-    }).join('');
-  };
-  const top = [['r', 80, 44, B], ['w', 110, 42, Y], ['b', 80, 36, G], ['l', 90, 46, O], ['w', 0, 44, T]];
-  const bottom = [['w', 100, 44, G], ['b', 80, 38, B], ['r', 90, 48, Y], ['q', 60, 34, T], ['w', 0, 44, O]];
-  const left = [['w', 130, 44, G], ['b', 100, 38, Y], ['r', 90, 48, T], ['q', 70, 34, B], ['w', 120, 42, O], ['b', 90, 36, G], ['l', 100, 46, Y], ['p', 80, 34, T], ['w', 0, 44, B]];
-  const right = [['b', 90, 40, O], ['w', 140, 46, T], ['q', 70, 36, Y], ['l', 110, 48, B], ['b', 100, 38, G], ['w', 120, 44, O], ['r', 90, 46, Y], ['p', 70, 34, B], ['w', 0, 44, G]];
-  const shapes = run(top, 0, W, (u, v) => [u, v]) + run(bottom, 0, W, (u, v) => [u, H - v])
-    + run(left, 0, H, (u, v) => [v, u]) + run(right, 0, H, (u, v) => [W - v, u]);
-  return '<svg class="flip-border" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">' + shapes + '</svg>';
-}
-
-const FLIP_CSS = '.half-card{padding:0!important;position:relative;background:#fff;font-family:\'Poppins\',sans-serif;color:#1d1d1b;}.flip-border{position:absolute;inset:0;width:100%;height:100%;}.flip-inner{position:absolute;top:0.6in;bottom:0.6in;left:0.6in;right:0.6in;display:flex;flex-direction:column;align-items:center;text-align:center;}'
+const FLIP_CSS = '.half-card{padding:0!important;position:relative;background:#fff;font-family:\'Poppins\',sans-serif;color:#1d1d1b;}.flip-border{position:absolute;inset:0;width:100%;height:100%;}.flip-inner{position:absolute;top:0.78in;bottom:0.72in;left:0.78in;right:0.78in;display:flex;flex-direction:column;align-items:center;text-align:center;}'
   + '.flip-logo{height:0.95in;width:auto;margin-bottom:10px;}.flip-title{font-size:23px;font-weight:700;letter-spacing:0.14em;margin-bottom:12px;}.flip-intro{font-size:13.5px;font-weight:600;line-height:1.35;margin-bottom:14px;}'
   + '.flip-rules{list-style:disc;text-align:left;font-size:12.5px;line-height:1.55;padding-left:18px;margin:0 0 14px;}.flip-rules li{margin-bottom:5px;}.flip-fail{font-size:13px;font-weight:600;line-height:1.35;margin-bottom:14px;}.flip-thanks{font-size:14px;font-weight:600;margin-bottom:4px;}'
   + '.flip-wifi{font-size:19px;letter-spacing:0.08em;line-height:1.35;margin-top:auto;}.flip-wifi b{font-weight:700;}';
 
 function flipPage(title, inner, extraCss) {
-  const slot = '<div class="half-slot"><div class="half-card">' + flipBorderSvg() + '<div class="flip-inner">' + inner + '</div></div></div>';
+  const slot = '<div class="half-slot"><div class="half-card">' + flipBrickBorderSvg() + '<div class="flip-inner">' + inner + '</div></div></div>';
   return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>' + title + ' — Lago Vista Brewing</title>' + FLIP_FONT_LINK + '<style>' + HALF_BASE_CSS + FLIP_CSS + (extraCss || '') + '</style></head><body>'
     + '<div class="page">' + slot + '<div class="cut-line"></div>' + slot + '</div></body></html>';
 }
@@ -1199,9 +1166,9 @@ function flipPoliciesInner() {
 }
 function genFlipPolicies() {
   openHtml(flipPage('Policies', flipPoliciesInner()));
-  genStatus('Policies flip card generated — print on 8.5×11, two per sheet.');
+  flipStatus('Policies flip card generated — print on 8.5×11, two per sheet.');
 }
-function genFlipPending(what) { genStatus(what + ' will be added once the Policies border is approved.'); }
+function genFlipPending(what) { flipStatus(what + ' will be added once the Policies border is approved.'); }
 
 // ---- Flip Menus: beer cards (glass-brick tile border, logo at the bottom, two different beers per sheet) ----
 // Teal subway-tile frame like the taproom wall: tiles in running bond, clipped to a ring around the card.
@@ -1251,15 +1218,15 @@ function buildFlipBeerHtml(beerList) {
 }
 let flipBeerList = [], flipSelected = {};
 async function openFlipBeerPicker() {
-  genStatus('Loading beers...');
+  flipStatus('Loading beers...');
   try {
     flipBeerList = (await fetchBeersForMenu()).filter((b) => (b.category || '').toLowerCase().indexOf('guest') === -1);
     flipSelected = {};
     flipBeerList.forEach((b) => { flipSelected[b.id] = true; });
     renderFlipPicker();
     document.getElementById('flip-modal').style.display = 'flex';
-    genStatus('');
-  } catch (e) { genStatus('Error: ' + e.message); }
+    flipStatus('');
+  } catch (e) { flipStatus('Error: ' + e.message); }
 }
 function renderFlipPicker() { renderBeerPickerList('flip-picker-list', flipBeerList, flipSelected, renderFlipPicker); }
 function flipSelectAll() { flipBeerList.forEach((b) => { flipSelected[b.id] = true; }); renderFlipPicker(); }
@@ -1267,8 +1234,8 @@ function flipSelectNone() { flipBeerList.forEach((b) => { flipSelected[b.id] = f
 function closeFlipPicker() { document.getElementById('flip-modal').style.display = 'none'; }
 function genFlipBeers() {
   const selected = flipBeerList.filter((b) => !!flipSelected[b.id]);
-  if (!selected.length) { genStatus('No beers selected.'); return; }
+  if (!selected.length) { flipStatus('No beers selected.'); return; }
   closeFlipPicker();
   openHtml(buildFlipBeerHtml(selected));
-  genStatus(selected.length + ' beer flip card' + (selected.length !== 1 ? 's' : '') + ' generated — two per sheet.');
+  flipStatus(selected.length + ' beer flip card' + (selected.length !== 1 ? 's' : '') + ' generated — two per sheet.');
 }
