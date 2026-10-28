@@ -1144,8 +1144,8 @@ function flipPage(title, inner, extraCss) {
     + '<div class="page">' + slot + '<div class="cut-line"></div>' + slot + '</div></body></html>';
 }
 
-function flipPoliciesInner() {
-  const rules = [
+const POLICY_DEFAULTS = {
+  rules: [
     'No smoking or vaping anywhere on the premises.',
     'Outside food and drinks are not permitted.',
     'Children MUST be supervised by their guardians at all times.',
@@ -1155,18 +1155,93 @@ function flipPoliciesInner() {
     'All visitors must wear shirts, pants, and shoes at all times.',
     'Visitors should not turn on heaters or fire pit without staff assistance.',
     'Please return games to the designated game area after use for others to enjoy.',
-  ];
+  ],
+  wifi_name: 'Lago Vista Brewing',
+  wifi_password: 'CheersLVBC',
+};
+// Caps keep any edit inside the card: the default text is ~560 chars across 9 bullets.
+const POLICY_MAX_RULES = 10, POLICY_MAX_RULE_CHARS = 140, POLICY_MAX_TOTAL_CHARS = 620;
+let policyDraft = [];
+
+async function fetchPolicies() {
+  const { data, error } = await window.supabase.from('flip_policies').select('rules,wifi_name,wifi_password').eq('id', 1).maybeSingle();
+  if (error || !data || !Array.isArray(data.rules) || !data.rules.length) return POLICY_DEFAULTS;
+  return data;
+}
+
+function flipPoliciesInner(p) {
   return '<img class="flip-logo" src="' + flipAsset('lvbc-arch-logo.png') + '">'
     + '<div class="flip-title">POLICIES</div>'
     + '<div class="flip-intro">Please help us keep Lago Vista Brewing<br>Company a safe and fun place!</div>'
-    + '<ul class="flip-rules">' + rules.map((r) => '<li>' + escHtml(r) + '</li>').join('') + '</ul>'
+    + '<ul class="flip-rules">' + p.rules.map((r) => '<li>' + escHtml(r) + '</li>').join('') + '</ul>'
     + '<div class="flip-fail">Failure to abide by these policies may result in staff asking you to leave the premises.</div>'
     + '<div class="flip-thanks">Thank you!</div>'
-    + '<div class="flip-wifi"><b>WIFI:</b> Lago Vista Brewing<br><b>PASSWORD:</b> CheersLVBC</div>';
+    + '<div class="flip-wifi"><b>WIFI:</b> ' + escHtml(p.wifi_name) + '<br><b>PASSWORD:</b> ' + escHtml(p.wifi_password) + '</div>';
 }
-function genFlipPolicies() {
-  openHtml(flipPage('Policies', flipPoliciesInner()));
+async function genFlipPolicies() {
+  flipStatus('Loading policies...');
+  const p = await fetchPolicies();
+  openHtml(flipPage('Policies', flipPoliciesInner(p)));
   flipStatus('Policies flip card generated — print on 8.5×11, two per sheet.');
+}
+
+async function openPoliciesEditor() {
+  const p = await fetchPolicies();
+  policyDraft = p.rules.slice();
+  document.getElementById('pol-wifi-name').value = p.wifi_name;
+  document.getElementById('pol-wifi-pass').value = p.wifi_password;
+  renderPolicyRules();
+  document.getElementById('policies-modal').style.display = 'flex';
+}
+function closePoliciesEditor() { document.getElementById('policies-modal').style.display = 'none'; }
+function renderPolicyRules() {
+  const el = document.getElementById('pol-rules');
+  el.innerHTML = '';
+  policyDraft.forEach((r, i) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:6px;align-items:flex-start;margin-bottom:6px;';
+    const ta = document.createElement('textarea');
+    ta.rows = 2; ta.maxLength = POLICY_MAX_RULE_CHARS; ta.value = r;
+    ta.style.cssText = 'flex:1;resize:none;';
+    ta.addEventListener('input', () => { policyDraft[i] = ta.value; updatePolicyTotal(); });
+    const del = document.createElement('button');
+    del.className = 'btn btn-secondary btn-sm'; del.textContent = '✕'; del.title = 'Remove';
+    del.addEventListener('click', () => { policyDraft.splice(i, 1); renderPolicyRules(); });
+    row.appendChild(ta); row.appendChild(del);
+    el.appendChild(row);
+  });
+  updatePolicyTotal();
+}
+function updatePolicyTotal() {
+  const t = policyDraft.reduce((n, r) => n + r.trim().length, 0);
+  const el = document.getElementById('pol-total');
+  el.textContent = t + ' / ' + POLICY_MAX_TOTAL_CHARS + ' characters · ' + POLICY_MAX_RULE_CHARS + ' per bullet';
+  el.style.color = t > POLICY_MAX_TOTAL_CHARS ? '#e5484d' : '';
+  document.getElementById('pol-add').disabled = policyDraft.length >= POLICY_MAX_RULES;
+}
+function polAddRule() {
+  if (policyDraft.length >= POLICY_MAX_RULES) return;
+  policyDraft.push('');
+  renderPolicyRules();
+}
+function polResetDefaults() {
+  policyDraft = POLICY_DEFAULTS.rules.slice();
+  document.getElementById('pol-wifi-name').value = POLICY_DEFAULTS.wifi_name;
+  document.getElementById('pol-wifi-pass').value = POLICY_DEFAULTS.wifi_password;
+  renderPolicyRules();
+}
+async function savePolicies() {
+  const rules = policyDraft.map((r) => r.trim()).filter(Boolean);
+  const wifi_name = document.getElementById('pol-wifi-name').value.trim();
+  const wifi_password = document.getElementById('pol-wifi-pass').value.trim();
+  if (!rules.length) { toast('Add at least one bullet point.', true); return; }
+  if (rules.reduce((n, r) => n + r.length, 0) > POLICY_MAX_TOTAL_CHARS) { toast('Too much text — shorten the bullets to fit the card.', true); return; }
+  if (!wifi_name || !wifi_password) { toast('WiFi name and password are required.', true); return; }
+  const { error } = await window.supabase.from('flip_policies').upsert({ id: 1, rules, wifi_name, wifi_password, updated_at: new Date().toISOString() });
+  if (error) { toast('Save failed: ' + error.message, true); return; }
+  closePoliciesEditor();
+  toast('Policies card updated.');
+  flipStatus('Policies text saved — Generate Policies to print the new version.');
 }
 function genFlipPending(what) { flipStatus(what + ' will be added once the Policies border is approved.'); }
 

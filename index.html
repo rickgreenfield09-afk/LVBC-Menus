@@ -950,11 +950,33 @@
         <div class="sub-sec" id="marketingtab-flipmenus">
           <div class="section-label" style="margin-top:0;">Flip Menu Inserts</div>
           <div class="gen-grid">
-            <div class="gen-card"><div class="gen-card-title">Policies</div><div class="gen-card-desc">House rules and WiFi, two per 8.5×11 sheet.</div><button class="btn btn-primary btn-sm" onclick="genFlipPolicies()">Generate Policies</button></div>
+            <div class="gen-card" style="position:relative;"><button class="btn btn-secondary btn-sm" style="position:absolute;top:12px;right:12px;" onclick="openPoliciesEditor()">Edit Text</button><div class="gen-card-title">Policies</div><div class="gen-card-desc">House rules and WiFi, two per 8.5×11 sheet.</div><button class="btn btn-primary btn-sm" onclick="genFlipPolicies()">Generate Policies</button></div>
             <div class="gen-card"><div class="gen-card-title">Mug Club</div><div class="gen-card-desc">Mug Club perks and join QR code.</div><button class="btn btn-secondary btn-sm" onclick="genFlipPending('The Mug Club card')">Generate Mug Club</button></div>
             <div class="gen-card"><div class="gen-card-title">Beer Cards</div><div class="gen-card-desc">One card per beer with photo, description, and QR codes — select individual beers or print all.</div><button class="btn btn-primary btn-sm" onclick="openFlipBeerPicker()">Select &amp; Generate Cards</button></div>
           </div>
           <div class="gen-status" id="flip-status"></div>
+          <div id="policies-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:500;align-items:center;justify-content:center;">
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;width:600px;max-width:94vw;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;">
+              <div style="padding:20px 24px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+                <div><div style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px;">Edit Policies Card</div><div style="font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);margin-top:2px;">Only the bullet list and WiFi are editable. Limits keep the text inside the card.</div></div>
+                <button onclick="closePoliciesEditor()" style="background:none;border:none;color:var(--sub);font-size:20px;cursor:pointer;line-height:1;">✕</button>
+              </div>
+              <div style="padding:16px 24px;overflow-y:auto;flex:1;">
+                <div class="section-label" style="margin-top:0;">Bullet points <span id="pol-total" style="float:right;"></span></div>
+                <div id="pol-rules"></div>
+                <button class="btn btn-secondary btn-sm" id="pol-add" onclick="polAddRule()" style="margin-top:6px;">+ Add bullet</button>
+                <div class="section-label">WiFi</div>
+                <div style="display:flex;gap:12px;">
+                  <label style="flex:1;font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);">NETWORK<input id="pol-wifi-name" maxlength="30" style="width:100%;margin-top:4px;"></label>
+                  <label style="flex:1;font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);">PASSWORD<input id="pol-wifi-pass" maxlength="30" style="width:100%;margin-top:4px;"></label>
+                </div>
+              </div>
+              <div style="padding:14px 24px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:space-between;flex-shrink:0;">
+                <button class="btn btn-secondary btn-sm" onclick="polResetDefaults()">Reset to default</button>
+                <div style="display:flex;gap:8px;"><button class="btn btn-secondary btn-sm" onclick="closePoliciesEditor()">Cancel</button><button class="btn btn-primary btn-sm" onclick="savePolicies()">Save</button></div>
+              </div>
+            </div>
+          </div>
           <div id="flip-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:500;align-items:center;justify-content:center;">
             <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;width:560px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;">
               <div style="padding:20px 24px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
