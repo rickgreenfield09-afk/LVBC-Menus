@@ -160,20 +160,30 @@ async function loadFlipDesigns() {
   flierList = data || [];
   Object.keys(flierSelected).forEach((id) => { if (!flierList.some((d) => d.id === id)) delete flierSelected[id]; });
   if (!flierList.length) { grid.innerHTML = '<div class="loading">No saved fliers yet — upload one above.</div>'; updateFlierBatchBtn(); return; }
+  if (flierList.some((d) => d.kind === 'built')) { fbEnsureAssets(); await fetchFlipComps(); }
   grid.innerHTML = flierList.map((d) => {
-    const label = d.size === 'full' ? '8.5×11 · 1 page' : '5.5×8.5 · ' + d.pages.length + ' page' + (d.pages.length !== 1 ? 's' : '');
+    const built = d.kind === 'built';
+    const label = (d.size === 'full' ? '8.5×11' : '5.5×8.5') + ' · ' + (built ? 'built' : d.pages.length + ' page' + (d.pages.length !== 1 ? 's' : ''));
     return '<div class="gen-card" style="position:relative;' + (d.archived ? 'opacity:0.55;' : '') + '">'
       + '<label style="position:absolute;top:12px;right:12px;"><input type="checkbox" ' + (flierSelected[d.id] ? 'checked ' : '') + 'onchange="toggleFlierSelect(\'' + d.id + '\', this.checked)"></label>'
-      + '<img src="' + escHtml(d.pages[0] || '') + '" style="height:120px;max-width:100%;object-fit:contain;align-self:flex-start;border:1px solid var(--border);margin-bottom:8px;">'
+      + (built ? flierThumbHtml(d) : '<img src="' + escHtml(d.pages[0] || '') + '" style="height:120px;max-width:100%;object-fit:contain;align-self:flex-start;border:1px solid var(--border);margin-bottom:8px;">')
       + '<div class="gen-card-title">' + escHtml(d.name) + '</div>'
       + '<div class="gen-card-desc">' + label + (d.archived ? ' · archived' : '') + '</div>'
       + '<div style="display:flex;gap:6px;flex-wrap:wrap;">'
       + '<button class="btn btn-primary btn-sm" onclick="printFlierById(\'' + d.id + '\')">Print</button>'
-      + '<button class="btn btn-secondary btn-sm" onclick="renameFlier(\'' + d.id + '\')">Rename</button>'
+      + (built ? '<button class="btn btn-secondary btn-sm" onclick="openFlierBuilder(\'' + d.id + '\')">Edit</button><button class="btn btn-secondary btn-sm" onclick="openFlierBuilder(\'' + d.id + '\', true)">Duplicate</button>'
+        : '<button class="btn btn-secondary btn-sm" onclick="renameFlier(\'' + d.id + '\')">Rename</button>')
       + '<button class="btn btn-secondary btn-sm" onclick="archiveFlier(\'' + d.id + '\', ' + !d.archived + ')">' + (d.archived ? 'Restore' : 'Archive') + '</button>'
       + '</div></div>';
   }).join('');
   updateFlierBatchBtn();
+}
+
+// Scaled-down live render of a built flier (no data block items; those load at print time).
+function flierThumbHtml(d) {
+  const w = d.size === 'full' ? 816 : 528, h = d.size === 'full' ? 1056 : 816, k = 120 / h;
+  return '<div style="width:' + w * k + 'px;height:120px;margin-bottom:8px;border:1px solid var(--border);align-self:flex-start;overflow:hidden;"><div style="width:' + w + 'px;height:' + h + 'px;transform:scale(' + k + ');transform-origin:0 0;">'
+    + flierRenderBuilt(d.spec, flierComps, []) + '</div></div>';
 }
 
 function toggleFlierSelect(id, on) {
@@ -208,22 +218,23 @@ function printSelectedFliers() { printFliers(flierList.filter((d) => flierSelect
 // Print window: half-size fliers share a sheet (a one-page flier prints twice,
 // a split flier prints both halves); 8.5x11 fliers get a sheet each. The
 // toolbar is screen-only and toggles the print helpers.
-function buildFlierHtml(designs) {
-  const img = (u) => '<div class="fl-wrap"><img class="fl-img" src="' + escHtml(u) + '"></div>';
-  const slot = (u) => '<div class="half-slot"><div class="half-card">' + img(u) + '</div></div>';
+// Each page is a ready-made HTML string: an <img> for uploads, a rendered card for built fliers.
+function buildFlierHtml(designs, comps, dataByDesign) {
+  const slot = (c) => '<div class="half-slot"><div class="half-card"><div class="fl-wrap">' + c + '</div></div></div>';
   let pages = '';
   designs.forEach((d) => {
+    const content = d.kind === 'built' ? [flierRenderBuilt(d.spec, comps, dataByDesign[d.id])] : d.pages.map((u) => '<img class="fl-pic" src="' + escHtml(u) + '">');
     if (d.size === 'full') {
-      d.pages.forEach((u) => { pages += '<div class="page">' + img(u) + '</div>'; });
+      content.forEach((c) => { pages += '<div class="page"><div class="fl-wrap">' + c + '</div></div>'; });
     } else {
-      const p = d.pages.length === 1 ? [d.pages[0], d.pages[0]] : d.pages;
+      const p = content.length === 1 ? [content[0], content[0]] : content;
       for (let i = 0; i < p.length; i += 2) {
         pages += '<div class="page">' + slot(p[i]) + '<div class="cut-line"></div><div class="crop crop-l"></div><div class="crop crop-r"></div>' + (p[i + 1] ? slot(p[i + 1]) : '<div class="half-slot"></div>') + '</div>';
       }
     }
   });
-  const css = '.fl-wrap{width:100%;height:100%;}.fl-img{width:100%;height:100%;object-fit:cover;display:block;}.half-card{padding:0!important;}'
-    + 'body.fit .fl-wrap{padding:0.25in;}body.fit .fl-img{object-fit:contain;}'
+  const css = FLIER_BUILT_CSS + '.fl-wrap{width:100%;height:100%;}.fl-pic{width:100%;height:100%;object-fit:cover;display:block;}.half-card{padding:0!important;}'
+    + 'body.fit .fl-wrap{padding:0.25in;}body.fit .fl-pic{object-fit:contain;}'
     + '.crop{display:none;position:absolute;top:5.5in;width:0.2in;border-top:1px solid #000;box-shadow:0 0 0 0.5px #fff;z-index:11;}.crop-l{left:0;}.crop-r{right:0;}body.marks .crop{display:block;}body.marks .cut-line{display:none;}'
     + '.bar{position:fixed;top:0;left:0;right:0;background:#222;color:#eee;font:13px sans-serif;padding:8px 14px;display:flex;gap:18px;align-items:center;z-index:50;}.bar button{padding:5px 12px;cursor:pointer;}body{padding-top:44px;}'
     + '@media print{.bar{display:none;}body{padding-top:0;}}';
@@ -231,11 +242,17 @@ function buildFlierHtml(designs) {
     + '<label><input type="checkbox" onchange="document.body.classList.toggle(\'marks\',this.checked)"> Cut marks (half sheets)</label>'
     + '<label><input type="checkbox" onchange="document.body.classList.toggle(\'fit\',this.checked)"> Fit inside printer margins</label>'
     + '<span style="opacity:0.7">Print at 100% scale, no margins.</span><button onclick="window.print()">Print</button></div>';
-  return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Fliers — Lago Vista Brewing</title><style>' + HALF_BASE_CSS + FLIP_BEER_CSS + css + '</style></head><body>' + bar + pages + '</body></html>';
+  return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Fliers — Lago Vista Brewing</title><link href="' + FB_FONTS_LINK + '" rel="stylesheet"><style>' + HALF_BASE_CSS + FLIP_BEER_CSS + css + '</style></head><body>' + bar + pages + '</body></html>';
 }
 
-function printFliers(designs) {
+async function printFliers(designs) {
   if (!designs.length) return;
-  openHtml(buildFlierHtml(designs));
+  const builtOnes = designs.filter((d) => d.kind === 'built');
+  let comps = flierComps, dataByDesign = {};
+  if (builtOnes.length) {
+    comps = await fetchFlipComps();
+    await Promise.all(builtOnes.map(async (d) => { dataByDesign[d.id] = await fetchFlierData(d.spec.data_source, d.spec.data_count); }));
+  }
+  openHtml(buildFlierHtml(designs, comps, dataByDesign));
   flipStatus(designs.length + ' flier' + (designs.length !== 1 ? 's' : '') + ' opened for printing.');
 }
