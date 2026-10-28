@@ -317,6 +317,13 @@
   .menu-btn { width: 44px; height: 44px; margin: -4px -10px -4px 0; background: none; border: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; cursor: pointer; touch-action: manipulation; }
   .menu-btn span { display: block; width: 22px; height: 2px; border-radius: 2px; background: var(--text-primary); }
 
+  /* push message popup */
+  .push-popup { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .push-popup-card { width: 100%; max-width: 420px; max-height: 80vh; display: flex; flex-direction: column; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
+  .push-popup-title { font-family: 'Barlow Condensed', sans-serif; font-size: 22px; font-weight: 700; color: var(--accent-teal); margin-bottom: 10px; }
+  .push-popup-body { overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.5; margin-bottom: 16px; }
+  .push-popup-btn { align-self: stretch; background: var(--accent-teal); color: #0A0F15; border: 0; border-radius: 10px; padding: 12px; font-weight: 700; font-size: 15px; cursor: pointer; }
+
   /* page menu */
   .menu-scrim { position: fixed; inset: 0; z-index: 300; background: rgba(0,0,0,0.6); opacity: 0; pointer-events: none; transition: opacity 0.2s; }
   .menu-scrim.open { opacity: 1; pointer-events: auto; }

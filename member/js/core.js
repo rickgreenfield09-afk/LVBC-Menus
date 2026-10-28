@@ -66,6 +66,37 @@ let realtimeChannel = null;
   });
 })();
 
+// ── PUSH MESSAGE POPUP ───────────────────────────────────
+// Tapping a push notification (see sw.js) lands here with the full text.
+function showPushPopup(title, body) {
+  const old = document.getElementById('push-popup');
+  if (old) old.remove();
+  const el = document.createElement('div');
+  el.id = 'push-popup';
+  el.className = 'push-popup';
+  el.innerHTML = '<div class="push-popup-card" role="dialog" aria-modal="true"><div class="push-popup-title">' + escHtml(title) + '</div>'
+    + '<div class="push-popup-body">' + escHtml(body) + '</div><button class="push-popup-btn" type="button">Close</button></div>';
+  el.addEventListener('click', (e) => { if (e.target === el || e.target.classList.contains('push-popup-btn')) el.remove(); });
+  document.body.appendChild(el);
+}
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'lvbc-push') showPushPopup(e.data.title, e.data.body);
+  });
+}
+
+// A cold start from a notification tap carries the text in the hash.
+document.addEventListener('DOMContentLoaded', () => {
+  const m = /^#push=(.+)$/.exec(location.hash);
+  if (!m) return;
+  history.replaceState(null, '', location.pathname + location.search);
+  try {
+    const { title, body } = JSON.parse(decodeURIComponent(m[1]));
+    showPushPopup(title, body);
+  } catch (err) { /* malformed hash — just open the app */ }
+});
+
 // ── AUTH ─────────────────────────────────────────────────
 async function checkSession() {
   if (settingNewPin) return;

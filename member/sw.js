@@ -61,16 +61,26 @@ self.addEventListener('push', (event) => {
   event.waitUntil(self.registration.showNotification(data.title || 'Lago Vista Brewing Company', {
     body: data.body || '',
     icon: 'https://opatyodqtfrytgosqxom.supabase.co/storage/v1/object/public/assets/lvbc-logo.png',
-    data: { url: data.url || '/member/' },
+    data: { url: data.url || '/member/', title: data.title || 'Lago Vista Brewing Company', body: data.body || '' },
   }));
 });
 
+// A tap hands the full text to the app, which shows it in a popup (the
+// notification itself truncates long messages). An open app gets it by
+// postMessage; a cold start gets it in the URL hash (#push=...), which
+// core.js reads and clears.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const target = new URL(event.notification.data.url, self.location.origin).href;
+  const { url, title, body } = event.notification.data;
+  const message = { type: 'lvbc-push', title, body };
+  const target = new URL(url, self.location.origin);
+  if (!target.hash) target.hash = 'push=' + encodeURIComponent(JSON.stringify({ title, body }));
   event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
     const open = wins.find((w) => w.url.startsWith(self.location.origin + '/member/'));
-    if (open) return open.navigate(target).then((w) => w && w.focus());
-    return self.clients.openWindow(target);
+    if (open) {
+      open.postMessage(message);
+      return open.focus();
+    }
+    return self.clients.openWindow(target.href);
   }));
 });
