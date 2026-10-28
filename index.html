@@ -719,7 +719,7 @@
           <button class="sub-tab" id="marketingtab-btn-audience" onclick="setMarketingTab('audience', this)">Audience</button>
           <button class="sub-tab" id="marketingtab-btn-push" onclick="setMarketingTab('push', this)">Push</button>
           <button class="sub-tab" id="marketingtab-btn-games" onclick="setMarketingTab('games', this)">Games</button>
-          <button class="sub-tab" id="marketingtab-btn-flipmenus" onclick="setMarketingTab('flipmenus', this)">Flip Menus</button>
+          <button class="sub-tab" id="marketingtab-btn-flipmenus" onclick="setMarketingTab('flipmenus', this)">Print Outs</button>
           <button class="sub-tab" id="marketingtab-btn-settings" onclick="setMarketingTab('settings', this)">Settings</button>
         </div>
 
@@ -946,15 +946,53 @@
           <div class="table-wrap" id="push-history"><div class="loading">Loading...</div></div>
         </div>
 
-        <!-- FLIP MENUS: half-sheet inserts for the table flip-menu holders -->
+        <!-- PRINT OUTS: flip cards (half-sheet table inserts) and uploaded fliers -->
         <div class="sub-sec" id="marketingtab-flipmenus">
-          <div class="section-label" style="margin-top:0;">Flip Menu Inserts</div>
+          <div class="sub-tabs" style="margin-bottom:8px;">
+            <button class="sub-tab active" type="button">Flip Cards</button>
+          </div>
+          <div class="section-label" style="margin-top:0;">Standard Cards</div>
           <div class="gen-grid">
             <div class="gen-card" style="position:relative;"><button class="btn btn-secondary btn-sm" style="position:absolute;top:12px;right:12px;" onclick="openPoliciesEditor()">Edit Text</button><div class="gen-card-title">Policies</div><div class="gen-card-desc">House rules and WiFi, two per 8.5×11 sheet.</div><button class="btn btn-primary btn-sm" onclick="genFlipPolicies()">Generate Policies</button></div>
             <div class="gen-card"><div class="gen-card-title">Mug Club</div><div class="gen-card-desc">Mug Club perks and join QR code.</div><button class="btn btn-secondary btn-sm" onclick="genFlipPending('The Mug Club card')">Generate Mug Club</button></div>
             <div class="gen-card"><div class="gen-card-title">Beer Cards</div><div class="gen-card-desc">One card per beer with photo, description, and QR codes — select individual beers or print all.</div><button class="btn btn-primary btn-sm" onclick="openFlipBeerPicker()">Select &amp; Generate Cards</button></div>
           </div>
+          <div class="section-label">Create New Flip Card</div>
+          <div class="gen-grid">
+            <div class="gen-card"><div class="gen-card-title">Upload a Flier</div><div class="gen-card-desc">Upload a Canva export (PNG or JPG). Keep it at full size, or turn a portrait flier sideways and split it into two half-sheet pages.</div><button class="btn btn-primary btn-sm" onclick="openFlierUpload()">Upload Flier</button></div>
+          </div>
+          <div class="section-label">Saved Fliers
+            <span style="float:right;display:flex;gap:8px;align-items:center;">
+              <label style="font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);text-transform:none;letter-spacing:0;"><input type="checkbox" id="flier-show-archived" onchange="loadFlipDesigns()"> Show archived</label>
+              <button class="btn btn-primary btn-sm" id="flier-batch-btn" onclick="printSelectedFliers()" disabled>Print Selected</button>
+            </span>
+          </div>
+          <div class="gen-grid" id="flier-grid"><div class="loading">Loading...</div></div>
           <div class="gen-status" id="flip-status"></div>
+          <div id="flier-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:500;align-items:center;justify-content:center;">
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;width:640px;max-width:94vw;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;">
+              <div style="padding:20px 24px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+                <div><div id="flier-modal-title" style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px;">Upload a Flier</div><div style="font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);margin-top:2px;">PNG or JPG exported from Canva. Higher resolution prints sharper.</div></div>
+                <button onclick="closeFlierUpload()" style="background:none;border:none;color:var(--sub);font-size:20px;cursor:pointer;line-height:1;">✕</button>
+              </div>
+              <div style="padding:16px 24px;overflow-y:auto;flex:1;">
+                <label style="display:block;font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);">NAME<input id="flier-name" maxlength="60" style="width:100%;margin-top:4px;" placeholder="e.g. Farmers Market"></label>
+                <label style="display:block;margin-top:12px;font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);">IMAGE<input type="file" id="flier-file" accept="image/png,image/jpeg" onchange="onFlierFile(this)" style="width:100%;margin-top:4px;"></label>
+                <div id="flier-mode-wrap" style="display:none;margin-top:12px;">
+                  <div style="font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);">OUTPUT</div>
+                  <label style="display:block;font-size:13px;margin-top:6px;"><input type="radio" name="flier-mode" value="keep" checked onchange="renderFlierPreview()"> Keep original size — one 8.5×11 page (larger sign holders)</label>
+                  <label style="display:block;font-size:13px;margin-top:4px;"><input type="radio" name="flier-mode" value="split" onchange="renderFlierPreview()"> Turn sideways and split — two half-sheet flip pages (5.5×8.5)</label>
+                  <label id="flier-dir-wrap" style="display:none;font-size:12px;margin-top:6px;margin-left:22px;color:var(--sub);">Rotate <select id="flier-dir" onchange="renderFlierPreview()"><option value="cw">clockwise</option><option value="ccw">counter-clockwise</option></select></label>
+                  <div id="flier-res" style="font-size:11px;font-family:'DM Mono',monospace;margin-top:8px;"></div>
+                </div>
+                <div id="flier-preview" style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:12px;"></div>
+              </div>
+              <div style="padding:14px 24px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;flex-shrink:0;">
+                <button class="btn btn-secondary btn-sm" onclick="closeFlierUpload()">Cancel</button>
+                <button class="btn btn-primary btn-sm" id="flier-save" onclick="saveFlier()" disabled>Save</button>
+              </div>
+            </div>
+          </div>
           <div id="policies-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:500;align-items:center;justify-content:center;">
             <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;width:600px;max-width:94vw;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;">
               <div style="padding:20px 24px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
@@ -1470,6 +1508,7 @@
   <script src="js/locations.js"></script>
   <script src="js/merch.js"></script>
   <script src="js/menu.js"></script>
+  <script src="js/printouts.js"></script>
   <script src="js/schedule.js"></script>
   <script src="js/recurring.js"></script>
   <script src="js/myshifts.js"></script>

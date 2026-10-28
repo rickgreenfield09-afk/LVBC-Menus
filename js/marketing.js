@@ -27,6 +27,7 @@ function setMarketingTab(tab, btn) {
   if (tab === 'audience') loadMarketingAudience();
   if (tab === 'push') loadPush();
   if (tab === 'games') loadGames();
+  if (tab === 'flipmenus') loadFlipDesigns();
   if (tab === 'settings') loadMarketingSettings();
 }
 
