@@ -75,6 +75,7 @@ function mTasksFor(dateStr, covers) {
   const dow = new Date(dateStr + 'T00:00:00').getDay();
   return mTasks.filter((t) => {
     if (t.assigned_staff_id || !covers.includes(t.period)) return false;
+    if (!M_INVENTORY_ENABLED && t.category === 'inventory') return false;
     if (t.category === 'turnover' && covers.length > 1) return false;
     if (t.frequency === 'daily') return true;
     if (t.frequency === 'weekly') return t.day_of_week === dow;
@@ -102,8 +103,8 @@ async function loadTasks() {
     // Every role, not just bartenders, so the shift card can name the manager on duty.
     window.supabase.from('shifts').select('id,shift_date,period,staff_id,role,start_time,end_time,staff:staff_id(name)').eq('shift_date', today),
     window.supabase.from('shifts').select('shift_date').in('staff_id', mMyStaffIds).in('role', ['bartender', 'manager']).gt('shift_date', today).order('shift_date').limit(1),
-    // The count buttons need the inventory records behind them.
-    loadInventoryCount(), loadMerchCount(),
+    // The count buttons need the inventory records behind them (core.js: M_INVENTORY_ENABLED).
+    M_INVENTORY_ENABLED && loadInventoryCount(), M_INVENTORY_ENABLED && loadMerchCount(),
   ]);
   loadOffsiteMine();
   const failed = [tasks, targets, completions, shifts].find((r) => r.error);
@@ -213,7 +214,7 @@ function renderTasks() {
   });
 
   // Special assignments are yours whatever shift you're on.
-  const special = mTasks.filter((t) => mMyStaffIds.includes(t.assigned_staff_id)).filter((t) => { const c = mTaskCompletion(t, today); return !c || c.completed_on === today; })
+  const special = mTasks.filter((t) => mMyStaffIds.includes(t.assigned_staff_id) && (M_INVENTORY_ENABLED || t.category !== 'inventory')).filter((t) => { const c = mTaskCompletion(t, today); return !c || c.completed_on === today; })
     .sort((a, b) => a.due_date.localeCompare(b.due_date));
   if (special.length) {
     html += '<div class="section-label">Assigned to you</div>';

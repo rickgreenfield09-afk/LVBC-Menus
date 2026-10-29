@@ -44,6 +44,12 @@ function pinRequiredFor(userId) { try { return localStorage.getItem(STAFF_PIN_RE
 
 window.currentStaff = null;
 const M_PROFILE_KEY = 'lvbc-mobile-profile';
+// Inventory isn't ready for everyday use yet (the staff app goes live
+// Nov 1 for scheduling). While this is false the Inventory tab is
+// hidden, count-sheet links open My Shift instead, and My Shift leaves
+// out inventory tasks. The code stays in place — flip to true to bring
+// it all back.
+const M_INVENTORY_ENABLED = false;
 // "tasks" is the My Shift page; its id predates the rename.
 const M_TAB_TITLES = { tasks: 'My Shift', schedule: 'Schedule', inventory: 'Inventory', team: 'Team' };
 const M_TAB_LOADERS = { tasks: () => loadTasks(), schedule: () => loadSchedule(), inventory: () => { loadInventoryCount(); loadMySheets(); }, team: () => loadTeam() };
@@ -211,8 +217,10 @@ function renderLoggedIn() {
   document.getElementById('app-shell').style.display = 'flex';
   document.getElementById('staff-name-badge').textContent = window.currentStaff.name;
   updateOfflineBar();
+  document.getElementById('m-tab-inventory').style.display = M_INVENTORY_ENABLED ? '' : 'none';
   // Land on today's shift, or on the inventory tab when a count-sheet push brought us here.
   showTab('tasks', document.querySelector('.m-tabbar .nav-btn'));
+  if (!M_INVENTORY_ENABLED) { if (/^#count/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search); return; }
   if (/^#count/.test(location.hash)) showCountSheets();
   else loadMySheets();
 }
@@ -226,7 +234,7 @@ function showCountSheets() {
   history.replaceState(null, '', location.pathname + location.search);
   showTab('inventory', document.querySelectorAll('.m-tabbar .nav-btn')[2]);
 }
-window.addEventListener('hashchange', () => { if (/^#count/.test(location.hash) && window.currentStaff) showCountSheets(); });
+window.addEventListener('hashchange', () => { if (M_INVENTORY_ENABLED && /^#count/.test(location.hash) && window.currentStaff) showCountSheets(); });
 
 function renderLoggedOut(msg) {
   document.getElementById('app-shell').style.display = 'none';
