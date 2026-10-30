@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Embed Preview — Request an Event</title>
+<style>
+  /* Stand-in for the brewery's own website. Its only job is to show how
+     event-request.html looks and behaves inside an iframe on a page that
+     isn't part of this app. The copy-paste snippet is at the bottom. */
+  body { margin: 0; font-family: Georgia, 'Times New Roman', serif; color: #2b2118; background: #faf6ef; }
+  header { background: #2b2118; color: #f3e6cf; padding: 18px 24px; display: flex; justify-content: space-between; align-items: center; }
+  header strong { font-size: 20px; letter-spacing: 1px; }
+  header nav a { color: #f3e6cf; text-decoration: none; margin-left: 20px; font-size: 14px; font-family: Arial, sans-serif; }
+  .banner { background: #c8873a; color: #fff; text-align: center; padding: 8px; font: 13px Arial, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 20px 64px; }
+  h1 { font-size: 34px; margin: 0 0 12px; }
+  p { line-height: 1.6; }
+  .frame-wrap { background: #fff; border: 1px solid #e4d9c6; border-radius: 10px; margin-top: 24px; }
+  iframe { display: block; width: 100%; border: 0; height: 760px; }
+  details { margin-top: 40px; font: 14px Arial, sans-serif; }
+  pre { background: #2b2118; color: #f3e6cf; padding: 14px; border-radius: 8px; overflow-x: auto; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="banner">Preview only — this page imitates the brewery's website so you can see the form embedded.</div>
+<header>
+  <strong>LAGO VISTA BREWING</strong>
+  <nav><a href="#">Beer</a><a href="#">Events</a><a href="#">Visit</a><a href="#">Contact</a></nav>
+</header>
+
+<main>
+  <h1>Host Your Event With Us</h1>
+  <p>Birthdays, fundraisers, team outings, and more. Fill out the form below and our team will follow up.</p>
+
+  <div class="frame-wrap">
+    <iframe id="lvbc-event-frame" src="event-request.html" title="Request an event" loading="lazy"></iframe>
+  </div>
+
+  <details open>
+    <summary>Snippet to paste into the real website</summary>
+    <p>Replace the URL with this app's deployed address. The script is optional; it makes the frame grow to fit the form.</p>
+    <pre id="snippet"></pre>
+  </details>
+</main>
+
+<script>
+  // Same resize logic the real site would use.
+  window.addEventListener('message', function (e) {
+    if (e.data && e.data.type === 'lvbc-event-height') {
+      document.getElementById('lvbc-event-frame').style.height = e.data.height + 'px';
+    }
+  });
+
+  var url = new URL('event-request.html', location.href).href;
+  document.getElementById('snippet').textContent =
+    '<iframe id="lvbc-event-frame" src="' + url + '"\n' +
+    '        style="width:100%;border:0;height:760px" title="Request an event"></iframe>\n' +
+    '<script>\n' +
+    '  window.addEventListener("message", function (e) {\n' +
+    '    if (e.data && e.data.type === "lvbc-event-height")\n' +
+    '      document.getElementById("lvbc-event-frame").style.height = e.data.height + "px";\n' +
+    '  });\n' +
+    '<\/script>';
+</script>
+</body>
+</html>

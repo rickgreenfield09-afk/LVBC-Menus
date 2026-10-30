@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Request an Event</title>
+<style>
+  /* Self-contained, like signup.html: this page is meant to be embedded
+     via iframe on the brewery's own website, so it doesn't share
+     style.css. It posts its height to the parent so the iframe can
+     resize to fit (see embed-demo.html for the snippet). */
+  html, body { margin: 0; background: transparent; }
+  #lvbc-event-widget {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 24px;
+    box-sizing: border-box;
+    color: #1a1a1a;
+  }
+  #lvbc-event-widget * { box-sizing: border-box; }
+  #lvbc-event-widget h2 { margin: 0 0 8px; font-size: 22px; }
+  #lvbc-event-widget p.lede { margin: 0 0 20px; color: #555; font-size: 14px; }
+  #lvbc-event-widget .row { display: flex; gap: 12px; }
+  #lvbc-event-widget .row > div { flex: 1; min-width: 0; }
+  #lvbc-event-widget label.field { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  #lvbc-event-widget input,
+  #lvbc-event-widget select,
+  #lvbc-event-widget textarea {
+    width: 100%;
+    padding: 10px 12px;
+    font: inherit;
+    font-size: 15px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    margin-bottom: 16px;
+    background: #fff;
+  }
+  #lvbc-event-widget textarea { min-height: 96px; resize: vertical; }
+  #lvbc-event-widget .hp { position: absolute; left: -9999px; height: 0; overflow: hidden; }
+  #lvbc-event-widget button {
+    width: 100%;
+    padding: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    border: none;
+    border-radius: 6px;
+    background: #1a1a1a;
+    color: #fff;
+    cursor: pointer;
+  }
+  #lvbc-event-widget button:disabled { opacity: 0.6; cursor: default; }
+  #lvbc-event-widget .status { margin-top: 14px; font-size: 14px; display: none; }
+  #lvbc-event-widget .status.error { color: #b3261e; }
+  #lvbc-event-widget .thanks { display: none; text-align: center; padding: 32px 0; }
+  #lvbc-event-widget .thanks h2 { color: #1a7a3a; }
+  @media (max-width: 480px) { #lvbc-event-widget .row { flex-direction: column; gap: 0; } }
+</style>
+</head>
+<body>
+
+<div id="lvbc-event-widget">
+  <div id="event-form-wrap">
+    <h2>Request an Event</h2>
+    <p class="lede">Tell us what you have in mind and we'll get back to you within a couple of business days. This is a request, not a booking.</p>
+
+    <form id="event-form">
+      <label class="field" for="ev-name">Your name</label>
+      <input type="text" id="ev-name" required maxlength="120">
+
+      <label class="field" for="ev-org">Company or organization (optional)</label>
+      <input type="text" id="ev-org" maxlength="160">
+
+      <div class="row">
+        <div>
+          <label class="field" for="ev-email">Email</label>
+          <input type="email" id="ev-email" required placeholder="you@example.com">
+        </div>
+        <div>
+          <label class="field" for="ev-phone">Phone (optional)</label>
+          <input type="tel" id="ev-phone" maxlength="40">
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label class="field" for="ev-type">Event type</label>
+          <select id="ev-type" required>
+            <option value="">Choose one…</option>
+            <option>Private party</option>
+            <option>Birthday</option>
+            <option>Corporate event</option>
+            <option>Fundraiser</option>
+            <option>Live music</option>
+            <option>Wedding or shower</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div>
+          <label class="field" for="ev-guests">Expected guests</label>
+          <input type="number" id="ev-guests" min="1" max="9999" inputmode="numeric">
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label class="field" for="ev-date">Preferred date</label>
+          <input type="date" id="ev-date" required>
+        </div>
+        <div>
+          <label class="field" for="ev-alt">Backup date (optional)</label>
+          <input type="date" id="ev-alt">
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label class="field" for="ev-start">Start time</label>
+          <input type="time" id="ev-start">
+        </div>
+        <div>
+          <label class="field" for="ev-end">End time</label>
+          <input type="time" id="ev-end">
+        </div>
+      </div>
+
+      <label class="field" for="ev-details">Anything else we should know?</label>
+      <textarea id="ev-details" maxlength="3000" placeholder="Food, music, decorations, budget, questions…"></textarea>
+
+      <div class="hp" aria-hidden="true">
+        <label>Website <input type="text" id="ev-website" tabindex="-1" autocomplete="off"></label>
+      </div>
+
+      <button type="submit" id="ev-submit">Send Request</button>
+      <div class="status error" id="ev-status"></div>
+    </form>
+  </div>
+
+  <div class="thanks" id="event-thanks">
+    <h2>Request received!</h2>
+    <p>Thanks — we'll be in touch soon about your event.</p>
+  </div>
+</div>
+
+<script>
+(function () {
+  const form = document.getElementById('event-form');
+  const statusEl = document.getElementById('ev-status');
+  const submitBtn = document.getElementById('ev-submit');
+  const $ = (id) => document.getElementById(id);
+
+  // Let the parent page size the iframe to fit.
+  function postHeight() {
+    if (window.parent === window) return;
+    window.parent.postMessage({ type: 'lvbc-event-height', height: document.documentElement.scrollHeight }, '*');
+  }
+  new ResizeObserver(postHeight).observe(document.body);
+  window.addEventListener('load', postHeight);
+
+  $('ev-date').min = new Date().toLocaleDateString('en-CA');
+
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    submitBtn.disabled = true;
+    statusEl.style.display = 'none';
+    try {
+      const res = await fetch(new URL('api/event-request', location.href), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: $('ev-name').value,
+          organization: $('ev-org').value,
+          email: $('ev-email').value,
+          phone: $('ev-phone').value,
+          eventType: $('ev-type').value,
+          guestCount: $('ev-guests').value,
+          eventDate: $('ev-date').value,
+          altDate: $('ev-alt').value,
+          startTime: $('ev-start').value,
+          endTime: $('ev-end').value,
+          details: $('ev-details').value,
+          website: $('ev-website').value,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Something went wrong');
+      $('event-form-wrap').style.display = 'none';
+      $('event-thanks').style.display = 'block';
+      postHeight();
+    } catch (err) {
+      statusEl.textContent = err.message || 'Something went wrong. Please try again.';
+      statusEl.style.display = 'block';
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+})();
+</script>
+
+</body>
+</html>
