@@ -270,6 +270,12 @@
                     <option value="market">Farmers Market</option>
                     <option value="foodtruck">Food Truck</option>
                     <option value="vfw">VFW Night</option>
+                    <option value="private">Private Party</option>
+                    <option value="birthday">Birthday</option>
+                    <option value="corporate">Corporate Event</option>
+                    <option value="fundraiser">Fundraiser</option>
+                    <option value="music">Live Music</option>
+                    <option value="wedding">Wedding or Shower</option>
                     <option value="__other__">Other...</option>
                   </select>
                 </div>
@@ -295,6 +301,17 @@
                   <div class="form-row">
                     <div class="form-group"><label class="form-label">Start Time</label><input class="form-input" style="width:100%;" type="time" id="ev-start-time"></div>
                     <div class="form-group"><label class="form-label">End Time</label><input class="form-input" style="width:100%;" type="time" id="ev-end-time"></div>
+                  </div>
+                  <div id="ev-host-wrap" style="display:none;">
+                    <div class="form-row">
+                      <div class="form-group"><label class="form-label">Company / Organization</label><input class="form-input" style="width:100%;" type="text" id="ev-org" maxlength="160"></div>
+                      <div class="form-group"><label class="form-label">Expected Guests</label><input class="form-input" style="width:100%;" type="number" min="1" id="ev-guests"></div>
+                    </div>
+                    <div class="form-row">
+                      <div class="form-group"><label class="form-label">Contact Name</label><input class="form-input" style="width:100%;" type="text" id="ev-contact-name" maxlength="120"></div>
+                      <div class="form-group"><label class="form-label">Contact Phone</label><input class="form-input" style="width:100%;" type="tel" id="ev-contact-phone" maxlength="40"></div>
+                    </div>
+                    <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Contact Email</label><input class="form-input" style="width:100%;" type="email" id="ev-contact-email" maxlength="200"></div>
                   </div>
                   <div class="form-group" style="margin-bottom:16px;">
                     <label class="form-label">Flier / Picture</label>
@@ -342,6 +359,11 @@
               </div>
             </div>
             <div class="grid2-col">
+              <div class="menu-col-header">
+                <div class="section-label" style="margin:0;">Event Requests <span id="ev-req-count"></span></div>
+                <label class="checkbox-row" style="margin:0;"><input type="checkbox" id="ev-req-closed" onchange="renderEventRequests()"> Show closed</label>
+              </div>
+              <div id="ev-requests" style="margin-bottom:28px;"></div>
               <div class="menu-col-header">
                 <div class="section-label" style="margin:0;">Upcoming Events</div>
                 <div style="display:flex;align-items:center;gap:10px;">

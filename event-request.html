@@ -9,7 +9,8 @@
      via iframe on the brewery's own website, so it doesn't share
      style.css. It posts its height to the parent so the iframe can
      resize to fit (see embed-demo.html for the snippet). */
-  html, body { margin: 0; background: transparent; }
+  html, body { margin: 0; background: transparent; scrollbar-width: none; }
+  html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
   #lvbc-event-widget {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
     max-width: 560px;

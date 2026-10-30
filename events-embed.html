@@ -12,7 +12,8 @@
   /* Self-contained: embedded via iframe on the brewery's own website
      (see embed-demo.html). Fed by the website_events() function
      (supabase/migration_056_website_events.sql). */
-  html, body { margin: 0; background: transparent; }
+  html, body { margin: 0; background: transparent; scrollbar-width: none; }
+  html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
   #lvbc-events { font-family: 'Poppins', -apple-system, 'Segoe UI', Arial, sans-serif; color: #000; padding: 24px 16px 40px; box-sizing: border-box; }
   #lvbc-events * { box-sizing: border-box; }
   .wrap { max-width: 1180px; margin: 0 auto; }

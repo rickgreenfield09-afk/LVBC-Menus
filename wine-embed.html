@@ -11,7 +11,8 @@
 <style>
   /* Self-contained: embedded via iframe on the brewery's own website.
      Reads the wine_menu table directly (public read, see schema.sql). */
-  html, body { margin: 0; background: transparent; }
+  html, body { margin: 0; background: transparent; scrollbar-width: none; }
+  html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
   #lvbc-wine { font-family: 'Poppins', -apple-system, 'Segoe UI', Arial, sans-serif; color: #000; padding: 16px 16px 40px; box-sizing: border-box; text-align: center; }
   .wrap { max-width: 860px; margin: 0 auto; }
   h2 { font-size: 36px; font-weight: 500; text-transform: uppercase; margin: 48px 0 28px; }

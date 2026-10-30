@@ -17,7 +17,13 @@ let customEventTypes = [];
 let evImg = null; // { url } for the saved flier, { file, preview } for a newly picked one
 let eventsListCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 
-const BUILTIN_EVENT_TYPES = { trivia: 'Trivia Night', bingo: 'Music Bingo', karaoke: 'Karaoke', special: 'Special / Performance', market: 'Farmers Market', foodtruck: 'Food Truck', vfw: 'VFW Night' };
+const BUILTIN_EVENT_TYPES = { trivia: 'Trivia Night', bingo: 'Music Bingo', karaoke: 'Karaoke', special: 'Special / Performance', market: 'Farmers Market', foodtruck: 'Food Truck', vfw: 'VFW Night', private: 'Private Party', birthday: 'Birthday', corporate: 'Corporate Event', fundraiser: 'Fundraiser', music: 'Live Music', wedding: 'Wedding or Shower' };
+// Types that show the host / contact fields (the ones people request), and how
+// the request form's labels (event-request.html) map onto event type keys.
+const HOST_EVENT_TYPES = ['private', 'birthday', 'corporate', 'fundraiser', 'music', 'wedding', 'special', '__other__'];
+const REQUEST_TYPE_KEYS = { 'Private party': 'private', 'Birthday': 'birthday', 'Corporate event': 'corporate', 'Fundraiser': 'fundraiser', 'Live music': 'music', 'Wedding or shower': 'wedding', 'Other': 'special' };
+let eventRequests = [];
+let eventFromRequestId = null;
 const AUTO_EVENT_NAMES = { trivia: 'Trivia Night', bingo: 'Music Bingo', karaoke: 'Karaoke Night', vfw: 'VFW Night' };
 
 // timestamptz columns are stored/interpreted in the DB's timezone
@@ -59,6 +65,7 @@ async function loadEventsList() {
   el.innerHTML = '<div class="loading">Loading...</div>';
   document.getElementById('events-list-month-label').textContent = eventsListCursor.toLocaleString('default', { month: 'long', year: 'numeric' });
   evDrawImg();
+  loadEventRequests();
   await loadEventTypes();
   await refreshRecurringData();
   document.getElementById('ev-staff').innerHTML = '<option value="">Unassigned</option>' + scheduleStaff.map((s) => '<option value="' + s.id + '">' + escHtml(s.name) + '</option>').join('');
@@ -113,6 +120,7 @@ function renderEventsList() {
         + '<div class="event-info"><span class="event-type-badge etype-' + escHtml(BUILTIN_EVENT_TYPES[e.event_type] ? e.event_type : 'default') + '">' + escHtml(eventTypeLabel(e.event_type)) + '</span>'
         + (e.is_public ? ' <span class="badge badge-purple">On website</span>' : '')
         + '<div class="event-name">' + escHtml(e.event_name) + '</div>'
+        + (e.organization || e.guest_count ? '<div class="event-meta">' + escHtml([e.organization, e.guest_count ? e.guest_count + ' guests' : ''].filter(Boolean).join(' · ')) + '</div>' : '')
         + (e.description ? '<div class="event-meta">' + escHtml(e.description.length > 110 ? e.description.slice(0, 110) + '…' : e.description) + '</div>' : '')
         + (e.event_type === 'vfw' ? '<div class="event-meta">' + (e.staff_id ? escHtml(staffName(e.staff_id)) : 'Unassigned') + '</div>' : '')
         + (e.notes ? '<div class="event-meta">' + escHtml(e.notes) + '</div>' : '') + '</div>'
@@ -156,6 +164,7 @@ function onEventTypeChange() {
   const val = document.getElementById('ev-type').value;
   document.getElementById('ev-other-wrap').style.display = val === '__other__' ? '' : 'none';
   document.getElementById('ev-staff-wrap').style.display = val === 'vfw' ? '' : 'none';
+  document.getElementById('ev-host-wrap').style.display = HOST_EVENT_TYPES.includes(val) ? '' : 'none';
   const nameEl = document.getElementById('ev-name');
   const isAutoOrEmpty = !nameEl.value || Object.values(AUTO_EVENT_NAMES).includes(nameEl.value);
   if (AUTO_EVENT_NAMES[val] && isAutoOrEmpty) nameEl.value = AUTO_EVENT_NAMES[val];
@@ -186,6 +195,12 @@ function editEvent(id) {
   document.getElementById('ev-end-time').value = e.event_end ? (() => { const t = new Date(e.event_end); return String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0'); })() : '';
   document.getElementById('ev-notes').value = e.notes || '';
   document.getElementById('ev-desc').value = e.description || '';
+  document.getElementById('ev-org').value = e.organization || '';
+  document.getElementById('ev-guests').value = e.guest_count || '';
+  document.getElementById('ev-contact-name').value = e.contact_name || '';
+  document.getElementById('ev-contact-phone').value = e.contact_phone || '';
+  document.getElementById('ev-contact-email').value = e.contact_email || '';
+  document.getElementById('ev-host-wrap').style.display = HOST_EVENT_TYPES.includes(document.getElementById('ev-type').value) || e.organization || e.contact_name ? '' : 'none';
   document.getElementById('ev-public').checked = !!e.is_public;
   evImg = e.image_url ? { url: e.image_url } : null;
   evDrawImg();
@@ -216,10 +231,86 @@ function cancelEventEdit() {
   document.getElementById('rec-end-time').value = '';
   document.getElementById('ev-notes').value = '';
   document.getElementById('ev-desc').value = '';
+  ['ev-org', 'ev-guests', 'ev-contact-name', 'ev-contact-phone', 'ev-contact-email'].forEach((id) => { document.getElementById(id).value = ''; });
+  document.getElementById('ev-host-wrap').style.display = 'none';
+  eventFromRequestId = null;
   document.getElementById('ev-public').checked = false;
   evImg = null;
   evDrawImg();
   setEventMode('once');
+}
+
+// ── EVENT REQUESTS (submitted from event-request.html) ─────
+async function loadEventRequests() {
+  const { data, error } = await window.supabase.from('event_requests').select('*').order('created_at', { ascending: false }).limit(100);
+  const el = document.getElementById('ev-requests');
+  if (error) { el.innerHTML = '<div class="loading">Could not load requests: ' + escHtml(error.message) + '</div>'; return; }
+  eventRequests = data || [];
+  renderEventRequests();
+}
+
+function renderEventRequests() {
+  const el = document.getElementById('ev-requests');
+  const showClosed = document.getElementById('ev-req-closed').checked;
+  const open = eventRequests.filter((r) => r.status === 'new' || r.status === 'contacted');
+  document.getElementById('ev-req-count').textContent = open.length ? '(' + open.length + ' open)' : '';
+  const list = showClosed ? eventRequests : open;
+  if (!list.length) { el.innerHTML = '<div class="loading">No open requests</div>'; return; }
+  el.innerHTML = list.map((r) => {
+    const d = new Date(r.event_date + 'T00:00:00');
+    const when = d.toLocaleDateString('default', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+      + (r.start_time ? ', ' + fmtClockFromTimeStr(r.start_time) + (r.end_time ? '–' + fmtClockFromTimeStr(r.end_time) : '') : '');
+    const alt = r.alt_date ? ' (backup ' + new Date(r.alt_date + 'T00:00:00').toLocaleDateString('default', { month: 'short', day: 'numeric' }) + ')' : '';
+    const closed = r.status === 'confirmed' || r.status === 'declined';
+    return '<div class="event-card"><div class="event-info">'
+      + '<span class="badge ' + (r.status === 'new' ? 'badge-purple' : '') + '">' + escHtml(r.status) + '</span> '
+      + '<span class="event-type-badge etype-default">' + escHtml(r.event_type) + '</span>'
+      + '<div class="event-name">' + escHtml(r.organization ? r.organization + ' — ' + r.name : r.name) + '</div>'
+      + '<div class="event-meta">' + escHtml(when + alt) + (r.guest_count ? ' · ' + r.guest_count + ' guests' : '') + '</div>'
+      + '<div class="event-meta"><a href="mailto:' + escHtml(r.email) + '">' + escHtml(r.email) + '</a>' + (r.phone ? ' · ' + escHtml(r.phone) : '') + '</div>'
+      + (r.details ? '<div class="event-meta">' + escHtml(r.details) + '</div>' : '')
+      + '</div><div style="display:flex;flex-direction:column;gap:6px;">'
+      + (closed ? '' : '<button class="btn btn-sm btn-primary" onclick="convertEventRequest(\'' + r.id + '\')">Add to calendar</button>')
+      + (r.status === 'new' ? '<button class="btn btn-sm btn-secondary" onclick="setEventRequestStatus(\'' + r.id + '\', \'contacted\')">Mark contacted</button>' : '')
+      + (closed ? '' : '<button class="btn btn-sm btn-danger" onclick="setEventRequestStatus(\'' + r.id + '\', \'declined\')">Decline</button>')
+      + (r.status === 'declined' ? '<button class="btn btn-sm btn-secondary" onclick="setEventRequestStatus(\'' + r.id + '\', \'new\')">Reopen</button>' : '')
+      + '</div></div>';
+  }).join('');
+}
+
+async function setEventRequestStatus(id, status) {
+  if (!canSchedule()) return;
+  const { error } = await window.supabase.from('event_requests').update({ status }).eq('id', id);
+  if (error) { toast('Error: ' + error.message, true); return; }
+  const r = eventRequests.find((x) => x.id === id);
+  if (r) r.status = status;
+  renderEventRequests();
+}
+
+// Pre-fills the Add Event form from a request; saving it links the new
+// event to the request and marks the request confirmed.
+function convertEventRequest(id) {
+  const r = eventRequests.find((x) => x.id === id);
+  if (!r) return;
+  cancelEventEdit();
+  eventFromRequestId = id;
+  document.getElementById('ev-form-label').textContent = 'Add Event (from request)';
+  document.getElementById('ev-cancel-edit').style.visibility = 'visible';
+  const typeKey = REQUEST_TYPE_KEYS[r.event_type] || 'special';
+  document.getElementById('ev-type').value = typeKey;
+  document.getElementById('ev-name').value = (r.organization || r.name) + ' — ' + eventTypeLabel(typeKey);
+  document.getElementById('ev-date').value = r.event_date;
+  document.getElementById('ev-start-time').value = (r.start_time || '').slice(0, 5);
+  document.getElementById('ev-end-time').value = (r.end_time || '').slice(0, 5);
+  document.getElementById('ev-org').value = r.organization || '';
+  document.getElementById('ev-guests').value = r.guest_count || '';
+  document.getElementById('ev-contact-name').value = r.name;
+  document.getElementById('ev-contact-phone').value = r.phone || '';
+  document.getElementById('ev-contact-email').value = r.email;
+  document.getElementById('ev-notes').value = r.details || '';
+  document.getElementById('ev-host-wrap').style.display = '';
+  document.getElementById('ev-staff-wrap').style.display = 'none';
+  document.getElementById('ev-form-label').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ── FLIER PICTURE ──────────────────────────────────────────
@@ -298,6 +389,11 @@ async function saveOneOffEvent(name, eventType) {
     description: document.getElementById('ev-desc').value.trim() || null,
     image_url: imageUrl,
     is_public: document.getElementById('ev-public').checked,
+    organization: document.getElementById('ev-org').value.trim() || null,
+    guest_count: parseInt(document.getElementById('ev-guests').value, 10) || null,
+    contact_name: document.getElementById('ev-contact-name').value.trim() || null,
+    contact_phone: document.getElementById('ev-contact-phone').value.trim() || null,
+    contact_email: document.getElementById('ev-contact-email').value.trim() || null,
     event_name: name,
     event_type: eventType,
     event_date: localDateTimeToISOString(dateVal, startVal),
@@ -312,9 +408,11 @@ async function saveOneOffEvent(name, eventType) {
     logAudit('edit_event', 'events', eventEditId, payload);
     toast('Event updated');
   } else {
+    if (eventFromRequestId) payload.request_id = eventFromRequestId;
     const { data, error } = await window.supabase.from('events').insert(payload).select().single();
     if (error) { toast('Error: ' + error.message, true); return; }
     logAudit('add_event', 'events', data.id, payload);
+    if (eventFromRequestId) await window.supabase.from('event_requests').update({ status: 'confirmed' }).eq('id', eventFromRequestId);
     toast('Event added');
   }
   cancelEventEdit();
