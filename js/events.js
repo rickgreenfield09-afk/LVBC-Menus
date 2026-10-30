@@ -14,6 +14,7 @@ let eventEditId = null;
 let recurringEditId = null;
 let eventMode = 'once';
 let customEventTypes = [];
+let evImg = null; // { url } for the saved flier, { file, preview } for a newly picked one
 let eventsListCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 
 const BUILTIN_EVENT_TYPES = { trivia: 'Trivia Night', bingo: 'Music Bingo', karaoke: 'Karaoke', special: 'Special / Performance', market: 'Farmers Market', foodtruck: 'Food Truck', vfw: 'VFW Night' };
@@ -57,6 +58,7 @@ async function loadEventsList() {
   const el = document.getElementById('events-list');
   el.innerHTML = '<div class="loading">Loading...</div>';
   document.getElementById('events-list-month-label').textContent = eventsListCursor.toLocaleString('default', { month: 'long', year: 'numeric' });
+  evDrawImg();
   await loadEventTypes();
   await refreshRecurringData();
   document.getElementById('ev-staff').innerHTML = '<option value="">Unassigned</option>' + scheduleStaff.map((s) => '<option value="' + s.id + '">' + escHtml(s.name) + '</option>').join('');
@@ -107,8 +109,11 @@ function renderEventsList() {
         + '<div class="event-date-block"><div class="event-date-month">' + d.toLocaleDateString('default', { month: 'short' }) + '</div>'
         + '<div class="event-date-day">' + d.getDate() + '</div>'
         + '<div class="event-date-time">' + fmtClockFromDate(d) + (end ? '–' + fmtClockFromDate(end) : '') + '</div></div>'
+        + (e.image_url ? '<img src="' + escHtml(e.image_url) + '" alt="" style="width:72px;height:72px;border-radius:8px;object-fit:cover;flex-shrink:0;">' : '')
         + '<div class="event-info"><span class="event-type-badge etype-' + escHtml(BUILTIN_EVENT_TYPES[e.event_type] ? e.event_type : 'default') + '">' + escHtml(eventTypeLabel(e.event_type)) + '</span>'
+        + (e.is_public ? ' <span class="badge badge-purple">On website</span>' : '')
         + '<div class="event-name">' + escHtml(e.event_name) + '</div>'
+        + (e.description ? '<div class="event-meta">' + escHtml(e.description.length > 110 ? e.description.slice(0, 110) + '…' : e.description) + '</div>' : '')
         + (e.event_type === 'vfw' ? '<div class="event-meta">' + (e.staff_id ? escHtml(staffName(e.staff_id)) : 'Unassigned') + '</div>' : '')
         + (e.notes ? '<div class="event-meta">' + escHtml(e.notes) + '</div>' : '') + '</div>'
         + '<div style="display:flex;gap:6px;">'
@@ -122,6 +127,7 @@ function renderEventsList() {
       + '<div class="event-date-day">' + d.getDate() + '</div>'
       + '<div class="event-date-time">' + (item.start_time ? fmtClockFromTimeStr(item.start_time) + (item.end_time ? '–' + fmtClockFromTimeStr(item.end_time) : '') : '') + '</div></div>'
       + '<div class="event-info"><span class="badge badge-purple">Recurring</span>'
+      + (recurringEvents.find((r) => r.id === item.recurringEventId)?.is_public ? ' <span class="badge badge-purple">On website</span>' : '')
       + '<div class="event-name">' + escHtml(item.name) + '</div>'
       + (item.event_type === 'vfw' ? '<div class="event-meta">' + (item.staff_id ? escHtml(staffName(item.staff_id)) : 'Unassigned') + '</div>' : '') + '</div>'
       + '<div style="display:flex;gap:6px;">'
@@ -179,6 +185,10 @@ function editEvent(id) {
   document.getElementById('ev-start-time').value = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
   document.getElementById('ev-end-time').value = e.event_end ? (() => { const t = new Date(e.event_end); return String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0'); })() : '';
   document.getElementById('ev-notes').value = e.notes || '';
+  document.getElementById('ev-desc').value = e.description || '';
+  document.getElementById('ev-public').checked = !!e.is_public;
+  evImg = e.image_url ? { url: e.image_url } : null;
+  evDrawImg();
   document.getElementById('ev-staff-wrap').style.display = e.event_type === 'vfw' ? '' : 'none';
   document.getElementById('ev-staff').value = e.staff_id || '';
   document.getElementById('btn-save-event').textContent = 'Save Changes';
@@ -205,7 +215,45 @@ function cancelEventEdit() {
   document.getElementById('rec-start-time').value = '';
   document.getElementById('rec-end-time').value = '';
   document.getElementById('ev-notes').value = '';
+  document.getElementById('ev-desc').value = '';
+  document.getElementById('ev-public').checked = false;
+  evImg = null;
+  evDrawImg();
   setEventMode('once');
+}
+
+// ── FLIER PICTURE ──────────────────────────────────────────
+function evDrawImg() {
+  const el = document.getElementById('ev-img-wrap');
+  if (!el) return;
+  el.innerHTML = evImg
+    ? '<div style="display:inline-block;text-align:center;"><img src="' + escHtml(evImg.preview || evImg.url) + '" alt="" style="width:160px;max-height:200px;border-radius:8px;object-fit:cover;display:block;">'
+      + '<button type="button" class="btn btn-sm btn-secondary" style="margin-top:6px;" onclick="evRemoveImg()">Remove</button></div>'
+    : '<label class="btn btn-sm btn-secondary" style="display:inline-block;cursor:pointer;">Add flier / picture<input type="file" accept="image/*" style="display:none;" onchange="evPickImg(this)"></label>';
+}
+
+function evPickImg(input) {
+  const file = input.files[0];
+  if (!file) return;
+  evImg = { file, preview: URL.createObjectURL(file) };
+  evDrawImg();
+}
+
+function evRemoveImg() {
+  evImg = null;
+  evDrawImg();
+}
+
+// Uploads a newly picked flier to assets/events/ and returns the public
+// URL to store (or the existing URL / null). invResizePhoto is in locations.js.
+async function evUploadImg() {
+  if (!evImg) return null;
+  if (evImg.url) return evImg.url;
+  const blob = await invResizePhoto(evImg.file);
+  const path = 'events/' + Date.now() + '.jpg';
+  const { error } = await window.supabase.storage.from('assets').upload(path, blob, { contentType: 'image/jpeg' });
+  if (error) throw new Error('Picture upload failed: ' + error.message);
+  return window.supabase.storage.from('assets').getPublicUrl(path).data.publicUrl;
 }
 
 async function resolveCustomTypeIfNeeded() {
@@ -244,7 +292,12 @@ async function saveOneOffEvent(name, eventType) {
   const startVal = document.getElementById('ev-start-time').value;
   if (!dateVal || !startVal) { toast('Date and start time are required', true); return; }
   const endVal = document.getElementById('ev-end-time').value;
+  let imageUrl;
+  try { imageUrl = await evUploadImg(); } catch (err) { toast(err.message, true); return; }
   const payload = {
+    description: document.getElementById('ev-desc').value.trim() || null,
+    image_url: imageUrl,
+    is_public: document.getElementById('ev-public').checked,
     event_name: name,
     event_type: eventType,
     event_date: localDateTimeToISOString(dateVal, startVal),
@@ -299,6 +352,7 @@ function editRecurringEvent(id) {
   document.getElementById('rec-start-time').value = (re.start_time || '').slice(0, 5);
   document.getElementById('rec-end-time').value = (re.end_time || '').slice(0, 5);
   document.getElementById('ev-notes').value = re.notes || '';
+  document.getElementById('ev-public').checked = !!re.is_public;
   document.getElementById('ev-staff-wrap').style.display = re.event_type === 'vfw' ? '' : 'none';
   document.getElementById('ev-staff').value = re.default_staff_id || '';
   document.getElementById('btn-save-event').textContent = 'Save Changes';
@@ -316,6 +370,7 @@ async function saveRecurringEvent(name, eventType) {
     week_of_month: recurrenceType === 'monthly_nth_weekday' ? parseInt(document.getElementById('rec-week-of-month').value, 10) : null,
     start_time: document.getElementById('rec-start-time').value || null,
     end_time: document.getElementById('rec-end-time').value || null,
+    is_public: document.getElementById('ev-public').checked,
     default_staff_id: eventType === 'vfw' ? (document.getElementById('ev-staff').value || null) : null,
     notes: document.getElementById('ev-notes').value.trim() || null,
   };

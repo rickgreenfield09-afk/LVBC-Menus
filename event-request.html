@@ -152,7 +152,7 @@
   // Let the parent page size the iframe to fit.
   function postHeight() {
     if (window.parent === window) return;
-    window.parent.postMessage({ type: 'lvbc-event-height', height: document.documentElement.scrollHeight }, '*');
+    window.parent.postMessage({ type: 'lvbc-embed-height', height: document.documentElement.scrollHeight }, '*');
   }
   new ResizeObserver(postHeight).observe(document.body);
   window.addEventListener('load', postHeight);

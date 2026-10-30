@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wine &amp; N/A</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="config.js"></script>
+<style>
+  /* Self-contained: embedded via iframe on the brewery's own website.
+     Reads the wine_menu table directly (public read, see schema.sql). */
+  html, body { margin: 0; background: transparent; }
+  #lvbc-wine { font-family: 'Poppins', -apple-system, 'Segoe UI', Arial, sans-serif; color: #000; padding: 16px 16px 40px; box-sizing: border-box; text-align: center; }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h2 { font-size: 36px; font-weight: 500; text-transform: uppercase; margin: 48px 0 28px; }
+  h2:first-child { margin-top: 8px; }
+  .item { margin-bottom: 40px; }
+  .item h3 { font-size: 20px; font-weight: 500; margin: 0 0 8px; }
+  .item .sub { font-size: 16px; margin: 0 0 8px; }
+  .item .desc { font-size: 16px; line-height: 1.6; margin: 0; }
+  .empty { color: #666; padding: 40px 0; }
+</style>
+</head>
+<body>
+<div id="lvbc-wine"><div class="wrap" id="root"><p class="empty">Loading…</p></div></div>
+
+<script>
+(function () {
+  const cfg = window.LVBC_CONFIG || {};
+  const root = document.getElementById('root');
+  const ORDER = ['Wine by the Glass', 'Wine by the Bottle', 'N/A Beer', 'N/A Options'];
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const money = (n) => '$' + Number(n).toFixed(2);
+
+  function postHeight() {
+    if (window.parent === window) return;
+    window.parent.postMessage({ type: 'lvbc-embed-height', height: document.documentElement.scrollHeight }, '*');
+  }
+  new ResizeObserver(postHeight).observe(document.body);
+  window.addEventListener('load', postHeight);
+
+  fetch(cfg.SUPABASE_URL + '/rest/v1/wine_menu?status=eq.active&select=name,winery,region,type,display_group,description,price_glass,price_bottle&order=sort_order.asc,name.asc', {
+    headers: { apikey: cfg.SUPABASE_ANON_KEY, Authorization: 'Bearer ' + cfg.SUPABASE_ANON_KEY },
+  }).then((r) => r.json().then((j) => { if (!r.ok) throw new Error(); return j; }))
+    .then((items) => {
+      if (!items.length) { root.innerHTML = '<p class="empty">The wine menu is not available right now.</p>'; return; }
+      const groups = {};
+      items.forEach((w) => { (groups[w.display_group || 'Other'] = groups[w.display_group || 'Other'] || []).push(w); });
+      const names = Object.keys(groups).sort((a, b) => (ORDER.indexOf(a) + 100) % 100 - (ORDER.indexOf(b) + 100) % 100);
+      root.innerHTML = names.map((g) => '<h2>' + esc(g) + '</h2>' + groups[g].map((w) => {
+        const sub = [w.winery, w.region, w.type].filter(Boolean).join(' | ');
+        const prices = [w.price_glass != null ? money(w.price_glass) + ' glass' : '', w.price_bottle != null ? money(w.price_bottle) + ' bottle' : ''].filter(Boolean).join(' | ');
+        return '<div class="item"><h3>' + esc(w.name) + '</h3>'
+          + (sub ? '<p class="sub">' + esc(sub) + '</p>' : '')
+          + (w.description ? '<p class="desc">' + esc(w.description) + '</p>' : '')
+          + (prices ? '<p class="desc">' + prices + '</p>' : '') + '</div>';
+      }).join('')).join('');
+      postHeight();
+    })
+    .catch(() => { root.innerHTML = '<p class="empty">The wine menu could not be loaded right now.</p>'; });
+})();
+</script>
+</body>
+</html>

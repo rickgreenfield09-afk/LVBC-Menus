@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>On Tap</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="config.js"></script>
+<style>
+  /* Self-contained: embedded via iframe on the brewery's own website.
+     Reads the beers table directly (public read, see schema.sql). */
+  html, body { margin: 0; background: transparent; }
+  #lvbc-tap { font-family: 'Poppins', -apple-system, 'Segoe UI', Arial, sans-serif; color: #000; padding: 16px 16px 40px; box-sizing: border-box; text-align: center; }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h2 { font-size: 36px; font-weight: 500; text-transform: uppercase; margin: 48px 0 28px; }
+  h2:first-child { margin-top: 8px; }
+  .item { margin-bottom: 40px; }
+  .item h3 { font-size: 20px; font-weight: 500; margin: 0 0 8px; }
+  .item .sub { font-size: 16px; margin: 0 0 8px; }
+  .item .desc { font-size: 16px; line-height: 1.6; margin: 0; }
+  .item .price { margin-top: 4px; }
+  .tag { display: inline-block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; background: #ebebf7; padding: 2px 8px; margin-left: 8px; vertical-align: middle; }
+  .empty { color: #666; padding: 40px 0; }
+</style>
+</head>
+<body>
+<div id="lvbc-tap"><div class="wrap" id="root"><p class="empty">Loading…</p></div></div>
+
+<script>
+(function () {
+  const cfg = window.LVBC_CONFIG || {};
+  const root = document.getElementById('root');
+  const ORDER = ['Light & Lager', 'Ales & IPAs', 'Strong & Specialty', 'Dark', 'Guest Tap', 'Non-Alcoholic'];
+  const BADGES = { new_release: 'New', back_again: 'Back again', seasonal: 'Seasonal', limited: 'Limited', collab: 'Collab' };
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  function postHeight() {
+    if (window.parent === window) return;
+    window.parent.postMessage({ type: 'lvbc-embed-height', height: document.documentElement.scrollHeight }, '*');
+  }
+  new ResizeObserver(postHeight).observe(document.body);
+  window.addEventListener('load', postHeight);
+
+  fetch(cfg.SUPABASE_URL + '/rest/v1/beers?status=eq.active&select=name,style,abv,price,category,description,badges,collab_partner&order=name.asc', {
+    headers: { apikey: cfg.SUPABASE_ANON_KEY, Authorization: 'Bearer ' + cfg.SUPABASE_ANON_KEY },
+  }).then((r) => r.json().then((j) => { if (!r.ok) throw new Error(); return j; }))
+    .then((beers) => {
+      if (!beers.length) { root.innerHTML = '<p class="empty">Nothing on tap right now.</p>'; return; }
+      const groups = {};
+      beers.forEach((b) => { (groups[b.category || 'Other'] = groups[b.category || 'Other'] || []).push(b); });
+      const names = Object.keys(groups).sort((a, b) => (ORDER.indexOf(a) + 100) % 100 - (ORDER.indexOf(b) + 100) % 100);
+      root.innerHTML = names.map((g) => '<h2>' + esc(g) + '</h2>' + groups[g].map((b) => {
+        const sub = [b.style, b.abv != null ? Number(b.abv) + '% ABV' : ''].filter(Boolean).join(' | ');
+        const tags = (b.badges || []).filter((x) => BADGES[x]).map((x) => '<span class="tag">' + BADGES[x] + '</span>').join('');
+        return '<div class="item"><h3>' + esc(b.name) + tags + '</h3>'
+          + (sub ? '<p class="sub">' + esc(sub) + '</p>' : '')
+          + (b.description ? '<p class="desc">' + esc(b.description) + '</p>' : '')
+          + (b.price != null ? '<p class="desc price">$' + Number(b.price).toFixed(2) + '</p>' : '') + '</div>';
+      }).join('')).join('');
+      postHeight();
+    })
+    .catch(() => { root.innerHTML = '<p class="empty">The tap list could not be loaded right now.</p>'; });
+})();
+</script>
+</body>
+</html>

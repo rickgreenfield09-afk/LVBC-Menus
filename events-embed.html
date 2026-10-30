@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Events</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="config.js"></script>
+<style>
+  /* Self-contained: embedded via iframe on the brewery's own website
+     (see embed-demo.html). Fed by the website_events() function
+     (supabase/migration_056_website_events.sql). */
+  html, body { margin: 0; background: transparent; }
+  #lvbc-events { font-family: 'Poppins', -apple-system, 'Segoe UI', Arial, sans-serif; color: #000; padding: 24px 16px 40px; box-sizing: border-box; }
+  #lvbc-events * { box-sizing: border-box; }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  .weekly { display: flex; gap: 32px; align-items: flex-start; margin-bottom: 72px; }
+  .weekly h2 { font-size: 40px; font-weight: 500; margin: 0; flex: 0 0 260px; line-height: 1.2; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; flex: 1; }
+  .tile { background: #ebebf7; padding: 36px 40px; }
+  .tile .day { font-size: 18px; margin-bottom: 16px; }
+  .tile .what { font-size: 16px; }
+  .event { display: flex; gap: 34px; align-items: center; margin-bottom: 56px; }
+  .event .pic { flex: 0 0 46%; }
+  .event .pic img { display: block; width: 100%; height: auto; }
+  .event .body { flex: 1; min-width: 0; }
+  .event h3 { font-size: 28px; font-weight: 500; margin: 0 0 20px; }
+  .event .when { font-size: 16px; margin: 0 0 6px; }
+  .event .desc p { font-size: 16px; line-height: 1.6; margin: 14px 0; }
+  .btn { display: inline-block; background: #000; color: #fff; border: 0; font: 500 16px 'Poppins', Arial, sans-serif; padding: 18px 32px; cursor: pointer; text-decoration: none; margin-top: 8px; }
+  .btn:hover { background: #333; }
+  .back { background: none; border: 0; font: 500 15px 'Poppins', Arial, sans-serif; cursor: pointer; padding: 0; margin-bottom: 28px; text-decoration: underline; }
+  .detail .pic { flex-basis: 46%; }
+  .empty { text-align: center; color: #666; padding: 40px 0; }
+  @media (max-width: 760px) {
+    .weekly { flex-direction: column; gap: 16px; margin-bottom: 40px; }
+    .weekly h2 { flex: none; font-size: 32px; }
+    .tiles { width: 100%; }
+    .event { flex-direction: column; align-items: stretch; gap: 18px; }
+    .event .pic { flex: none; }
+  }
+</style>
+</head>
+<body>
+<div id="lvbc-events"><div class="wrap" id="root"><p class="empty">Loading…</p></div></div>
+
+<script>
+(function () {
+  const cfg = window.LVBC_CONFIG || {};
+  const root = document.getElementById('root');
+  const TZ = 'America/Chicago';
+  const DAYS = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
+  const ORD = { 1: '1st', 2: '2nd', 3: '3rd', 4: '4th', 5: 'Last' };
+  let data = null;
+
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  function postHeight() {
+    if (window.parent === window) return;
+    window.parent.postMessage({ type: 'lvbc-embed-height', height: document.documentElement.scrollHeight }, '*');
+  }
+  new ResizeObserver(postHeight).observe(document.body);
+
+  // "6pm" / "7:30pm" from a time string like "18:00:00"
+  function shortTime(t) {
+    if (!t) return '';
+    const [h, m] = t.split(':').map(Number);
+    return ((h + 11) % 12 + 1) + (m ? ':' + String(m).padStart(2, '0') : '') + (h < 12 ? 'am' : 'pm');
+  }
+  function clock(iso) {
+    return new Date(iso).toLocaleTimeString('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' }).replace(' ', '');
+  }
+  function dateLine(e) {
+    const d = new Date(e.event_date).toLocaleDateString('en-US', { timeZone: TZ, weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    return d;
+  }
+  function timeLine(e) {
+    return clock(e.event_date) + (e.event_end ? ' – ' + clock(e.event_end) : '');
+  }
+  // Blank line = new paragraph, **text** = bold. Escaped first, so safe.
+  function descHtml(text) {
+    return String(text || '').split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean)
+      .map((p) => '<p>' + esc(p).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>') + '</p>').join('');
+  }
+
+  function weeklyHtml() {
+    if (!data.weekly.length) return '';
+    return '<div class="weekly"><h2>Weekly Events:</h2><div class="tiles">' + data.weekly.map((w) => {
+      const day = w.recurrence_type === 'monthly_nth_weekday' ? ORD[w.week_of_month] + ' ' + DAYS[w.day_of_week] : DAYS[w.day_of_week];
+      const times = w.start_time ? ' | ' + shortTime(w.start_time) + (w.end_time ? ' - ' + shortTime(w.end_time) : '') : '';
+      return '<div class="tile"><div class="day">' + esc(day) + '</div><div class="what"><strong>' + esc(w.name) + '</strong>' + times + '</div></div>';
+    }).join('') + '</div></div>';
+  }
+
+  function listView() {
+    const events = data.upcoming.map((e) => '<div class="event">'
+      + (e.image_url ? '<div class="pic"><img src="' + esc(e.image_url) + '" alt="' + esc(e.name) + '"></div>' : '')
+      + '<div class="body"><h3>' + esc(e.name) + '</h3>'
+      + '<p class="when">' + esc(dateLine(e)) + '</p><p class="when">' + esc(timeLine(e)) + '</p>'
+      + '<div class="desc">' + descHtml(e.description) + '</div>'
+      + '<button class="btn" data-id="' + esc(e.id) + '">View Event →</button></div></div>').join('');
+    root.innerHTML = weeklyHtml() + (events || (data.weekly.length ? '' : '<p class="empty">No upcoming events right now. Check back soon!</p>'));
+    root.querySelectorAll('button[data-id]').forEach((b) => b.addEventListener('click', () => { location.hash = 'event=' + b.dataset.id; }));
+  }
+
+  function detailView(e) {
+    root.innerHTML = '<button class="back" id="back">← All events</button><div class="event detail">'
+      + (e.image_url ? '<div class="pic"><img src="' + esc(e.image_url) + '" alt="' + esc(e.name) + '"></div>' : '')
+      + '<div class="body"><h3>' + esc(e.name) + '</h3>'
+      + '<p class="when">' + esc(dateLine(e)) + '</p><p class="when">' + esc(timeLine(e)) + '</p>'
+      + '<div class="desc">' + descHtml(e.description) + '</div></div></div>';
+    document.getElementById('back').addEventListener('click', () => { location.hash = ''; });
+  }
+
+  function render() {
+    if (!data) return;
+    const m = location.hash.match(/^#event=(.+)$/);
+    const ev = m && data.upcoming.find((e) => e.id === m[1]);
+    if (ev) detailView(ev); else listView();
+    postHeight();
+  }
+
+  window.addEventListener('hashchange', render);
+  window.addEventListener('load', postHeight);
+
+  fetch(cfg.SUPABASE_URL + '/rest/v1/rpc/website_events', {
+    method: 'POST',
+    headers: { apikey: cfg.SUPABASE_ANON_KEY, Authorization: 'Bearer ' + cfg.SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+    body: '{}',
+  }).then((r) => r.json().then((j) => { if (!r.ok) throw new Error(); return j; }))
+    .then((j) => { data = j; render(); })
+    .catch(() => { root.innerHTML = '<p class="empty">Events could not be loaded right now.</p>'; });
+})();
+</script>
+</body>
+</html>

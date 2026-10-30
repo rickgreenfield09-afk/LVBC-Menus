@@ -296,6 +296,14 @@
                     <div class="form-group"><label class="form-label">Start Time</label><input class="form-input" style="width:100%;" type="time" id="ev-start-time"></div>
                     <div class="form-group"><label class="form-label">End Time</label><input class="form-input" style="width:100%;" type="time" id="ev-end-time"></div>
                   </div>
+                  <div class="form-group" style="margin-bottom:16px;">
+                    <label class="form-label">Flier / Picture</label>
+                    <div id="ev-img-wrap"></div>
+                  </div>
+                  <div class="form-group" style="margin-bottom:16px;">
+                    <label class="form-label">Description (shown on the website)</label>
+                    <textarea class="form-ta" id="ev-desc" rows="5" placeholder="Leave a blank line between paragraphs. **Bold** works."></textarea>
+                  </div>
                 </div>
 
                 <div id="ev-recurring-fields" style="display:none;">
@@ -327,7 +335,8 @@
                   </div>
                 </div>
 
-                <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Notes</label><textarea class="form-ta" id="ev-notes" rows="2"></textarea></div>
+                <label class="checkbox-row" style="margin-bottom:16px;"><input type="checkbox" id="ev-public"> Show on the brewery website</label>
+                <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Internal Notes (staff only)</label><textarea class="form-ta" id="ev-notes" rows="2"></textarea></div>
                 <div id="event-alert" style="display:none;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:'DM Mono',monospace;"></div>
                 <button class="btn btn-primary" id="btn-save-event" style="width:100%;" onclick="saveEventOrRecurring()">Add Event</button>
               </div>
