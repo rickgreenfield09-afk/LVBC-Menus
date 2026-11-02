@@ -14,6 +14,9 @@
 // 'off' and 'archived' menu items are hidden, same as the printed menus.
 // Depends on: window.supabase, escHtml(), fmtTime(), money() (core.js)
 
+// Menu prices always show cents ($7.00, not $7).
+const menuMoney = (n) => '$' + Number(n).toFixed(2);
+
 const WINE_GROUPS = ['Wine by the Glass', 'Wine by the Bottle'];
 const NA_GROUPS = ['N/A Beer', 'N/A Options'];
 const EVENT_TYPE_LABELS = { trivia: 'Trivia Night', bingo: 'Music Bingo', karaoke: 'Karaoke', special: 'Special Event', market: 'Farmers Market', foodtruck: 'Food Truck', vfw: 'VFW Night' };
@@ -65,8 +68,8 @@ function wineGroupsHtml(groups, icon) {
     if (!rows.length) return '';
     return '<div class="section-header">' + escHtml(g) + '</div>' + rows.map((w) => {
       const prices = [];
-      if (w.price_glass) prices.push('Glass ' + money(w.price_glass));
-      if (w.price_bottle) prices.push('Bottle ' + money(w.price_bottle));
+      if (w.price_glass) prices.push('Glass ' + menuMoney(w.price_glass));
+      if (w.price_bottle) prices.push('Bottle ' + menuMoney(w.price_bottle));
       return menuCard({
         icon, name: w.name, sub: [w.winery, w.type].filter(Boolean).join(' · '), desc: w.description,
         extra: prices.length ? '<div class="wine-price">' + prices.join(' · ') + '</div>' : '',
@@ -84,7 +87,7 @@ function coffeeListHtml() {
   });
   return drinks.map((d) => menuCard({
     icon: '☕', name: d.name, desc: d.desc,
-    extra: '<div class="coffee-sizes">' + d.sizes.map((s) => '<span>' + escHtml(s.size_label) + '<b>' + money(s.price) + '</b></span>').join('') + '</div>',
+    extra: '<div class="coffee-sizes">' + d.sizes.map((s) => '<span>' + escHtml(s.size_label) + '<b>' + menuMoney(s.price) + '</b></span>').join('') + '</div>',
   })).join('');
 }
 

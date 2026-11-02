@@ -832,7 +832,7 @@ async function saveCoffeeGuide() {
 }
 
 // ── MENU GENERATOR (print-ready HTML, opened in a new tab) ──
-function fmtP(n) { return n ? '$' + Number(n).toFixed(2).replace(/\.00$/, '') : ''; }
+function fmtP(n) { return n ? '$' + Number(n).toFixed(2) : ''; }
 function genStatus(msg) { const el = document.getElementById('gen-status'); if (el) el.textContent = msg; }
 function openHtml(html) {
   const blob = new Blob([html], { type: 'text/html' });
@@ -1110,8 +1110,8 @@ function buildLabelHtml(beerList) {
   const cards = beerList.map((b) => {
     const badges = (b.badges || []).map((bk) => { const m = LABEL_BADGE_MAP[bk]; return m ? '<span class="lbl-badge ' + m.cls + '">' + m.label + '</span>' : ''; }).join('');
     const isNA = (b.category || '').toLowerCase().indexOf('non-alc') !== -1;
-    const packPrice = isNA ? '$15' : '$18';
-    const canPrice = b.price ? '$' + (Number(b.price) + 1).toFixed(2).replace(/\.00$/, '') : '';
+    const packPrice = isNA ? '$15.00' : '$18.00';
+    const canPrice = b.price ? '$' + (Number(b.price) + 1).toFixed(2) : '';
     return '<div class="card">' + '<div class="card-top"><div>' + '<div class="card-name">' + escHtml(b.name) + '</div>' + '<div class="card-style">' + escHtml(b.style || '') + '</div>' + '</div>' + (badges ? '<div class="card-badge-wrap">' + badges + '</div>' : '') + '</div>' + '<div class="card-desc">' + escHtml(b.description || '') + '</div>' + '<div class="card-bottom">' + '<span class="card-abv">' + escHtml(String(b.abv || '')) + '% ABV</span>' + '<div style="display:flex;align-items:baseline;gap:6px;">' + '<span class="card-price-sub"><em>Build a 4-pack for ' + packPrice + ' or</em></span>' + '<span class="card-price-main">' + canPrice + '/can</span>' + '</div></div></div>';
   }).join('');
   return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Fridge Labels — Lago Vista Brewing</title><style>' + LABEL_CSS + '</style></head><body><div class="grid">' + cards + '</div></body></html>';
