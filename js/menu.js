@@ -1310,7 +1310,7 @@ function genFlipPending(what) { flipStatus(what + ' has not been built yet.'); }
 // Teal subway-tile frame like the taproom wall: tiles in running bond, clipped to a ring around the card.
 function flipBrickBorderSvg(o) {
   const { W, H, m, band, tw, th, gap } = Object.assign({ W: 550, H: 850, m: 12, band: 48, tw: 48, th: 24, gap: 3 }, o);
-  const colors = ['#0f7a68', '#12856f', '#0c6f5f', '#168a74', '#0e7563'];
+  const colors = ['#0a5f4a', '#0c694f', '#085641', '#0d6d52', '#095c47'];
   const x0 = m, y0 = m, x1 = W - m, y1 = H - m, ix0 = x0 + band, iy0 = y0 + band, ix1 = x1 - band, iy1 = y1 - band;
   let tiles = '';
   for (let r = 0, y = y0; y < y1; r++, y += th) {

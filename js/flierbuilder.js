@@ -185,7 +185,7 @@ function fbPick(kind, id) {
 
 function fbPickerHtml(kind, selected) {
   const cell = (id, inner, on, label) => '<div onclick="fbPick(\'' + kind + '\',' + (id ? '\'' + id + '\'' : 'null') + ')" title="' + escHtml(label) + '" style="width:64px;height:64px;border:2px solid ' + (on ? 'var(--teal)' : 'var(--border)') + ';border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;font-family:\'DM Mono\',monospace;background:' + (on ? 'rgba(42,184,166,0.12)' : 'var(--raised)') + ';color:var(--sub);overflow:hidden;">' + inner + '</div>';
-  const brick = '<div style="width:100%;height:100%;background:repeating-linear-gradient(0deg,#0f7a68 0 9px,#d6e9e4 9px 11px),#0f7a68;"></div>';
+  const brick = '<div style="width:100%;height:100%;background:repeating-linear-gradient(0deg,#0a5f4a 0 9px,#d6e9e4 9px 11px),#0a5f4a;"></div>';
   return cell(null, 'None', !selected, 'None')
     + (kind === 'border' ? cell(FB_BRICK, brick, selected === FB_BRICK, 'Green brick (default)') : '')
     + flierComps.filter((c) => c.kind === kind).map((c) => cell(c.id, '<img src="' + escHtml(c.url) + '" style="max-width:100%;max-height:100%;">', c.id === selected, c.name)).join('');
