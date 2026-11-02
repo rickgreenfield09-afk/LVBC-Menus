@@ -7,6 +7,15 @@
 // Depends on: window.supabase, toast(), escHtml(), openHtml(), flipStatus(),
 // HALF_BASE_CSS, FLIP_BEER_CSS (js/menu.js)
 
+// Print Outs sub-pages: Flip Cards (half sheets) and Full Sheets (8.5x11).
+function setPrintOutsTab(tab, btn) {
+  document.querySelectorAll('#marketingtab-flipmenus > .sub-tabs .sub-tab').forEach((b) => b.classList.remove('active'));
+  document.querySelectorAll('#marketingtab-flipmenus > .sub-sec').forEach((s) => s.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.getElementById('po-' + tab).classList.add('active');
+  flipStatus('');
+}
+
 let flierImg = null, flierFile = null, flierPages = [], flierSaving = false;
 let flierList = [], flierSelected = {};
 

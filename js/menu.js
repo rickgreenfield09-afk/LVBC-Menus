@@ -1304,12 +1304,12 @@ async function saveReleases() {
   flipStatus('Upcoming Releases saved — Generate Upcoming Releases to print the new version.');
 }
 
-function genFlipPending(what) { flipStatus(what + ' will be added once the Policies border is approved.'); }
+function genFlipPending(what) { flipStatus(what + ' has not been built yet.'); }
 
 // ---- Flip Menus: beer cards (glass-brick tile border, logo at the bottom, two different beers per sheet) ----
 // Teal subway-tile frame like the taproom wall: tiles in running bond, clipped to a ring around the card.
-function flipBrickBorderSvg() {
-  const W = 550, H = 850, m = 12, band = 48, tw = 48, th = 24, gap = 3;
+function flipBrickBorderSvg(o) {
+  const { W, H, m, band, tw, th, gap } = Object.assign({ W: 550, H: 850, m: 12, band: 48, tw: 48, th: 24, gap: 3 }, o);
   const colors = ['#0f7a68', '#12856f', '#0c6f5f', '#168a74', '#0e7563'];
   const x0 = m, y0 = m, x1 = W - m, y1 = H - m, ix0 = x0 + band, iy0 = y0 + band, ix1 = x1 - band, iy1 = y1 - band;
   let tiles = '';
@@ -1352,8 +1352,9 @@ function buildFlipBeerHtml(beerList) {
   for (let i = 0; i < list.length; i += 2) pages += '<div class="page">' + flipBeerSlot(list[i]) + '<div class="cut-line"></div>' + flipBeerSlot(list[i + 1]) + '</div>';
   return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Beer Flip Cards — Lago Vista Brewing</title>' + FLIP_FONT_LINK + '<style>' + HALF_BASE_CSS + FLIP_CSS + FLIP_BEER_CSS + '</style></head><body>' + pages + '</body></html>';
 }
-let flipBeerList = [], flipSelected = {};
+let flipBeerList = [], flipSelected = {}, flipPickerFull = false;
 async function openFlipBeerPicker() {
+  flipPickerFull = false;
   flipStatus('Loading beers...');
   try {
     flipBeerList = (await fetchBeersForMenu()).filter((b) => (b.category || '').toLowerCase().indexOf('guest') === -1);
@@ -1372,6 +1373,39 @@ function genFlipBeers() {
   const selected = flipBeerList.filter((b) => !!flipSelected[b.id]);
   if (!selected.length) { flipStatus('No beers selected.'); return; }
   closeFlipPicker();
+  if (flipPickerFull) {
+    openHtml(flipFullPage('Beer Full Sheets', selected.map(flipBeerInner), ''));
+    flipStatus(selected.length + ' full beer sheet' + (selected.length !== 1 ? 's' : '') + ' generated — one per 8.5×11 page.');
+    return;
+  }
   openHtml(buildFlipBeerHtml(selected));
   flipStatus(selected.length + ' beer flip card' + (selected.length !== 1 ? 's' : '') + ' generated — two per sheet.');
+}
+
+// ---- Flip Menus: Full Sheets (8.5x11 versions of the flip cards, one card per page) ----
+// Same inner markup as the half-sheet cards, restyled ~1.35x larger inside a taller brick frame.
+const FLIP_FULL_BORDER = { W: 850, H: 1100, m: 25, band: 62, tw: 62, th: 31, gap: 4 };
+const FLIP_FULL_CSS = '.page .full-card{width:8.5in;height:11in;transform:none;}.full-card .flip-inner{top:1.05in;bottom:1in;left:1.05in;right:1.05in;}'
+  + '.full-card .flip-logo{height:1.2in;margin-bottom:12px;}.full-card .flip-title{font-size:30px;margin-bottom:14px;}.full-card .flip-intro{font-size:17.5px;margin-bottom:16px;}'
+  + '.full-card .flip-rules{font-size:16.5px;padding-left:24px;margin-bottom:16px;}.full-card .flip-rules li{margin-bottom:6px;}.full-card .flip-fail{font-size:17px;margin-bottom:16px;}.full-card .flip-thanks{font-size:18px;margin-bottom:6px;}.full-card .flip-wifi{font-size:26px;}'
+  + '.full-card .flip-rel{margin-bottom:40px;}.full-card .flip-rel-style{font-size:36px;}.full-card .flip-rel-note{font-size:21px;margin-top:8px;}.full-card .flip-rel-list{margin-top:8px;}.full-card .flip-rel-qr .flip-qr{width:2in;}.full-card .flip-rel-qr .flip-qr svg{width:1.5in;height:1.5in;}'
+  + '.full-card .flip-beer-name{font-size:44px;margin-bottom:8px;}.full-card .flip-beer-meta{font-size:19px;margin-bottom:16px;}.full-card .flip-beer-photo,.full-card .flip-beer-photo-empty{width:5.2in;height:4.7in;border-radius:10px;}'
+  + '.full-card .flip-beer-desc{font-size:18.5px;margin:16px 0 10px;}.full-card .flip-beer-logo{height:1.4in;}.full-card .flip-qr{width:1.7in;}.full-card .flip-qr svg{width:1.2in;height:1.2in;}.full-card .flip-qr-label{font-size:16px;}';
+function flipFullPage(title, innerList, extraCss) {
+  const pages = innerList.map((inner) => '<div class="page"><div class="half-card full-card">' + flipBrickBorderSvg(FLIP_FULL_BORDER) + '<div class="flip-inner">' + inner + '</div></div></div>').join('');
+  return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>' + title + ' — Lago Vista Brewing</title>' + FLIP_FONT_LINK + '<style>' + HALF_BASE_CSS + FLIP_CSS + FLIP_BEER_CSS + FLIP_RELEASES_CSS + FLIP_FULL_CSS + (extraCss || '') + '</style></head><body>' + pages + '</body></html>';
+}
+async function genFullPolicies() {
+  flipStatus('Loading policies...');
+  openHtml(flipFullPage('Policies Full Sheet', [flipPoliciesInner(await fetchPolicies())], ''));
+  flipStatus('Policies full sheet generated — 8.5×11.');
+}
+async function genFullReleases() {
+  flipStatus('Loading releases...');
+  openHtml(flipFullPage('Upcoming Releases Full Sheet', [flipReleasesInner(await fetchReleases())], ''));
+  flipStatus('Upcoming Releases full sheet generated — 8.5×11.');
+}
+async function openFullBeerPicker() {
+  await openFlipBeerPicker();
+  flipPickerFull = true;
 }

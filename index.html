@@ -980,8 +980,10 @@
         <!-- PRINT OUTS: flip cards (half-sheet table inserts) and uploaded fliers -->
         <div class="sub-sec" id="marketingtab-flipmenus">
           <div class="sub-tabs" style="margin-bottom:8px;">
-            <button class="sub-tab active" type="button">Flip Cards</button>
+            <button class="sub-tab active" id="po-btn-flip" type="button" onclick="setPrintOutsTab('flip', this)">Flip Cards</button>
+            <button class="sub-tab" id="po-btn-full" type="button" onclick="setPrintOutsTab('full', this)">Full Sheets</button>
           </div>
+          <div class="sub-sec active" id="po-flip">
           <div class="section-label" style="margin-top:0;">Standard Cards</div>
           <div class="gen-grid">
             <div class="gen-card" style="position:relative;"><button class="btn btn-secondary btn-sm" style="position:absolute;top:12px;right:12px;" onclick="openPoliciesEditor()">Edit Text</button><div class="gen-card-title">Policies</div><div class="gen-card-desc">House rules and WiFi, two per 8.5×11 sheet.</div><button class="btn btn-primary btn-sm" onclick="genFlipPolicies()">Generate Policies</button></div>
@@ -1002,6 +1004,18 @@
             </span>
           </div>
           <div class="gen-grid" id="flier-grid"><div class="loading">Loading...</div></div>
+          </div>
+
+          <!-- FULL SHEETS: 8.5x11 versions of the standard flip cards -->
+          <div class="sub-sec" id="po-full">
+            <div class="section-label" style="margin-top:0;">Standard Cards — Full Sheet (8.5×11)</div>
+            <div class="gen-grid">
+              <div class="gen-card" style="position:relative;"><button class="btn btn-secondary btn-sm" style="position:absolute;top:12px;right:12px;" onclick="openPoliciesEditor()">Edit Text</button><div class="gen-card-title">Policies</div><div class="gen-card-desc">House rules and WiFi, one per 8.5×11 sheet. Uses the same text as the flip card.</div><button class="btn btn-primary btn-sm" onclick="genFullPolicies()">Generate Policies</button></div>
+              <div class="gen-card" style="position:relative;"><button class="btn btn-secondary btn-sm" style="position:absolute;top:12px;right:12px;" onclick="openReleasesEditor()">Edit Text</button><div class="gen-card-title">Upcoming Releases</div><div class="gen-card-desc">Four beer styles with flavor notes and a tap list QR code, one per 8.5×11 sheet.</div><button class="btn btn-primary btn-sm" onclick="genFullReleases()">Generate Upcoming Releases</button></div>
+              <div class="gen-card"><div class="gen-card-title">Mug Club</div><div class="gen-card-desc">Mug Club perks and join QR code.</div><button class="btn btn-secondary btn-sm" onclick="genFlipPending('The Mug Club card')">Generate Mug Club</button></div>
+              <div class="gen-card"><div class="gen-card-title">Beer Cards</div><div class="gen-card-desc">One full sheet per beer with photo, description, and QR codes — select individual beers or print all.</div><button class="btn btn-primary btn-sm" onclick="openFullBeerPicker()">Select &amp; Generate Sheets</button></div>
+            </div>
+          </div>
           <div class="gen-status" id="flip-status"></div>
           <div id="flib-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:600;align-items:center;justify-content:center;">
             <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;width:640px;max-width:94vw;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;">
