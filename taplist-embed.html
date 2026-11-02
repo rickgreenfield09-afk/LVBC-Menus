@@ -39,7 +39,7 @@
   const cfg = window.LVBC_CONFIG || {};
   const root = document.getElementById('root');
   const ORDER = ['Light & Lager', 'Ales & IPAs', 'Strong & Specialty', 'Dark', 'Guest Tap', 'Non-Alcoholic'];
-  const BADGES = { new_release: 'New', back_again: 'Back again', seasonal: 'Seasonal', limited: 'Limited', collab: 'Collab' };
+  const BADGES = { new_release: 'New', back_again: 'Back again', seasonal: 'Seasonal', limited: 'Limited', collab: 'Collaboration', lactose: 'Contains lactose', reduced_gluten: 'Reduced gluten', wheat: 'Contains wheat', leaving_soon: 'Almost gone!' };
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   function postHeight() {

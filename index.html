@@ -1420,6 +1420,12 @@
                     <option>Guest Tap</option><option>Non-Alcoholic</option>
                   </select>
                 </div>
+                <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Pills <span style="text-transform:none;letter-spacing:0;color:var(--muted);">(printed after the ABV on the tap list)</span></label>
+                  <select class="form-select" style="width:100%;" id="bn-pill-add" onchange="addBeerPill(this)">
+                    <option value="">Add a pill…</option>
+                  </select>
+                  <div id="bn-pill-list" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;"></div>
+                </div>
                 <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Description</label>
                   <textarea class="form-ta" id="bn-desc" placeholder="e.g. Smooth and easy-drinking with a touch of honey sweetness" rows="3"></textarea>
                 </div>
