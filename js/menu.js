@@ -1243,6 +1243,67 @@ async function savePolicies() {
   toast('Policies card updated.');
   flipStatus('Policies text saved — Generate Policies to print the new version.');
 }
+// ---- Flip Menus: Upcoming Releases (four beer styles, each with an optional flavor/color subtitle, tap list QR) ----
+const RELEASES_MAX_ITEMS = 4, RELEASES_MAX_STYLE_CHARS = 40, RELEASES_MAX_NOTE_CHARS = 90;
+const RELEASES_DEFAULTS = [
+  { style: 'Cold IPA', note: '' },
+  { style: 'Lagoritaville Mexican Lager', note: '' },
+  { style: 'Apple Strudel Lager', note: '' },
+  { style: '', note: '' },
+];
+const FLIP_RELEASES_CSS = '.flip-rel{margin-bottom:22px;}.flip-rel-style{font-size:21px;font-weight:700;line-height:1.15;}.flip-rel-note{font-size:13.5px;font-weight:400;line-height:1.4;margin-top:4px;color:#3a3530;}'
+  + '.flip-rel-list{margin-top:6px;}.flip-rel-qr{margin-top:auto;width:100%;display:flex;justify-content:center;}.flip-rel-qr .flip-qr{width:1.5in;}.flip-rel-qr .flip-qr svg{width:1.15in;height:1.15in;}';
+
+async function fetchReleases() {
+  const { data, error } = await window.supabase.from('flip_releases').select('items').eq('id', 1).maybeSingle();
+  if (error || !data || !Array.isArray(data.items) || !data.items.length) return RELEASES_DEFAULTS;
+  return data.items;
+}
+
+function flipReleasesInner(items) {
+  const rows = items.filter((i) => i.style && i.style.trim()).slice(0, RELEASES_MAX_ITEMS);
+  return '<img class="flip-logo" src="' + flipAsset('lvbc-arch-logo.png') + '">'
+    + '<div class="flip-title">UPCOMING RELEASES</div>'
+    + '<div class="flip-rel-list">' + rows.map((i) => '<div class="flip-rel"><div class="flip-rel-style">' + escHtml(i.style.trim()) + '</div>'
+      + (i.note && i.note.trim() ? '<div class="flip-rel-note">' + escHtml(i.note.trim()) + '</div>' : '') + '</div>').join('') + '</div>'
+    + '<div class="flip-rel-qr">' + flipQr(FLIP_QR.tap, 'Our Tap List') + '</div>';
+}
+async function genFlipReleases() {
+  flipStatus('Loading releases...');
+  const items = await fetchReleases();
+  openHtml(flipPage('Upcoming Releases', flipReleasesInner(items), FLIP_RELEASES_CSS + '.flip-qr-label{font-size:11px;font-weight:600;text-align:center;margin-top:4px;}'));
+  flipStatus('Upcoming Releases flip card generated — print on 8.5×11, two per sheet.');
+}
+
+async function openReleasesEditor() {
+  const items = await fetchReleases();
+  for (let n = 0; n < RELEASES_MAX_ITEMS; n++) {
+    document.getElementById('rel-style-' + n).value = (items[n] && items[n].style) || '';
+    document.getElementById('rel-note-' + n).value = (items[n] && items[n].note) || '';
+  }
+  document.getElementById('releases-modal').style.display = 'flex';
+}
+function closeReleasesEditor() { document.getElementById('releases-modal').style.display = 'none'; }
+function relResetDefaults() {
+  for (let n = 0; n < RELEASES_MAX_ITEMS; n++) {
+    document.getElementById('rel-style-' + n).value = RELEASES_DEFAULTS[n].style;
+    document.getElementById('rel-note-' + n).value = RELEASES_DEFAULTS[n].note;
+  }
+}
+async function saveReleases() {
+  const items = [];
+  for (let n = 0; n < RELEASES_MAX_ITEMS; n++) {
+    items.push({ style: document.getElementById('rel-style-' + n).value.trim(), note: document.getElementById('rel-note-' + n).value.trim() });
+  }
+  if (!items.some((i) => i.style)) { toast('Enter at least one beer style.', true); return; }
+  if (items.some((i) => i.note && !i.style)) { toast('A subtitle needs a beer style above it.', true); return; }
+  const { error } = await window.supabase.from('flip_releases').upsert({ id: 1, items, updated_at: new Date().toISOString() });
+  if (error) { toast('Save failed: ' + error.message, true); return; }
+  closeReleasesEditor();
+  toast('Upcoming Releases card updated.');
+  flipStatus('Upcoming Releases saved — Generate Upcoming Releases to print the new version.');
+}
+
 function genFlipPending(what) { flipStatus(what + ' will be added once the Policies border is approved.'); }
 
 // ---- Flip Menus: beer cards (glass-brick tile border, logo at the bottom, two different beers per sheet) ----

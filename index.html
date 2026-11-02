@@ -985,6 +985,7 @@
           <div class="section-label" style="margin-top:0;">Standard Cards</div>
           <div class="gen-grid">
             <div class="gen-card" style="position:relative;"><button class="btn btn-secondary btn-sm" style="position:absolute;top:12px;right:12px;" onclick="openPoliciesEditor()">Edit Text</button><div class="gen-card-title">Policies</div><div class="gen-card-desc">House rules and WiFi, two per 8.5×11 sheet.</div><button class="btn btn-primary btn-sm" onclick="genFlipPolicies()">Generate Policies</button></div>
+            <div class="gen-card" style="position:relative;"><button class="btn btn-secondary btn-sm" style="position:absolute;top:12px;right:12px;" onclick="openReleasesEditor()">Edit Text</button><div class="gen-card-title">Upcoming Releases</div><div class="gen-card-desc">Four beer styles with flavor notes and a tap list QR code, two per 8.5×11 sheet.</div><button class="btn btn-primary btn-sm" onclick="genFlipReleases()">Generate Upcoming Releases</button></div>
             <div class="gen-card"><div class="gen-card-title">Mug Club</div><div class="gen-card-desc">Mug Club perks and join QR code.</div><button class="btn btn-secondary btn-sm" onclick="genFlipPending('The Mug Club card')">Generate Mug Club</button></div>
             <div class="gen-card"><div class="gen-card-title">Beer Cards</div><div class="gen-card-desc">One card per beer with photo, description, and QR codes — select individual beers or print all.</div><button class="btn btn-primary btn-sm" onclick="openFlipBeerPicker()">Select &amp; Generate Cards</button></div>
           </div>
@@ -1100,6 +1101,24 @@
               <div style="padding:14px 24px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;flex-shrink:0;">
                 <button class="btn btn-secondary btn-sm" onclick="closeFlierUpload()">Cancel</button>
                 <button class="btn btn-primary btn-sm" id="flier-save" onclick="saveFlier()" disabled>Save</button>
+              </div>
+            </div>
+          </div>
+          <div id="releases-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:500;align-items:center;justify-content:center;">
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;width:600px;max-width:94vw;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;">
+              <div style="padding:20px 24px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+                <div><div style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px;">Edit Upcoming Releases Card</div><div style="font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);margin-top:2px;">Up to four beers. Leave a style blank to skip it. The tap list QR code is added automatically.</div></div>
+                <button onclick="closeReleasesEditor()" style="background:none;border:none;color:var(--sub);font-size:20px;cursor:pointer;line-height:1;">✕</button>
+              </div>
+              <div style="padding:16px 24px;overflow-y:auto;flex:1;">
+                <div class="card" style="margin-bottom:12px;"><div class="form-group" style="margin-bottom:12px;"><label class="form-label">Beer 1 style</label><input class="form-input" style="width:100%;" id="rel-style-0" maxlength="40" placeholder="e.g. Cold IPA"></div><div class="form-group"><label class="form-label">Subtitle (optional flavor / color profile)</label><input class="form-input" style="width:100%;" id="rel-note-0" maxlength="90" placeholder="e.g. Crisp and pale gold with citrus and pine"></div></div>
+                <div class="card" style="margin-bottom:12px;"><div class="form-group" style="margin-bottom:12px;"><label class="form-label">Beer 2 style</label><input class="form-input" style="width:100%;" id="rel-style-1" maxlength="40"></div><div class="form-group"><label class="form-label">Subtitle (optional flavor / color profile)</label><input class="form-input" style="width:100%;" id="rel-note-1" maxlength="90"></div></div>
+                <div class="card" style="margin-bottom:12px;"><div class="form-group" style="margin-bottom:12px;"><label class="form-label">Beer 3 style</label><input class="form-input" style="width:100%;" id="rel-style-2" maxlength="40"></div><div class="form-group"><label class="form-label">Subtitle (optional flavor / color profile)</label><input class="form-input" style="width:100%;" id="rel-note-2" maxlength="90"></div></div>
+                <div class="card"><div class="form-group" style="margin-bottom:12px;"><label class="form-label">Beer 4 style</label><input class="form-input" style="width:100%;" id="rel-style-3" maxlength="40"></div><div class="form-group"><label class="form-label">Subtitle (optional flavor / color profile)</label><input class="form-input" style="width:100%;" id="rel-note-3" maxlength="90"></div></div>
+              </div>
+              <div style="padding:14px 24px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:space-between;flex-shrink:0;">
+                <button class="btn btn-secondary btn-sm" onclick="relResetDefaults()">Reset to default</button>
+                <div style="display:flex;gap:8px;"><button class="btn btn-secondary btn-sm" onclick="closeReleasesEditor()">Cancel</button><button class="btn btn-primary btn-sm" onclick="saveReleases()">Save</button></div>
               </div>
             </div>
           </div>
