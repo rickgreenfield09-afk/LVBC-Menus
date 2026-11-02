@@ -157,6 +157,7 @@ function loadBeerIntoForm(b) {
   document.getElementById('bn-longdesc').value = b.long_description || '';
   setBeerImagePreview(b.image_url || null);
   beerPills = Array.isArray(b.badges) ? b.badges.slice() : [];
+  document.getElementById('bn-collab').value = b.collab_partner || '';
   renderBeerPills();
 
   const old = document.getElementById('bn-archive-btn');
@@ -190,6 +191,7 @@ function cancelBeerEdit() {
   document.getElementById('bn-longdesc').value = '';
   document.getElementById('bn-cat').value = '';
   beerPills = [];
+  document.getElementById('bn-collab').value = '';
   renderBeerPills();
   clearBeerImage();
   const old = document.getElementById('bn-archive-btn');
@@ -214,6 +216,7 @@ async function saveBeer() {
     long_description: document.getElementById('bn-longdesc').value.trim() || null,
     category: cat,
     badges: beerPills.slice(),
+    collab_partner: beerPills.includes('collab') ? (document.getElementById('bn-collab').value.trim() || null) : null,
   };
 
   try {
@@ -865,6 +868,8 @@ let beerPills = [];
 function renderBeerPills() {
   const sel = document.getElementById('bn-pill-add');
   if (sel && sel.options.length <= 1) BEER_PILL_OPTIONS.forEach((k) => { const o = document.createElement('option'); o.value = k; o.textContent = BEER_BADGE_MAP[k].label; sel.appendChild(o); });
+  const collabEl = document.getElementById('bn-collab');
+  if (collabEl) collabEl.style.display = beerPills.includes('collab') ? 'block' : 'none';
   const el = document.getElementById('bn-pill-list');
   if (!el) return;
   el.innerHTML = '';
@@ -891,7 +896,7 @@ function tapBadgesHtml(badges, collabPartner) {
     const m = BEER_BADGE_MAP[b];
     if (!m) return '';
     let label = m.label;
-    if (b === 'collab' && collabPartner) label = 'Collab · ' + escHtml(collabPartner);
+    if (b === 'collab' && collabPartner) label = m.label + ' · ' + escHtml(collabPartner);
     return '<span class="badge ' + m.cls + '">' + label + '</span>';
   }).join('');
 }
