@@ -1355,6 +1355,7 @@ function buildFlipBeerHtml(beerList) {
 let flipBeerList = [], flipSelected = {}, flipPickerFull = false;
 async function openFlipBeerPicker() {
   flipPickerFull = false;
+  document.getElementById('flip-photo-opts').style.display = 'none';
   flipStatus('Loading beers...');
   try {
     flipBeerList = (await fetchBeersForMenu()).filter((b) => (b.category || '').toLowerCase().indexOf('guest') === -1);
@@ -1374,7 +1375,7 @@ function genFlipBeers() {
   if (!selected.length) { flipStatus('No beers selected.'); return; }
   closeFlipPicker();
   if (flipPickerFull) {
-    openHtml(flipFullPage('Beer Full Sheets', selected.map(flipBeerInner), ''));
+    openHtml(flipFullPage('Beer Full Sheets', selected.map(flipBeerInner), flipPhotoCss()));
     flipStatus(selected.length + ' full beer sheet' + (selected.length !== 1 ? 's' : '') + ' generated — one per 8.5×11 page.');
     return;
   }
@@ -1405,7 +1406,26 @@ async function genFullReleases() {
   openHtml(flipFullPage('Upcoming Releases Full Sheet', [flipReleasesInner(await fetchReleases())], ''));
   flipStatus('Upcoming Releases full sheet generated — 8.5×11.');
 }
+// Print-time photo framing for the full sheets: "whole" shows the entire photo at the chosen height;
+// "crop" fills a frame and slides the crop up/down.
+function flipPhotoOptsChanged() {
+  const crop = document.getElementById('flip-ph-fit').value === 'crop';
+  document.getElementById('flip-ph-pos-wrap').style.display = crop ? 'block' : 'none';
+  document.getElementById('flip-ph-size-val').textContent = document.getElementById('flip-ph-size').value;
+  document.getElementById('flip-ph-pos-val').textContent = document.getElementById('flip-ph-pos').value;
+}
+function flipPhotoCss() {
+  const h = Number(document.getElementById('flip-ph-size').value) || 3.6;
+  const crop = document.getElementById('flip-ph-fit').value === 'crop';
+  const pos = Number(document.getElementById('flip-ph-pos').value);
+  const w = Math.min(6.2, h * 1.15).toFixed(2);
+  return crop
+    ? '.full-card .flip-beer-photo,.full-card .flip-beer-photo-empty{width:' + w + 'in;height:' + h + 'in;object-fit:cover;object-position:50% ' + pos + '%;}'
+    : '.full-card .flip-beer-photo{width:auto;height:' + h + 'in;max-width:100%;object-fit:contain;}.full-card .flip-beer-photo-empty{width:' + w + 'in;height:' + h + 'in;}';
+}
 async function openFullBeerPicker() {
   await openFlipBeerPicker();
   flipPickerFull = true;
+  document.getElementById('flip-photo-opts').style.display = 'block';
+  flipPhotoOptsChanged();
 }
