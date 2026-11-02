@@ -6,12 +6,16 @@
 // Depends on: window.supabase, toast(), escHtml(), flipAsset() (js/menu.js),
 // loadFlipDesigns() (js/printouts.js)
 
-const FB_FONTS_LINK = 'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@500;700&family=Poppins:wght@400;600;700&family=Inter:wght@400;600;700&display=swap';
-const FB_FONTS = { poppins: "'Poppins',sans-serif", oswald: "'Oswald',sans-serif", bebas: "'Bebas Neue',sans-serif", inter: "'Inter',sans-serif" };
+// Every flip card uses Poppins, the brewery website's font (see FLIP_CSS in menu.js).
+const FB_FONTS_LINK = 'https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap';
+const FB_FONT = "'Poppins',sans-serif";
+// 'brick' is the built-in green brick border the standard flip cards use
+// (flipBrickBorderSvg in menu.js); any other border_id is a library component.
+const FB_BRICK = 'brick';
 const FB_TITLE_PX = { s: 26, m: 38, l: 54 }, FB_BODY_PX = { s: 12, m: 15, l: 19 }, FB_IMG_PCT = { s: 40, m: 65, l: 90 };
 const FB_SOURCES = { none: 'No data block', releases: 'Upcoming beer releases (Events)', events: 'Upcoming events (incl. recurring)', new_beers: 'New releases on tap' };
 
-const FLIER_BUILT_CSS = '.fl-card{position:relative;width:100%;height:100%;overflow:hidden;color:var(--tc);}.fl-bg,.fl-bd{position:absolute;inset:0;width:100%;height:100%;}.fl-bg{object-fit:cover;}'
+const FLIER_BUILT_CSS = '.fl-card{position:relative;width:100%;height:100%;overflow:hidden;color:var(--tc);}.fl-bg,.fl-bd{position:absolute;inset:0;width:100%;height:100%;}.fl-bg{object-fit:cover;}.fl-card .flip-border{position:absolute;inset:0;width:100%;height:100%;}'
   + '.fl-content{position:absolute;inset:var(--m);display:flex;flex-direction:column;align-items:center;text-align:center;overflow:hidden;}'
   + '.fl-logo{height:calc(64px*var(--u));width:auto;margin-bottom:calc(8px*var(--u));flex-shrink:0;}.fl-logo.bottom{margin:auto 0 0;}'
   + '.fl-title{font-weight:700;line-height:1.05;margin:0 0 calc(8px*var(--u));}.fl-sub{font-size:calc(17px*var(--u));font-weight:600;margin-bottom:calc(10px*var(--u));}'
@@ -24,8 +28,8 @@ let flierComps = [], fb = null, fbId = null, fbData = {}, fbSaving = false;
 
 function fbDefaults() {
   return {
-    size: 'half', bg_id: null, bg_color: '#ffffff', border_id: null, border_fit: 'fill', margin: 0.7, logo: 'top',
-    title: 'Upcoming Releases', title_font: 'bebas', title_size: 'm', text_color: '#1d1d1b',
+    size: 'half', bg_id: null, bg_color: '#ffffff', border_id: FB_BRICK, border_fit: 'fill', margin: 0.78, logo: 'top',
+    title: 'Upcoming Releases', title_size: 'm', text_color: '#1d1d1b',
     subtitle: '', image_id: null, image_size: 'm',
     data_source: 'none', data_heading: '', data_count: 5, body: '', body_size: 'm',
   };
@@ -113,14 +117,15 @@ function flierRenderBuilt(spec, comps, items) {
   const byId = (id) => comps.find((c) => c.id === id);
   const u = spec.size === 'full' ? 1.5 : 1;
   const bg = byId(spec.bg_id), bd = byId(spec.border_id), im = byId(spec.image_id);
-  const style = '--u:' + u + ';--m:' + spec.margin + 'in;--tc:' + escHtml(spec.text_color) + ';font-family:' + FB_FONTS.poppins + ';background:' + escHtml(spec.bg_color);
+  const style = '--u:' + u + ';--m:' + spec.margin + 'in;--tc:' + escHtml(spec.text_color) + ';font-family:' + FB_FONT + ';background:' + escHtml(spec.bg_color);
   const logo = '<img class="fl-logo' + (spec.logo === 'bottom' ? ' bottom' : '') + '" src="' + flipAsset('lvbc-arch-logo.png') + '">';
   let h = '<div class="fl-card" style="' + style + '">';
   if (bg) h += '<img class="fl-bg" src="' + escHtml(bg.url) + '">';
-  if (bd) h += '<img class="fl-bd" style="object-fit:' + (spec.border_fit === 'cover' ? 'cover' : 'fill') + ';" src="' + escHtml(bd.url) + '">';
+  if (spec.border_id === FB_BRICK) h += flipBrickBorderSvg();
+  else if (bd) h += '<img class="fl-bd" style="object-fit:' + (spec.border_fit === 'cover' ? 'cover' : 'fill') + ';" src="' + escHtml(bd.url) + '">';
   h += '<div class="fl-content">';
   if (spec.logo === 'top') h += logo;
-  if (spec.title) h += '<div class="fl-title" style="font-family:' + FB_FONTS[spec.title_font] + ';font-size:calc(' + FB_TITLE_PX[spec.title_size] + 'px*var(--u));">' + escHtml(spec.title) + '</div>';
+  if (spec.title) h += '<div class="fl-title" style="font-size:calc(' + FB_TITLE_PX[spec.title_size] + 'px*var(--u));">' + escHtml(spec.title) + '</div>';
   if (spec.subtitle) h += '<div class="fl-sub">' + escHtml(spec.subtitle) + '</div>';
   if (im) h += '<img class="fl-img" style="width:' + FB_IMG_PCT[spec.image_size] + '%;" src="' + escHtml(im.url) + '">';
   if (spec.data_source !== 'none') {
@@ -162,7 +167,7 @@ async function openFlierBuilder(fromId, asCopy) {
 }
 function closeFlierBuilder() { document.getElementById('fb-modal').style.display = 'none'; fb = null; }
 
-const FB_FIELDS = { 'fb-size': 'size', 'fb-bg-color': 'bg_color', 'fb-border-fit': 'border_fit', 'fb-margin': 'margin', 'fb-logo': 'logo', 'fb-title': 'title', 'fb-title-font': 'title_font', 'fb-title-size': 'title_size',
+const FB_FIELDS = { 'fb-size': 'size', 'fb-bg-color': 'bg_color', 'fb-border-fit': 'border_fit', 'fb-margin': 'margin', 'fb-logo': 'logo', 'fb-title': 'title', 'fb-title-size': 'title_size',
   'fb-text-color': 'text_color', 'fb-subtitle': 'subtitle', 'fb-image-size': 'image_size', 'fb-source': 'data_source', 'fb-heading': 'data_heading', 'fb-count': 'data_count', 'fb-body': 'body', 'fb-body-size': 'body_size' };
 function fbSyncControls() {
   Object.keys(FB_FIELDS).forEach((id) => { document.getElementById(id).value = fb[FB_FIELDS[id]]; });
@@ -179,8 +184,11 @@ function fbPick(kind, id) {
 }
 
 function fbPickerHtml(kind, selected) {
-  const cell = (id, inner, on) => '<div onclick="fbPick(\'' + kind + '\',' + (id ? '\'' + id + '\'' : 'null') + ')" style="width:56px;height:56px;border:2px solid ' + (on ? 'var(--teal)' : 'var(--border)') + ';border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;background:#fff;color:#555;overflow:hidden;">' + inner + '</div>';
-  return cell(null, 'None', !selected) + flierComps.filter((c) => c.kind === kind).map((c) => cell(c.id, '<img src="' + escHtml(c.url) + '" style="max-width:100%;max-height:100%;" title="' + escHtml(c.name) + '">', c.id === selected)).join('');
+  const cell = (id, inner, on, label) => '<div onclick="fbPick(\'' + kind + '\',' + (id ? '\'' + id + '\'' : 'null') + ')" title="' + escHtml(label) + '" style="width:64px;height:64px;border:2px solid ' + (on ? 'var(--teal)' : 'var(--border)') + ';border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;font-family:\'DM Mono\',monospace;background:' + (on ? 'rgba(42,184,166,0.12)' : 'var(--raised)') + ';color:var(--sub);overflow:hidden;">' + inner + '</div>';
+  const brick = '<div style="width:100%;height:100%;background:repeating-linear-gradient(0deg,#0f7a68 0 9px,#d6e9e4 9px 11px),#0f7a68;"></div>';
+  return cell(null, 'None', !selected, 'None')
+    + (kind === 'border' ? cell(FB_BRICK, brick, selected === FB_BRICK, 'Green brick (default)') : '')
+    + flierComps.filter((c) => c.kind === kind).map((c) => cell(c.id, '<img src="' + escHtml(c.url) + '" style="max-width:100%;max-height:100%;">', c.id === selected, c.name)).join('');
 }
 
 async function fbRender() {
