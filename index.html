@@ -297,7 +297,8 @@
                 </div>
 
                 <div id="ev-once-fields">
-                  <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Date</label><input class="form-input" style="width:100%;" type="date" id="ev-date"></div>
+                  <div class="form-group" style="margin-bottom:16px;"><label class="form-label">Date</label><input class="form-input" style="width:100%;" type="date" id="ev-date" onchange="applyEventAllDay()"></div>
+                  <label class="checkbox-row" style="margin-bottom:12px;"><input type="checkbox" id="ev-all-day" onchange="applyEventAllDay()"> All day (the full hours of operation that day)</label>
                   <div class="form-row">
                     <div class="form-group"><label class="form-label">Start Time</label><input class="form-input" style="width:100%;" type="time" id="ev-start-time"></div>
                     <div class="form-group"><label class="form-label">End Time</label><input class="form-input" style="width:100%;" type="time" id="ev-end-time"></div>

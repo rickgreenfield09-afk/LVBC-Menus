@@ -53,6 +53,44 @@ function slugifyEventType(text) {
 async function loadEventTypes() {
   const { data } = await window.supabase.from('event_types').select('*').order('label');
   customEventTypes = data || [];
+  renderEventTypeOptions();
+}
+
+// Built-in types, then saved/used custom ones, then "Other..." — the
+// dropdown's options are rebuilt so newly saved types show up in it.
+function renderEventTypeOptions() {
+  const sel = document.getElementById('ev-type');
+  if (!sel) return;
+  const prev = sel.value;
+  const builtin = Object.entries(BUILTIN_EVENT_TYPES).map(([k, l]) => '<option value="' + k + '">' + escHtml(l) + '</option>');
+  const custom = customEventTypes.filter((t) => !BUILTIN_EVENT_TYPES[t.key]).map((t) => '<option value="' + escHtml(t.key) + '">' + escHtml(t.label) + '</option>');
+  sel.innerHTML = builtin.concat(custom).join('') + '<option value="__other__">Other...</option>';
+  if (Array.from(sel.options).some((o) => o.value === prev)) sel.value = prev;
+}
+
+// Fills the start/end times from that day's hours of operation
+// (shift_day_settings) while "All day" is checked.
+function applyEventAllDay() {
+  const on = document.getElementById('ev-all-day').checked;
+  const startEl = document.getElementById('ev-start-time');
+  const endEl = document.getElementById('ev-end-time');
+  startEl.disabled = on;
+  endEl.disabled = on;
+  if (!on) return;
+  const dateVal = document.getElementById('ev-date').value;
+  if (!dateVal) { startEl.value = ''; endEl.value = ''; return; }
+  const setting = scheduleDaySettings.find((s) => s.day_of_week === new Date(dateVal + 'T00:00:00').getDay());
+  const open = setting && !setting.is_closed ? (setting.morning_start || setting.evening_start) : null;
+  const close = setting && !setting.is_closed ? (setting.evening_end || setting.morning_end) : null;
+  if (!open || !close) {
+    toast('No hours of operation set for that day — enter times manually', true);
+    document.getElementById('ev-all-day').checked = false;
+    startEl.disabled = false;
+    endEl.disabled = false;
+    return;
+  }
+  startEl.value = open.slice(0, 5);
+  endEl.value = close.slice(0, 5);
 }
 
 function eventsListMonth(delta) {
@@ -181,7 +219,7 @@ function editEvent(id) {
   document.getElementById('ev-cancel-edit').style.visibility = 'visible';
   document.getElementById('ev-name').value = e.event_name;
   document.getElementById('ev-other-wrap').style.display = 'none';
-  if (BUILTIN_EVENT_TYPES[e.event_type]) {
+  if (Array.from(document.getElementById('ev-type').options).some((o) => o.value === e.event_type)) {
     document.getElementById('ev-type').value = e.event_type;
   } else {
     document.getElementById('ev-type').value = '__other__';
@@ -222,6 +260,9 @@ function cancelEventEdit() {
   document.getElementById('ev-staff-wrap').style.display = 'none';
   document.getElementById('ev-staff').value = '';
   document.getElementById('ev-date').value = '';
+  document.getElementById('ev-all-day').checked = false;
+  document.getElementById('ev-start-time').disabled = false;
+  document.getElementById('ev-end-time').disabled = false;
   document.getElementById('ev-start-time').value = '';
   document.getElementById('ev-end-time').value = '';
   document.getElementById('rec-type').value = 'weekly';
@@ -355,7 +396,8 @@ async function resolveCustomTypeIfNeeded() {
   eventType = slugifyEventType(customText);
   if (document.getElementById('ev-other-save').checked) {
     const { error: typeErr } = await window.supabase.from('event_types').upsert({ key: eventType, label: customText }, { onConflict: 'key' });
-    if (!typeErr) await loadEventTypes();
+    if (typeErr) toast('Could not save the type for later: ' + typeErr.message, true);
+    else await loadEventTypes();
   } else if (!customEventTypes.some((t) => t.key === eventType)) {
     customEventTypes.push({ key: eventType, label: customText });
   }
@@ -442,7 +484,7 @@ function editRecurringEvent(id) {
   document.getElementById('ev-cancel-edit').style.visibility = 'visible';
   document.getElementById('ev-name').value = re.name;
   document.getElementById('ev-other-wrap').style.display = 'none';
-  document.getElementById('ev-type').value = BUILTIN_EVENT_TYPES[re.event_type] ? re.event_type : 'trivia';
+  document.getElementById('ev-type').value = Array.from(document.getElementById('ev-type').options).some((o) => o.value === re.event_type) ? re.event_type : 'trivia';
   document.getElementById('rec-type').value = re.recurrence_type;
   document.getElementById('rec-weekday').value = re.day_of_week;
   document.getElementById('rec-week-of-month').value = re.week_of_month || 3;
