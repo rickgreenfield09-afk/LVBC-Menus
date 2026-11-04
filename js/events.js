@@ -156,7 +156,7 @@ function renderEventsList() {
         + '<div class="event-date-time">' + fmtClockFromDate(d) + (end ? '–' + fmtClockFromDate(end) : '') + '</div></div>'
         + (e.image_url ? '<img src="' + escHtml(e.image_url) + '" alt="" style="width:72px;height:72px;border-radius:8px;object-fit:cover;flex-shrink:0;">' : '')
         + '<div class="event-info"><span class="event-type-badge etype-' + escHtml(BUILTIN_EVENT_TYPES[e.event_type] ? e.event_type : 'default') + '">' + escHtml(eventTypeLabel(e.event_type)) + '</span>'
-        + (e.is_public ? ' <span class="badge badge-purple">On website</span>' : '')
+        + (e.is_public ? '' : ' <span class="badge badge-amber">Staff only</span>')
         + '<div class="event-name">' + escHtml(e.event_name) + '</div>'
         + (e.organization || e.guest_count ? '<div class="event-meta">' + escHtml([e.organization, e.guest_count ? e.guest_count + ' guests' : ''].filter(Boolean).join(' · ')) + '</div>' : '')
         + (e.description ? '<div class="event-meta">' + escHtml(e.description.length > 110 ? e.description.slice(0, 110) + '…' : e.description) + '</div>' : '')
@@ -173,7 +173,7 @@ function renderEventsList() {
       + '<div class="event-date-day">' + d.getDate() + '</div>'
       + '<div class="event-date-time">' + (item.start_time ? fmtClockFromTimeStr(item.start_time) + (item.end_time ? '–' + fmtClockFromTimeStr(item.end_time) : '') : '') + '</div></div>'
       + '<div class="event-info"><span class="badge badge-purple">Recurring</span>'
-      + (recurringEvents.find((r) => r.id === item.recurringEventId)?.is_public ? ' <span class="badge badge-purple">On website</span>' : '')
+      + (recurringEvents.find((r) => r.id === item.recurringEventId)?.is_public ? '' : ' <span class="badge badge-amber">Staff only</span>')
       + '<div class="event-name">' + escHtml(item.name) + '</div>'
       + (item.event_type === 'vfw' ? '<div class="event-meta">' + (item.staff_id ? escHtml(staffName(item.staff_id)) : 'Unassigned') + '</div>' : '') + '</div>'
       + '<div style="display:flex;gap:6px;">'
@@ -239,7 +239,7 @@ function editEvent(id) {
   document.getElementById('ev-contact-phone').value = e.contact_phone || '';
   document.getElementById('ev-contact-email').value = e.contact_email || '';
   document.getElementById('ev-host-wrap').style.display = HOST_EVENT_TYPES.includes(document.getElementById('ev-type').value) || e.organization || e.contact_name ? '' : 'none';
-  document.getElementById('ev-public').checked = !!e.is_public;
+  document.getElementById('ev-staff-only').checked = !e.is_public;
   evImg = e.image_url ? { url: e.image_url } : null;
   evDrawImg();
   document.getElementById('ev-staff-wrap').style.display = e.event_type === 'vfw' ? '' : 'none';
@@ -275,7 +275,7 @@ function cancelEventEdit() {
   ['ev-org', 'ev-guests', 'ev-contact-name', 'ev-contact-phone', 'ev-contact-email'].forEach((id) => { document.getElementById(id).value = ''; });
   document.getElementById('ev-host-wrap').style.display = 'none';
   eventFromRequestId = null;
-  document.getElementById('ev-public').checked = false;
+  document.getElementById('ev-staff-only').checked = false;
   evImg = null;
   evDrawImg();
   setEventMode('once');
@@ -430,7 +430,7 @@ async function saveOneOffEvent(name, eventType) {
   const payload = {
     description: document.getElementById('ev-desc').value.trim() || null,
     image_url: imageUrl,
-    is_public: document.getElementById('ev-public').checked,
+    is_public: !document.getElementById('ev-staff-only').checked,
     organization: document.getElementById('ev-org').value.trim() || null,
     guest_count: parseInt(document.getElementById('ev-guests').value, 10) || null,
     contact_name: document.getElementById('ev-contact-name').value.trim() || null,
@@ -492,7 +492,7 @@ function editRecurringEvent(id) {
   document.getElementById('rec-start-time').value = (re.start_time || '').slice(0, 5);
   document.getElementById('rec-end-time').value = (re.end_time || '').slice(0, 5);
   document.getElementById('ev-notes').value = re.notes || '';
-  document.getElementById('ev-public').checked = !!re.is_public;
+  document.getElementById('ev-staff-only').checked = !re.is_public;
   document.getElementById('ev-staff-wrap').style.display = re.event_type === 'vfw' ? '' : 'none';
   document.getElementById('ev-staff').value = re.default_staff_id || '';
   document.getElementById('btn-save-event').textContent = 'Save Changes';
@@ -510,7 +510,7 @@ async function saveRecurringEvent(name, eventType) {
     week_of_month: recurrenceType === 'monthly_nth_weekday' ? parseInt(document.getElementById('rec-week-of-month').value, 10) : null,
     start_time: document.getElementById('rec-start-time').value || null,
     end_time: document.getElementById('rec-end-time').value || null,
-    is_public: document.getElementById('ev-public').checked,
+    is_public: !document.getElementById('ev-staff-only').checked,
     default_staff_id: eventType === 'vfw' ? (document.getElementById('ev-staff').value || null) : null,
     notes: document.getElementById('ev-notes').value.trim() || null,
   };
